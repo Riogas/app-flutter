@@ -17,17 +17,69 @@ import 'package:geolocator/geolocator.dart';
 import 'firebase_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'
+    as firebase_messaging;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'app_lifecycle_observer.dart'; // Importar AppLifecycleObserver
+
+FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  _showNotification(message);
+}
+
+void _showNotification(RemoteMessage message) async {
+  const AndroidNotificationDetails androidPlatformChannelSpecifics =
+      AndroidNotificationDetails(
+    'your_channel_id',
+    'your_channel_name',
+    channelDescription: 'your_channel_description',
+    importance: Importance.max,
+    priority: Priority.high,
+    showWhen: false,
+  );
+  const NotificationDetails platformChannelSpecifics =
+      NotificationDetails(android: androidPlatformChannelSpecifics);
+  await flutterLocalNotificationsPlugin.show(
+    0,
+    message.notification?.title,
+    message.notification?.body,
+    platformChannelSpecifics,
+    payload: 'item x',
+  );
+}
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding
+      .ensureInitialized(); // 🔹 Inicializa Flutter antes de todo
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  FirebaseMessaging.onBackgroundMessage(
+      _firebaseMessagingBackgroundHandler); // 🔹 Mover aquí después de Firebase.initializeApp()
 
   // Inicializar Hive
   final appDocumentDir = await getApplicationDocumentsDirectory();
   await Hive.initFlutter(appDocumentDir.path);
   await Hive.openBox('sessionBox');
+
+  // Configurar Firebase Messaging
+  FirebaseMessaging messaging = FirebaseMessaging.instance;
+  await messaging.requestPermission();
+  String? token = await messaging.getToken();
+  print('FCM Token: $token');
+
+  // Inicializar notificaciones locales
+  await _initializeLocalNotifications();
+
+  // Configurar handlers de mensajes en primer plano
+  FirebaseMessaging.onMessage.listen(_firebaseMessagingForegroundHandler);
 
   // Verificar si hay datos en sessionBox
   var box = await Hive.openBox('sessionBox');
@@ -36,10 +88,68 @@ void main() async {
   runApp(MyApp(isLoggedIn: isLoggedIn));
 }
 
-class MyApp extends StatelessWidget {
+Future<void> _initializeLocalNotifications() async {
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  final InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+}
+
+void _firebaseMessagingForegroundHandler(RemoteMessage message) {
+  print('Got a message whilst in the foreground!');
+  print('Message data: ${message.data}');
+
+  if (message.notification != null) {
+    print('Message also contained a notification: ${message.notification}');
+    _showNotification(message);
+  }
+}
+
+class MyApp extends StatefulWidget {
   final bool isLoggedIn;
 
   MyApp({required this.isLoggedIn});
+
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final AppLifecycleObserver _lifecycleObserver = AppLifecycleObserver();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    _startLoggingAppState();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startLoggingAppState() {
+    _timer = Timer.periodic(Duration(seconds: 5), (timer) {
+      final state = _lifecycleObserver.lastLifecycleState;
+      if (state == AppLifecycleState.resumed) {
+        print('App is in the foreground');
+      } else if (state == AppLifecycleState.paused) {
+        print('App is in the background');
+      } else if (state == AppLifecycleState.detached) {
+        print('App is closed');
+      } else {
+        print('App state: $state');
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +158,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: isLoggedIn ? HomePage() : LoginPage(),
+      home: widget.isLoggedIn ? HomePage() : LoginPage(),
     );
   }
 }
@@ -459,11 +569,9 @@ class _LoginPageState extends State<LoginPage> {
       var box = await Hive.openBox('sessionBox');
       await box.put('username', username);
       await box.put('movil', movil);
-      await box.put('escenario', escenario);
       print('Sesión guardada con los siguientes valores:');
       print('Username: $username');
       print('Movil: $movil');
-      print('Escenario: $escenario');
     } catch (e) {
       print('Error al guardar los datos del usuario: $e');
     }
@@ -729,4 +837,16 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
+}
+
+class AppLifecycleObserver extends WidgetsBindingObserver {
+  AppLifecycleState? _lastLifecycleState;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lastLifecycleState = state;
+    print('AppLifecycleState changed to $state');
+  }
+
+  AppLifecycleState? get lastLifecycleState => _lastLifecycleState;
 }
