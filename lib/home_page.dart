@@ -7,10 +7,7 @@ import 'message_page.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
-import 'package:flutter_background/flutter_background.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive/hive.dart';
 import 'session_service.dart'; // Importar el servicio de sesión
 import 'firebase_service.dart'; // Importar el servicio de Firebase
@@ -31,7 +28,6 @@ class _HomePageState extends State<HomePage> {
   bool _locationPermissionDenied = false;
   bool _constantsLoaded = false;
   int _coordinateUpdateInterval = 30; // Valor por defecto en segundos
-  late StreamController<List<DocumentSnapshot>> _ordersStreamController;
   late StreamSubscription _ordersSubscription;
 
   static List<Widget> _widgetOptions = <Widget>[
@@ -45,7 +41,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _ordersStreamController = StreamController.broadcast();
     _loadSessionData();
     _startLocationUpdates();
     _printConstantDocumentNames();
@@ -57,7 +52,6 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _timer?.cancel();
     _ordersSubscription.cancel();
-    _ordersStreamController.close();
     super.dispose();
   }
 
@@ -171,9 +165,9 @@ class _HomePageState extends State<HomePage> {
 
   void _listenToPendingOrders() {
     _ordersSubscription = _firebaseService.getPedidosStream().listen((orders) {
-      if (!_ordersStreamController.isClosed) {
-        _ordersStreamController.add(orders);
-      }
+      setState(() {
+        _newOrders = orders.length;
+      });
     });
   }
 
