@@ -14,17 +14,33 @@ import 'package:latlong2/latlong.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'session_service.dart'; // Importar el servicio de sesión
 import 'package:geolocator/geolocator.dart';
+import 'firebase_service.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  await initHive();
-  runApp(MyApp());
+
+  // Inicializar Hive
+  final appDocumentDir = await getApplicationDocumentsDirectory();
+  await Hive.initFlutter(appDocumentDir.path);
+  await Hive.openBox('sessionBox');
+
+  // Verificar si hay datos en sessionBox
+  var box = await Hive.openBox('sessionBox');
+  bool isLoggedIn = box.get('username') != null && box.get('movil') != null;
+
+  runApp(MyApp(isLoggedIn: isLoggedIn));
 }
 
 class MyApp extends StatelessWidget {
+  final bool isLoggedIn;
+
+  MyApp({required this.isLoggedIn});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -32,8 +48,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home:
-          LoginPage(), // Asegúrate de que LoginPage sea tu pantalla de inicio de sesión
+      home: isLoggedIn ? HomePage() : LoginPage(),
     );
   }
 }
@@ -55,6 +70,7 @@ class _LoginPageState extends State<LoginPage> {
   int? _escenario; // Guarda el EscenarioId en sesión
   String _appVersion = 'Versión desconocida';
   final SessionService _sessionService = SessionService();
+  final FirebaseService _firebaseService = FirebaseService();
 
   @override
   void didChangeDependencies() {
@@ -68,6 +84,7 @@ class _LoginPageState extends State<LoginPage> {
     _checkLocationPermission();
     _getDeviceId(); // Llama automáticamente al obtener el Device ID
     _getAppVersion(); // Llama automáticamente al obtener la versión de la app
+    _checkActiveSession();
   }
 
   Future<void> _checkLocationPermission() async {
@@ -438,11 +455,11 @@ class _LoginPageState extends State<LoginPage> {
       var box = await Hive.openBox('sessionBox');
       await box.put('username', username);
       await box.put('movil', movil);
+      await box.put('escenario', escenario);
       print('Sesión guardada con los siguientes valores:');
       print('Username: $username');
       print('Movil: $movil');
-
-      _saveSession(username, movil); // Guardar la sesión en Firestore
+      print('Escenario: $escenario');
     } catch (e) {
       print('Error al guardar los datos del usuario: $e');
     }
@@ -586,6 +603,20 @@ class _LoginPageState extends State<LoginPage> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _checkActiveSession() async {
+    await for (var _ in _firebaseService.getSesionesStream()) {
+      var box = await Hive.openBox('sessionBox');
+      if (box.get('username') != null && box.get('movil') != null) {
+        print('Sesión activa encontrada en sessionBox.');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => HomePage()),
+        );
+        break;
+      }
     }
   }
 

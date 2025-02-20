@@ -62,8 +62,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   // Navegar a la pantalla de inicio de sesión
                   Navigator.of(context).pushReplacement(
                     MaterialPageRoute(
-                        builder: (context) =>
-                            MyApp()), // Reemplaza MyApp con tu pantalla de inicio de sesión
+                        builder: (context) => MyApp(
+                            isLoggedIn:
+                                false)), // Reemplaza MyApp con tu pantalla de inicio de sesión
                   );
                 },
                 icon: Icon(Icons.power_settings_new, color: Colors.blue),

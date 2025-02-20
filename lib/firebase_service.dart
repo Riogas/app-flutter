@@ -14,25 +14,61 @@ class FirebaseService {
     try {
       // Inicializar Firebase
       await Firebase.initializeApp();
-      //print('Firebase initialized successfully');
+      print('Firebase initialized successfully');
     } catch (e) {
-      //print('Error initializing Firebase: $e');
-      return;
+      print('Error initializing Firebase: $e');
     }
+  }
 
-    // Autenticar usuario
-    try {
-      UserCredential userCredential =
-          await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: "firestoreWrite@riogas.com.uy",
-        password: "!!Lecocq1013-,",
-      );
-      _user = userCredential.user;
-      //print('User authenticated: ${_user?.email}');
-    } on FirebaseAuthException catch (e) {
-      //print('Error authenticating user: $e');
-      return;
-    }
+  Stream<void> getSesionesStream() async* {
+    var box = await Hive.openBox('sessionBox');
+    String escenarioId = box.get('escenario', defaultValue: '0');
+    String movil = box.get('movil', defaultValue: '0');
+    String collectionName = 'Sesiones-$escenarioId';
+
+    // Obtener la fecha actual en formato yyyymmdd
+    String fechaActual =
+        DateTime.now().toIso8601String().split('T')[0].replaceAll('-', '');
+
+    // Nombre del documento de la fecha actual
+    String fechaDocName = fechaActual;
+
+    // Nombre de la colección del móvil
+    String movilCollectionName = 'Movil-$movil';
+
+    // Nombre del documento "activo"
+    String activoDocName = 'activo';
+
+    // Obtener el documento "activo" dentro de la colección del móvil
+    DocumentReference activoDocRef = _firestore
+        .collection(collectionName)
+        .doc(fechaDocName)
+        .collection(movilCollectionName)
+        .doc(activoDocName);
+
+    // Escuchar cambios en el documento "activo"
+    yield* activoDocRef.snapshots().handleError((error) {
+      print('Error fetching sesiones: $error');
+    }).map((snapshot) async {
+      if (snapshot.exists) {
+        var data = snapshot.data() as Map<String, dynamic>;
+        print('Sesion activa encontrada: $data');
+
+        // Guardar o actualizar los valores en sessionBox
+        await box.put('movil', data['movil']);
+        await box.put('NombreUsuario', data['nomUsuario']);
+        await box.put('username', data['idUsuario']);
+        await box.put('deviceId', data['idTerminal']);
+
+        print('Datos guardados en sessionBox:');
+        print('movil: ${data['movil']}');
+        print('NombreUsuario: ${data['nomUsuario']}');
+        print('username: ${data['idUsuario']}');
+        print('deviceId: ${data['idTerminal']}');
+      } else {
+        print('No se encontró el documento "activo".');
+      }
+    });
   }
 
   Stream<List<DocumentSnapshot>> getPedidosStream() async* {
@@ -164,26 +200,6 @@ class FirebaseService {
       //print('Fetched ${snapshot.docs.length} mensajes');
       snapshot.docs.forEach((doc) {
         //print('Mensaje: ${doc.data()}');
-      });
-      return snapshot.docs;
-    });
-  }
-
-  Stream<List<DocumentSnapshot>> getSesionesStream() async* {
-    var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
-    String collectionName = 'Sesiones-$escenarioId';
-
-    //print('Fetching sesiones from collection: $collectionName');
-    yield* _firestore
-        .collection(collectionName)
-        .snapshots()
-        .handleError((error) {
-      //print('Error fetching sesiones: $error');
-    }).map((snapshot) {
-      //print('Fetched ${snapshot.docs.length} sesiones');
-      snapshot.docs.forEach((doc) {
-        //print('Sesion: ${doc.data()}');
       });
       return snapshot.docs;
     });
