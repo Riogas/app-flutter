@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 import 'package:hive/hive.dart';
 import 'hive_init.dart';
 import 'home_page.dart';
@@ -64,8 +65,37 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    _checkLocationPermission();
     _getDeviceId(); // Llama automáticamente al obtener el Device ID
     _getAppVersion(); // Llama automáticamente al obtener la versión de la app
+  }
+
+  Future<void> _checkLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Permisos de ubicación denegados. Por favor, actívelos para continuar.'),
+            duration: Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Permisos de ubicación denegados permanentemente. Por favor, actívelos en la configuración.'),
+          duration: Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
   }
 
   Future<void> _getDeviceId() async {
@@ -95,6 +125,11 @@ class _LoginPageState extends State<LoginPage> {
       deviceId = id;
       _deviceIdController.text = id;
     });
+
+    // Guardar el ID del dispositivo en sessionBox
+    var box = await Hive.openBox('sessionBox');
+    await box.put('deviceId', id);
+    print('ID de dispositivo guardado en sessionBox: $id');
 
     // Llama al servicio para validar el dispositivo
     await _validateDevice(id);
@@ -180,6 +215,12 @@ class _LoginPageState extends State<LoginPage> {
           setState(() {
             _deviceExists = true; // Actualiza el estado para ocultar el botón
           });
+
+          // Guardar el valor de "NombreUsuario" en sessionBox
+          var box = await Hive.openBox('sessionBox');
+          await box.put('NombreUsuario', responseData['NombreUsuario']);
+          print(
+              'NombreUsuario guardado en sessionBox: ${responseData['NombreUsuario']}');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -255,12 +296,15 @@ class _LoginPageState extends State<LoginPage> {
           print('Lista de móviles extraída: $listaMoviles');
           _showMobileSelectionDialog(listaMoviles, username);
 
-          // Guardar EscenarioId en Hive
-          print('Guardando EscenarioId en Hive...');
+          // Guardar EscenarioId y NombreUsuario en Hive
+          print('Guardando EscenarioId y NombreUsuario en Hive...');
           var box = await Hive.openBox('sessionBox');
           await box.put('escenario', responseData['EscenarioId']);
+          await box.put('NombreUsuario', responseData['NombreUsuario'].trim());
           print(
               'EscenarioId guardado en sesión: ${responseData['EscenarioId']}');
+          print(
+              'NombreUsuario guardado en sesión: ${responseData['NombreUsuario'].trim()}');
 
           //print('Guardando sesión...');
           //await _saveSession(username, responseData['selectedMovil']);
@@ -305,64 +349,84 @@ class _LoginPageState extends State<LoginPage> {
 
   void _showMobileSelectionDialog(List<String> listaMoviles, String username) {
     String? selectedMovil;
+    bool isLoading = false; // Estado para controlar el indicador de carga
 
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Seleccionar Móvil'),
-          content: StatefulBuilder(
-            builder: (BuildContext context, StateSetter setState) {
-              return DropdownButton<String>(
-                hint: const Text('Seleccione un móvil'),
-                value: selectedMovil,
-                onChanged: (String? newValue) {
-                  setState(() {
-                    selectedMovil = newValue;
-                  });
-                },
-                items:
-                    listaMoviles.map<DropdownMenuItem<String>>((String movil) {
-                  return DropdownMenuItem<String>(
-                    value: movil,
-                    child: Text(movil),
-                  );
-                }).toList(),
-              );
-            },
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (selectedMovil != null) {
-                  Navigator.of(context).pop();
-                  await _saveUserData(
-                      username, selectedMovil!, _escenario.toString());
-                  if (mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => HomePage()),
-                    );
-                  }
-                } else {
-                  // Mostrar un mensaje de error si no se selecciona ningún móvil
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Por favor, seleccione un móvil.'),
-                      backgroundColor: Colors.red,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              title: const Text('Seleccionar Móvil'),
+              content: isLoading
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 10),
+                        const Text('Accediendo... Espere un momento'),
+                      ],
+                    )
+                  : DropdownButton<String>(
+                      hint: const Text('Seleccione un móvil'),
+                      value: selectedMovil,
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          selectedMovil = newValue;
+                        });
+                      },
+                      items: listaMoviles
+                          .map<DropdownMenuItem<String>>((String movil) {
+                        return DropdownMenuItem<String>(
+                          value: movil,
+                          child: Text(movil),
+                        );
+                      }).toList(),
                     ),
-                  );
-                }
-              },
-              child: const Text('Confirmar'),
-            ),
-          ],
+              actions: <Widget>[
+                if (!isLoading) // Ocultar botones cuando está cargando
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop(); // Cierra el diálogo
+                    },
+                    child: const Text('Cancelar'),
+                  ),
+                if (!isLoading)
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (selectedMovil != null) {
+                        setState(() {
+                          isLoading = true; // Muestra el indicador de carga
+                        });
+
+                        await _saveUserData(
+                            username, selectedMovil!, _escenario.toString());
+
+                        Future.delayed(Duration.zero, () {
+                          if (mounted) {
+                            Navigator.of(dialogContext)
+                                .pop(); // Oculta el diálogo de selección
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => HomePage()),
+                            );
+                          }
+                        });
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Por favor, seleccione un móvil.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Confirmar'),
+                  ),
+              ],
+            );
+          },
         );
       },
     );
@@ -370,16 +434,18 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _saveUserData(
       String username, String movil, String escenario) async {
-    var box = Hive.box('sessionBox');
-    await box.put('username', username);
-    await box.put('movil', movil);
+    try {
+      var box = await Hive.openBox('sessionBox');
+      await box.put('username', username);
+      await box.put('movil', movil);
+      print('Sesión guardada con los siguientes valores:');
+      print('Username: $username');
+      print('Movil: $movil');
 
-    // Imprimir en consola los valores guardados
-    print('Sesión guardada con los siguientes valores:');
-    print('Username: $username');
-    print('Movil: $movil');
-
-    await _saveSession(username, movil);
+      _saveSession(username, movil); // Guardar la sesión en Firestore
+    } catch (e) {
+      print('Error al guardar los datos del usuario: $e');
+    }
   }
 
   void _showSuccessMessage(String message) {
@@ -470,23 +536,57 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Future<void> _saveSession(String idUsuario, String nomUsuario) async {
-    Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    LatLng currentLocation = LatLng(position.latitude, position.longitude);
+  Future<void> _saveSession(String? idUsuario, String? nomUsuario) async {
+    print('_SaveSession');
+    try {
+      // Verifica que los valores no sean null antes de asignarlos
+      final String safeIdUsuario = idUsuario ?? "Desconocido";
+      final String safeNomUsuario = nomUsuario ?? "Desconocido";
+      final String safeVersionApp = _appVersion ?? "Versión desconocida";
 
-    print('Guardando sesión con los siguientes datos:');
-    print('ID Usuario: $idUsuario');
-    print('Nombre Usuario: $nomUsuario');
-    print('Primera Ubicación: $currentLocation');
-    print('Versión de la App: $_appVersion');
+      // Valor por defecto para la ubicación
+      LatLng currentLocation = LatLng(0.0, 0.0);
 
-    await _sessionService.saveSession(
-      idUsuario: idUsuario,
-      nomUsuario: nomUsuario,
-      primeraUbicacion: currentLocation,
-      versionApp: _appVersion,
-    );
+      try {
+        // Obtener ubicación con timeout
+        Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        ).timeout(Duration(seconds: 2), onTimeout: () {
+          throw TimeoutException('Timeout al obtener la ubicación');
+        });
+        currentLocation = LatLng(position.latitude, position.longitude);
+      } catch (e) {
+        print('Error al obtener ubicación: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Error al obtener ubicación. Verifique los permisos.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+
+      print('Guardando sesión con los siguientes datos:');
+      print('ID Usuario: $safeIdUsuario');
+      print('Nombre Usuario: $safeNomUsuario');
+      print('Primera Ubicación: $currentLocation');
+      print('Versión de la App: $safeVersionApp');
+
+      await _sessionService.saveSession(
+        idUsuario: safeIdUsuario,
+        nomUsuario: safeNomUsuario,
+        primeraUbicacion: currentLocation,
+        versionApp: safeVersionApp,
+      );
+    } catch (e) {
+      print('Error al guardar la sesión: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error al guardar la sesión.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -590,58 +690,6 @@ class _LoginPageState extends State<LoginPage> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  @override
-  _MyHomePageState createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  final SessionService _sessionService = SessionService();
-  final String versionApp = '1.1'; // Número de versión de la app
-
-  Future<void> _saveSession(String idUsuario, String nomUsuario) async {
-    Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    LatLng currentLocation = LatLng(position.latitude, position.longitude);
-
-    print('Guardando sesión con los siguientes datos:');
-    print('ID Usuario: $idUsuario');
-    print('Nombre Usuario: $nomUsuario');
-    print('Primera Ubicación: $currentLocation');
-    print('Versión de la App: $versionApp');
-
-    await _sessionService.saveSession(
-      idUsuario: idUsuario,
-      nomUsuario: nomUsuario,
-      primeraUbicacion: currentLocation,
-      versionApp: versionApp,
-    );
-  }
-
-  Future<void> _onLoginConfirmed(String username) async {
-    // Lógica para confirmar el login y seleccionar el móvil
-    // ...
-
-    // Guardar la sesión
-    await _saveSession(username, 'Diego Medaglia');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Guardar Sesión'),
-      ),
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () => _onLoginConfirmed('27861374'),
-          child: Text('Confirmar Login y Guardar Sesión'),
         ),
       ),
     );

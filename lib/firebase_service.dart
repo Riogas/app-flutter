@@ -40,6 +40,12 @@ class FirebaseService {
     String escenarioId = box.get('escenario', defaultValue: '0');
     int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
+    // Imprimir todo el contenido de sessionBox
+    print("Contenido de sessionBox en pedidos:");
+    box.toMap().forEach((key, value) {
+      print('$key: $value');
+    });
+
     String collectionName = 'Pedidos-$escenarioId';
     String fechaActualStr = DateTime.now()
         .toUtc()

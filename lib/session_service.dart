@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
 
 class SessionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -17,8 +19,10 @@ class SessionService {
     String escenarioId = box.get('escenario');
     String movil = box.get('movil');
     String idSesion = _uuid.v4();
-    String idTerminal = _uuid.v4(); // Placeholder for device ID
-    String infoDispositivo = ''; // Placeholder for device info
+    String idTerminal = box.get('deviceId');
+    String infoDispositivo =
+        await _getDeviceInfo(); // Obtener información del dispositivo
+    String nombreUsuario = box.get('NombreUsuario');
     int distanciaRecorridaMts = 0;
     String estado = 'Activa';
     DateTime now = DateTime.now();
@@ -38,7 +42,7 @@ class SessionService {
         fechaDocRef.collection('Movil-$movil').doc(horaActual);
 
     DocumentReference ultimaDocRef =
-        fechaDocRef.collection('Movil-$movil').doc('ultima');
+        fechaDocRef.collection('Movil-$movil').doc('activo');
 
     Map<String, dynamic> sessionData = {
       'distanciaRecorridaMts': distanciaRecorridaMts,
@@ -50,7 +54,8 @@ class SessionService {
       'idTerminal': idTerminal,
       'idUsuario': idUsuario,
       'infoDispositivo': infoDispositivo,
-      'nomUsuario': nomUsuario,
+      'nomUsuario': nombreUsuario,
+      'movil': movil,
       'primeraUbicacion':
           GeoPoint(primeraUbicacion.latitude, primeraUbicacion.longitude),
       'tiempoLogueoMins': tiempoLogueoMins,
@@ -79,5 +84,24 @@ class SessionService {
     } catch (e) {
       print('Error al guardar la sesión en Firestore: $e');
     }
+  }
+
+  Future<String> _getDeviceInfo() async {
+    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+    String deviceInfoString = 'Unknown Device';
+
+    try {
+      if (Platform.isAndroid) {
+        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+        deviceInfoString = '${androidInfo.brand} ${androidInfo.model}';
+      } else if (Platform.isIOS) {
+        IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+        deviceInfoString = '${iosInfo.name} ${iosInfo.model}';
+      }
+    } catch (e) {
+      print('Error al obtener la información del dispositivo: $e');
+    }
+
+    return deviceInfoString;
   }
 }

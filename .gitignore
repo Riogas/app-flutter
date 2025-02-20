@@ -41,6 +41,7 @@ macos/
 linux/
 ios/
 android/
+.dart_tool/flutter_build/
 
 # Android bundle
 /build/
