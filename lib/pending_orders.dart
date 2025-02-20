@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '/firebase_service.dart'; // Asegúrate de usar la ruta correcta
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class PendingOrdersPage extends StatefulWidget {
   @override
@@ -10,16 +9,15 @@ class PendingOrdersPage extends StatefulWidget {
 
 class _PendingOrdersPageState extends State<PendingOrdersPage> {
   final FirebaseService _firebaseService = FirebaseService();
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
   List<String> _readOrderIds = [];
   int _orderCount = 0;
+  late Stream<List<DocumentSnapshot>> _ordersStream;
 
   @override
   void initState() {
     super.initState();
     _initializeFirebase();
-    _initializeNotifications();
+    _ordersStream = _firebaseService.getPedidosStream();
   }
 
   Future<void> _initializeFirebase() async {
@@ -27,16 +25,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     _listenToPendingOrders();
   }
 
-  void _initializeNotifications() {
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    final InitializationSettings initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
-    flutterLocalNotificationsPlugin.initialize(initializationSettings);
-  }
-
   void _listenToPendingOrders() {
-    _firebaseService.getPedidosStream().listen((orders) {
+    _ordersStream.listen((orders) {
       setState(() {
         _checkForNewOrders(orders);
         _orderCount = orders.length;
@@ -47,31 +37,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   void _checkForNewOrders(List<DocumentSnapshot> orders) {
     for (var order in orders) {
       if (!_readOrderIds.contains(order.id)) {
-        _showNotification(order);
         _readOrderIds.add(order.id);
       }
     }
-  }
-
-  Future<void> _showNotification(DocumentSnapshot order) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-      'your_channel_id',
-      'your_channel_name',
-      channelDescription: 'your_channel_description',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: false,
-    );
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
-    await flutterLocalNotificationsPlugin.show(
-      0,
-      'Nuevo Pedido',
-      'Cliente: ${order['ClienteNombre'] ?? 'Desconocido'}',
-      platformChannelSpecifics,
-      payload: 'item x',
-    );
   }
 
   @override
@@ -79,7 +47,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     return Scaffold(
       appBar: AppBar(
         title: StreamBuilder<List<DocumentSnapshot>>(
-          stream: _firebaseService.getPedidosStream(),
+          stream: _ordersStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return Text('Pedidos Pendientes (Cargando...)');
@@ -95,7 +63,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         ),
       ),
       body: StreamBuilder<List<DocumentSnapshot>>(
-        stream: _firebaseService.getPedidosStream(),
+        stream: _ordersStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());

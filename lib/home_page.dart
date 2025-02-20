@@ -14,6 +14,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive/hive.dart';
 import 'session_service.dart'; // Importar el servicio de sesión
 import 'firebase_service.dart'; // Importar el servicio de Firebase
+import 'main.dart'; // Importar la página de inicio de sesión
 
 class HomePage extends StatefulWidget {
   @override
@@ -30,6 +31,8 @@ class _HomePageState extends State<HomePage> {
   bool _locationPermissionDenied = false;
   bool _constantsLoaded = false;
   int _coordinateUpdateInterval = 30; // Valor por defecto en segundos
+  late StreamController<List<DocumentSnapshot>> _ordersStreamController;
+  late StreamSubscription _ordersSubscription;
 
   static List<Widget> _widgetOptions = <Widget>[
     PendingOrdersPage(),
@@ -42,6 +45,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _ordersStreamController = StreamController.broadcast();
     _loadSessionData();
     _startLocationUpdates();
     _printConstantDocumentNames();
@@ -52,6 +56,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _timer?.cancel();
+    _ordersSubscription.cancel();
+    _ordersStreamController.close();
     super.dispose();
   }
 
@@ -164,14 +170,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _listenToPendingOrders() {
-    _firebaseService.getPedidosStream().listen((orders) {
-      setState(() {
-        _newOrders = orders.where((order) {
-          var data = order.data() as Map<String, dynamic>;
-          return !data.containsKey('FechaHoraLeido') ||
-              data['FechaHoraLeido'] == null;
-        }).length;
-      });
+    _ordersSubscription = _firebaseService.getPedidosStream().listen((orders) {
+      if (!_ordersStreamController.isClosed) {
+        _ordersStreamController.add(orders);
+      }
     });
   }
 
@@ -181,6 +183,28 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  Widget _showForcedLogoutDialog(
+      BuildContext context, String nomUsuario, String movil) {
+    return AlertDialog(
+      title: Text('Deslogueo forzado'),
+      content: Text(
+          'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.'),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            var box = await Hive.openBox('sessionBox');
+            await box.clear();
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => LoginPage()),
+              (Route<dynamic> route) => false,
+            );
+          },
+          child: Text('Aceptar'),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,7 +212,35 @@ class _HomePageState extends State<HomePage> {
         title: Text('MoveIT'),
         toolbarHeight: 40.0, // Ajusta la altura del AppBar
       ),
-      body: _widgetOptions.elementAt(_selectedIndex),
+      body: StreamBuilder<Map<String, dynamic>?>(
+        stream: _firebaseService.getSesionesStream(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          if (snapshot.hasData) {
+            var data = snapshot.data;
+            if (data != null) {
+              var box = Hive.box('sessionBox');
+              String? deviceId = box.get('deviceId');
+              if (data['idTerminal'] != deviceId) {
+                return _showForcedLogoutDialog(
+                    context, data['nomUsuario'], data['movil']);
+              }
+            }
+          } else {
+            return _showForcedLogoutDialog(
+                context, 'Desconocido', 'Desconocido');
+          }
+
+          return _widgetOptions.elementAt(_selectedIndex);
+        },
+      ),
       bottomNavigationBar: BottomNavigationBar(
         items: <BottomNavigationBarItem>[
           BottomNavigationBarItem(

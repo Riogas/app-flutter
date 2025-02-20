@@ -81,11 +81,7 @@ void main() async {
   // Configurar handlers de mensajes en primer plano
   FirebaseMessaging.onMessage.listen(_firebaseMessagingForegroundHandler);
 
-  // Verificar si hay datos en sessionBox
-  var box = await Hive.openBox('sessionBox');
-  bool isLoggedIn = box.get('username') != null && box.get('movil') != null;
-
-  runApp(MyApp(isLoggedIn: isLoggedIn));
+  runApp(MyApp());
 }
 
 Future<void> _initializeLocalNotifications() async {
@@ -110,27 +106,29 @@ void _firebaseMessagingForegroundHandler(RemoteMessage message) {
 }
 
 class MyApp extends StatefulWidget {
-  final bool isLoggedIn;
-
-  MyApp({required this.isLoggedIn});
-
   @override
   _MyAppState createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppLifecycleObserver _lifecycleObserver = AppLifecycleObserver();
   Timer? _timer;
+  bool _isLoading = true;
+  bool _isLoggedIn = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
+
+    _checkIsLoggedIn();
     _startLoggingAppState();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     _timer?.cancel();
     super.dispose();
@@ -140,27 +138,85 @@ class _MyAppState extends State<MyApp> {
     _timer = Timer.periodic(Duration(seconds: 5), (timer) {
       final state = _lifecycleObserver.lastLifecycleState;
       if (state == AppLifecycleState.resumed) {
-        print('App is in the foreground');
+        print('✅ App is in the foreground');
       } else if (state == AppLifecycleState.paused) {
-        print('App is in the background');
+        print('⚠ App is in the background');
       } else if (state == AppLifecycleState.detached) {
-        print('App is closed');
+        print('❌ App is closed');
       } else {
         print('App state: $state');
       }
     });
   }
 
+  Future<void> _checkIsLoggedIn() async {
+    bool loggedIn = await checkIsLoggedIn();
+    if (!loggedIn) {
+      await clearHiveData(); // Si no está logueado, borra datos de Hive
+    }
+    setState(() {
+      _isLoggedIn = loggedIn;
+      _isLoading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator()), // Pantalla de carga
+      );
+    }
+
     return MaterialApp(
       title: 'MoveIT',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: widget.isLoggedIn ? HomePage() : LoginPage(),
+      home: _isLoggedIn ? HomePage() : LoginPage(),
     );
   }
+}
+
+Future<void> clearHiveData() async {
+  var box = await Hive.openBox('sessionBox');
+  await box.clear();
+  print("🔄 Datos de sesión eliminados.");
+}
+
+Future<bool> checkIsLoggedIn() async {
+  var box = await Hive.openBox('sessionBox');
+  String? username = box.get('username');
+  String? movil = box.get('movil');
+
+  if (username != null && movil != null) {
+    print("✅ Usuario y móvil encontrados en Hive: $username, $movil");
+
+    var session = await FirebaseService().getSesionesStream().first;
+    if (session != null) {
+      print("✅ Sesión activa encontrada en Firestore.");
+      return true;
+    } else {
+      print("⚠ No se encontró una sesión activa en Firestore.");
+      return false;
+    }
+  }
+
+  print("❌ No se encontraron datos de sesión en Hive.");
+  return false;
+}
+
+class AppLifecycleObserver extends WidgetsBindingObserver {
+  AppLifecycleState _lastLifecycleState =
+      AppLifecycleState.resumed; // 🔹 Estado por defecto: Foreground
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lastLifecycleState = state;
+    print('🔄 AppLifecycleState changed to $state');
+  }
+
+  AppLifecycleState get lastLifecycleState => _lastLifecycleState;
 }
 
 class LoginPage extends StatefulWidget {
@@ -572,6 +628,8 @@ class _LoginPageState extends State<LoginPage> {
       print('Sesión guardada con los siguientes valores:');
       print('Username: $username');
       print('Movil: $movil');
+
+      _saveSession(username, movil);
     } catch (e) {
       print('Error al guardar los datos del usuario: $e');
     }
@@ -837,16 +895,4 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
-}
-
-class AppLifecycleObserver extends WidgetsBindingObserver {
-  AppLifecycleState? _lastLifecycleState;
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _lastLifecycleState = state;
-    print('AppLifecycleState changed to $state');
-  }
-
-  AppLifecycleState? get lastLifecycleState => _lastLifecycleState;
 }

@@ -20,7 +20,7 @@ class FirebaseService {
     }
   }
 
-  Stream<void> getSesionesStream() async* {
+  Stream<Map<String, dynamic>?> getSesionesStream() async* {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0');
     String movil = box.get('movil', defaultValue: '0');
@@ -39,34 +39,45 @@ class FirebaseService {
     // Nombre del documento "activo"
     String activoDocName = 'activo';
 
-    // Obtener el documento "activo" dentro de la colección del móvil
-    DocumentReference activoDocRef = _firestore
+    // Obtener la referencia del documento "activo"
+    DocumentReference activoDocRef = FirebaseFirestore.instance
         .collection(collectionName)
         .doc(fechaDocName)
         .collection(movilCollectionName)
         .doc(activoDocName);
 
-    // Escuchar cambios en el documento "activo"
-    yield* activoDocRef.snapshots().handleError((error) {
-      print('Error fetching sesiones: $error');
-    }).map((snapshot) async {
+    try {
+      // 🌐 Hacer una consulta inicial FORZANDO datos desde el servidor (sin caché)
+      DocumentSnapshot snapshot = await activoDocRef.get(
+        const GetOptions(source: Source.server),
+      );
+
       if (snapshot.exists) {
         var data = snapshot.data() as Map<String, dynamic>;
-        print('Sesion activa encontrada: $data');
-
-        // Guardar o actualizar los valores en sessionBox
-        await box.put('movil', data['movil']);
-        await box.put('NombreUsuario', data['nomUsuario']);
-        await box.put('username', data['idUsuario']);
-        await box.put('deviceId', data['idTerminal']);
-
-        print('Datos guardados en sessionBox:');
-        print('movil: ${data['movil']}');
-        print('NombreUsuario: ${data['nomUsuario']}');
-        print('username: ${data['idUsuario']}');
-        print('deviceId: ${data['idTerminal']}');
+        print('✅ Sesión activa encontrada desde el servidor: $data');
+        yield data;
       } else {
-        print('No se encontró el documento "activo".');
+        print('⚠ No se encontró el documento "activo" en el servidor.');
+        yield null;
+      }
+    } catch (error) {
+      print('❌ Error al obtener sesión desde el servidor: $error');
+      yield null;
+    }
+
+    // 📡 Ahora, escuchar cambios en Firestore en tiempo real
+    yield* activoDocRef
+        .snapshots(includeMetadataChanges: true)
+        .handleError((error) {
+      print('❌ Error al escuchar cambios en Firestore: $error');
+    }).map((snapshot) {
+      if (snapshot.exists) {
+        var data = snapshot.data() as Map<String, dynamic>;
+        print('🔄 Sesión activa actualizada en Firestore: $data');
+        return data;
+      } else {
+        print('⚠ Documento "activo" eliminado o no encontrado en Firestore.');
+        return null;
       }
     });
   }
