@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:MoveIT/main.dart';
 import 'package:hive/hive.dart';
-import 'main.dart'; // Asegúrate de importar la pantalla de inicio de sesión
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -8,8 +8,10 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  String username = "";
-  String mobileNumber = "";
+  String? nombreUsuario;
+  String? movil;
+  String? idUsuario;
+  String? deviceId;
 
   @override
   void initState() {
@@ -20,14 +22,10 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadSessionData() async {
     var box = await Hive.openBox('sessionBox');
     setState(() {
-      username = box.get('username', defaultValue: 'Usuario no encontrado');
-      mobileNumber = box.get('movil', defaultValue: 'Número no encontrado');
-    });
-
-    // Debug: Mostrar todo el contenido de sessionBox
-    print("Contenido de sessionBox:");
-    box.toMap().forEach((key, value) {
-      print('$key: $value');
+      nombreUsuario = box.get('NombreUsuario');
+      movil = box.get('movil');
+      idUsuario = box.get('username');
+      deviceId = box.get('deviceId');
     });
   }
 
@@ -35,45 +33,38 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Opciones'),
+        title: Text('Settings'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: Center(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              'Usuario: $username',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Número de móvil: $mobileNumber',
-              style: TextStyle(fontSize: 18),
-            ),
+            if (nombreUsuario != null)
+              Text('Nombre de Usuario: $nombreUsuario'),
+            if (movil != null) Text('Móvil: $movil'),
+            if (idUsuario != null) Text('ID de Usuario: $idUsuario'),
+            if (deviceId != null) Text('ID de Dispositivo: $deviceId'),
             SizedBox(height: 20),
-            Center(
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  // Eliminar los datos de sesión de Hive
-                  var box = await Hive.openBox('sessionBox');
-                  await box.clear();
+            ElevatedButton.icon(
+              onPressed: () async {
+                // Eliminar los datos de sesión de Hive
+                var box = await Hive.openBox('sessionBox');
+                await box.deleteFromDisk();
 
-                  // Navegar a la pantalla de inicio de sesión
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                        builder: (context) => MyApp(
-                            isLoggedIn:
-                                false)), // Reemplaza MyApp con tu pantalla de inicio de sesión
-                  );
-                },
-                icon: Icon(Icons.power_settings_new, color: Colors.blue),
-                label: Text('Cerrar sesión'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.blue,
-                  side: BorderSide(color: Colors.blue),
-                ),
+                // Navegar a la pantalla de inicio de sesión
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        LoginPage(), // Reemplaza LoginPage con tu pantalla de inicio de sesión
+                  ),
+                );
+              },
+              icon: Icon(Icons.power_settings_new, color: Colors.blue),
+              label: Text('Cerrar sesión'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.blue,
+                side: BorderSide(color: Colors.blue),
               ),
             ),
           ],

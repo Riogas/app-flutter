@@ -71,6 +71,7 @@ class _LoginPageState extends State<LoginPage> {
   String _appVersion = 'Versión desconocida';
   final SessionService _sessionService = SessionService();
   final FirebaseService _firebaseService = FirebaseService();
+  bool _isLoading = true;
 
   @override
   void didChangeDependencies() {
@@ -199,6 +200,9 @@ class _LoginPageState extends State<LoginPage> {
         _deviceExists = false; // Por defecto, si ocurre un error
       });
     }
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   Future<void> _registerDevice(String document) async {
