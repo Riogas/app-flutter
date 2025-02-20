@@ -1,0 +1,59 @@
+gradle-wrapper.jar
+/.gradle
+/captures/
+/gradlew
+/gradlew.bat
+/local.properties
+GeneratedPluginRegistrant.java
+
+# Remember to never publicly share your keystore.
+# See https://flutter.dev/to/reference-keystore
+key.properties
+**/*.keystore
+**/*.jks
+
+# For iOS, this file is automatically created during the build process
+ios/Runner/GeneratedPluginRegistrant.h
+ios/Runner/GeneratedPluginRegistrant.m
+ios/Flutter/AppFrameworkInfo.plist
+ios/Flutter/Debug.xcconfig
+ios/Flutter/Release.xcconfig
+ios/Runner/
+
+linux/flutter/
+
+# For macOS, this file is automatically created during the build process
+macos/Flutter/Debug.xcconfig
+macos/Flutter/Release.xcconfig
+macos/runner/
+
+# For Windows, this file is automatically created during the build process
+windows/Runner/GeneratedPluginRegistrant.h
+windows/Runner/GeneratedPluginRegistrant.cpp
+windows/Flutter/AppFrameworkInfo.plist
+windows/Flutter/Debug.win32.config
+windows/Flutter/Release.win32.config
+windows/Flutter/Debug.x64.config
+windows/Flutter/Release.x64.config
+windows/runner/
+windows/
+macos/
+linux/
+ios/
+android/
+
+# Android bundle
+/build/
+/captures/
+/android/key.properties
+/app/build/
+/app/
+
+# Web
+/web/
+/lib/generated_plugin_registrant.dart
+```
+
+### 3.2.2. Configuración de Firebase
+
+
