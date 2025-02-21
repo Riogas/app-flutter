@@ -27,6 +27,7 @@ class LocationService {
     await _requestIgnoreBatteryOptimizations();
     await _loadUpdateInterval();
     await _getLocationPermission();
+    await ensureCorrectLocationPermission(); // 🔹 Verifica y solicita permiso en background
     await _enableBackgroundExecution();
     _startLocationUpdates();
   }
@@ -118,6 +119,24 @@ class LocationService {
       }
     } else {
       print('❌ No se pudo habilitar la ejecución en segundo plano.');
+    }
+  }
+
+  /// ✅ **Verifica si el usuario otorgó el permiso "Permitir todo el tiempo"**
+  Future<void> ensureCorrectLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.whileInUse) {
+      print(
+          "⚠️ El usuario solo concedió 'Mientras se usa la app'. Solicitando 'Permitir todo el tiempo'...");
+
+      // 🔹 Redirige al usuario a la configuración para que habilite el permiso correcto
+      final intent = AndroidIntent(
+        action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
+        data: 'package:com.example.appmovil',
+        flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+      );
+      await intent.launch();
     }
   }
 
