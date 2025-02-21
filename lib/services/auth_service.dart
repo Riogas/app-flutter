@@ -34,12 +34,18 @@ class AuthService {
     var response =
         await RioGasService.validarUsuario(username, password, deviceId);
 
+    print("en auth_service.dart");
+
     if (response != null && response['OK'] == 0) {
       var box = await Hive.openBox('sessionBox');
       await box.put('username', username);
       await box.put('movil', response['selectedMovil']);
       await box.put('escenario', response['EscenarioId']);
       await box.put('NombreUsuario', response['NombreUsuario'].trim());
+
+      // 🔹 Guardar que es un login manual para evitar el logout forzado inmediato
+      await box.put('firstLoginDone', true);
+
       return true;
     }
     return false;

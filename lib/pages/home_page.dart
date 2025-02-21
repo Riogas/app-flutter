@@ -43,6 +43,14 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _initializeHomePage();
     _initializeLocationService(); // 🔹 Ahora con mejor control
+
+    // 🔹 Resetear la bandera para futuros chequeos de sesión
+    Future.delayed(Duration(seconds: 10), () async {
+      var box = await Hive.openBox('sessionBox');
+      await box.put('firstLoginDone', false);
+      print(
+          "🔄 Reset de la bandera firstLoginDone, futuras sesiones serán chequeadas normalmente.");
+    });
   }
 
   @override
@@ -156,27 +164,50 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('MoveIT'), toolbarHeight: 40.0),
-      body: StreamBuilder<Map<String, dynamic>?>(
-        stream: _firebaseService.getSesionesStream(),
+      body: FutureBuilder(
+        future: Hive.openBox('sessionBox'),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (!snapshot.hasData) {
             return Center(child: CircularProgressIndicator());
-          if (snapshot.hasError)
-            return Center(child: Text('Error: ${snapshot.error}'));
-
-          if (snapshot.hasData) {
-            var data = snapshot.data;
-            var box = Hive.box('sessionBox');
-            if (data != null && data['idTerminal'] != box.get('deviceId')) {
-              return _showForcedLogoutDialog(
-                  context, data['nomUsuario'], data['movil']);
-            }
-          } else {
-            return _showForcedLogoutDialog(
-                context, 'Desconocido', 'Desconocido');
           }
 
-          return _widgetOptions.elementAt(_selectedIndex);
+          var box = Hive.box('sessionBox');
+          bool firstLoginDone = box.get('firstLoginDone', defaultValue: false);
+
+          print('🔒 firstLoginDone: $firstLoginDone');
+
+          // ✅ Si es el primer login manual, ignorar completamente el chequeo de sesión activa
+          if (firstLoginDone) {
+            print(
+                "🚀 Ignorando chequeo de logout forzado en el primer login manual...");
+            return _widgetOptions.elementAt(_selectedIndex);
+          }
+
+          // ✅ Si no es el primer login, proceder con la validación en Firestore
+          return StreamBuilder<Map<String, dynamic>?>(
+            stream: _firebaseService.getSesionesStream(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              }
+
+              if (snapshot.hasData && !firstLoginDone) {
+                var data = snapshot.data;
+                if (data != null && data['idTerminal'] != box.get('deviceId')) {
+                  return _showForcedLogoutDialog(
+                      context, data['nomUsuario'], data['movil']);
+                }
+              } else {
+                return _showForcedLogoutDialog(
+                    context, 'Desconocido', 'Desconocido');
+              }
+
+              return _widgetOptions.elementAt(_selectedIndex);
+            },
+          );
         },
       ),
       bottomNavigationBar: BottomNavigationBar(

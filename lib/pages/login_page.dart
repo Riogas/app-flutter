@@ -151,11 +151,21 @@ class _LoginPageState extends State<LoginPage> {
       Map<String, dynamic> response, String? selectedMovil) async {
     _showLoadingDialog();
 
+    print("Antes de guardar en hive");
+
     // 🔹 Guardar en Hive los datos del usuario, pero SOLO EL MÓVIL SELECCIONADO
     var box = await Hive.openBox('sessionBox');
     await box.put('username', _usernameController.text);
     await box.put('escenario', response['EscenarioId']);
     await box.put('NombreUsuario', response['NombreUsuario'].trim());
+
+    // 🔹 Guardar que es un login manual para evitar el logout forzado inmediato
+    await box.put('firstLoginDone', true);
+    await box.flush(); // ✅ Asegura que el valor se escriba inmediatamente
+
+    // 🔹 Imprimir el contenido de sessionBox después de asegurarnos que se guardó correctamente
+    print("📦 Contenido de sessionBox después de guardar firstLoginDone:");
+    box.toMap().forEach((key, value) => print('$key: $value'));
 
     // 🔹 Cargar y guardar constantes desde Firebase
     await ConstantsService.loadAndSaveConstants();
