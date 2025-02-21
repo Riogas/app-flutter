@@ -4,14 +4,13 @@ import 'completed_orders.dart';
 import 'map_page.dart';
 import 'settings_page.dart';
 import 'message_page.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
-import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
-import '../services/session_service.dart'; // Importar el servicio de sesión
-import '../services/firebase_service.dart'; // Importar el servicio de Firebase
-import 'main_.dart'; // Importar la página de inicio de sesión
+import 'dart:async';
+import '../services/session_service.dart';
+import '../services/firebase_service.dart';
+import '../services/location_service.dart'; // 🔹 Importamos LocationService
+import 'main_.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -20,17 +19,15 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final FirebaseService _firebaseService = FirebaseService();
+  final LocationService _locationService =
+      LocationService(); // 🔹 Instancia del servicio
   int _selectedIndex = 0;
   int _unreadMessages = 0;
   int _newOrders = 0;
-  Timer? _timer;
-  LatLng? _currentPosition;
-  bool _locationPermissionDenied = false;
   bool _constantsLoaded = false;
-  int _coordinateUpdateInterval = 30; // Valor por defecto en segundos
   late StreamSubscription _ordersSubscription;
 
-  static List<Widget> _widgetOptions = <Widget>[
+  static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
     CompletedOrdersPage(),
     MapPage(),
@@ -41,95 +38,30 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _loadSessionData();
-    _startLocationUpdates();
-    _printConstantDocumentNames();
-    _listenToMessages();
-    _listenToPendingOrders();
+    _initializeHomePage();
+    _locationService
+        .initializeLocationUpdates(); // 🔹 Se inicia el servicio de ubicación
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
     _ordersSubscription.cancel();
+    _locationService
+        .stopLocationUpdates(); // 🔹 Detiene las actualizaciones al salir
     super.dispose();
+  }
+
+  Future<void> _initializeHomePage() async {
+    await _loadSessionData();
+    _listenToMessages();
+    _listenToPendingOrders();
+    _printConstantDocumentNames();
   }
 
   Future<void> _loadSessionData() async {
     var box = await Hive.openBox('sessionBox');
-    var frecuenciaEnvio = box.get(
-        'Frecuencia envio coordenadas a Riogas (segs)',
-        defaultValue: {'Valor': 30, 'Estado': 'I'});
-
-    if (frecuenciaEnvio['Estado'] == 'A') {
-      setState(() {
-        _coordinateUpdateInterval = frecuenciaEnvio['Valor'];
-      });
-    }
-
-    // Debug: Mostrar todo el contenido de sessionBox
-    print("Contenido de sessionBox:");
-    box.toMap().forEach((key, value) {
-      print('$key: $value');
-    });
-  }
-
-  void _startLocationUpdates() async {
-    // Obtener las coordenadas inmediatamente
-    await _getAndShowLocation();
-
-    // Configurar el timer para obtener las coordenadas según el valor de la constante
-    print(
-        'Configurando el timer para obtener las coordenadas cada $_coordinateUpdateInterval segundos.');
-    _timer = Timer.periodic(Duration(seconds: _coordinateUpdateInterval),
-        (timer) async {
-      print('Obteniendo coordenadas...');
-      await _getAndShowLocation();
-    });
-  }
-
-  Future<void> _getAndShowLocation() async {
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        setState(() {
-          _locationPermissionDenied = true;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Permisos de ubicación denegados. Por favor, actívelos para continuar.'),
-            duration: Duration(seconds: 5),
-          ),
-        );
-        return;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      setState(() {
-        _locationPermissionDenied = true;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Permisos de ubicación denegados permanentemente. Por favor, actívelos en la configuración.'),
-          duration: Duration(seconds: 5),
-        ),
-      );
-      return;
-    }
-
-    // Obtener la ubicación actual del usuario
-    Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    setState(() {
-      _currentPosition = LatLng(position.latitude, position.longitude);
-      _locationPermissionDenied = false;
-    });
-
-    print('Latitud: ${position.latitude}, Longitud: ${position.longitude}');
+    print("📦 Contenido de sessionBox:");
+    box.toMap().forEach((key, value) => print('$key: $value'));
   }
 
   Future<void> _printConstantDocumentNames() async {
@@ -138,10 +70,9 @@ class _HomePageState extends State<HomePage> {
         QuerySnapshot querySnapshot = await FirebaseFirestore.instance
             .collection('Constantes-1000')
             .get();
-        print("Documentos en 'Constantes-1000':");
-        for (var doc in querySnapshot.docs) {
-          print('📝 Document ID: ${doc.id}');
-        }
+        print("📂 Documentos en 'Constantes-1000':");
+        querySnapshot.docs.forEach((doc) => print('📝 ${doc.id}'));
+
         setState(() {
           _constantsLoaded = true;
         });
@@ -156,8 +87,7 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _unreadMessages = messages.where((message) {
           var data = message.data() as Map<String, dynamic>;
-          return !data.containsKey('FchHoraLeido') ||
-              data['FchHoraLeido'] == null;
+          return data['FchHoraLeido'] == null;
         }).length;
       });
     });
@@ -186,8 +116,7 @@ class _HomePageState extends State<HomePage> {
       actions: [
         TextButton(
           onPressed: () async {
-            var box = await Hive.openBox('sessionBox');
-            await box.clear();
+            await Hive.openBox('sessionBox').then((box) => box.clear());
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => LoginPage()),
               (Route<dynamic> route) => false,
@@ -202,30 +131,21 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('MoveIT'),
-        toolbarHeight: 40.0, // Ajusta la altura del AppBar
-      ),
+      appBar: AppBar(title: Text('MoveIT'), toolbarHeight: 40.0),
       body: StreamBuilder<Map<String, dynamic>?>(
         stream: _firebaseService.getSesionesStream(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
+          if (snapshot.hasError)
             return Center(child: Text('Error: ${snapshot.error}'));
-          }
 
           if (snapshot.hasData) {
             var data = snapshot.data;
-            if (data != null) {
-              var box = Hive.box('sessionBox');
-              String? deviceId = box.get('deviceId');
-              if (data['idTerminal'] != deviceId) {
-                return _showForcedLogoutDialog(
-                    context, data['nomUsuario'], data['movil']);
-              }
+            var box = Hive.box('sessionBox');
+            if (data != null && data['idTerminal'] != box.get('deviceId')) {
+              return _showForcedLogoutDialog(
+                  context, data['nomUsuario'], data['movil']);
             }
           } else {
             return _showForcedLogoutDialog(
@@ -236,88 +156,48 @@ class _HomePageState extends State<HomePage> {
         },
       ),
       bottomNavigationBar: BottomNavigationBar(
-        items: <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Stack(
-              children: [
-                Icon(Icons.list),
-                if (_newOrders > 0)
-                  Positioned(
-                    right: 0,
-                    child: Container(
-                      padding: EdgeInsets.all(1),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      constraints: BoxConstraints(
-                        minWidth: 12,
-                        minHeight: 12,
-                      ),
-                      child: Text(
-                        '$_newOrders',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            label: 'Pendientes',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.check_circle),
-            label: 'Finalizados',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map),
-            label: 'Mapa',
-          ),
-          BottomNavigationBarItem(
-            icon: Stack(
-              children: [
-                Icon(Icons.message),
-                if (_unreadMessages > 0)
-                  Positioned(
-                    right: 0,
-                    child: Container(
-                      padding: EdgeInsets.all(1),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      constraints: BoxConstraints(
-                        minWidth: 12,
-                        minHeight: 12,
-                      ),
-                      child: Text(
-                        '$_unreadMessages',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            label: 'Mensajes',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Configuración',
-          ),
+        items: [
+          _buildBottomNavigationBarItem(Icons.list, 'Pendientes', _newOrders),
+          _buildBottomNavigationBarItem(Icons.check_circle, 'Finalizados', 0),
+          _buildBottomNavigationBarItem(Icons.map, 'Mapa', 0),
+          _buildBottomNavigationBarItem(
+              Icons.message, 'Mensajes', _unreadMessages),
+          _buildBottomNavigationBarItem(Icons.settings, 'Configuración', 0),
         ],
         currentIndex: _selectedIndex,
         selectedItemColor: Colors.blue,
-        unselectedItemColor:
-            Colors.grey, // Color de los elementos no seleccionados
+        unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
       ),
+    );
+  }
+
+  BottomNavigationBarItem _buildBottomNavigationBarItem(
+      IconData icon, String label, int badgeCount) {
+    return BottomNavigationBarItem(
+      icon: Stack(
+        children: [
+          Icon(icon),
+          if (badgeCount > 0)
+            Positioned(
+              right: 0,
+              child: _buildBadge(badgeCount),
+            ),
+        ],
+      ),
+      label: label,
+    );
+  }
+
+  Widget _buildBadge(int count) {
+    return Container(
+      padding: EdgeInsets.all(1),
+      decoration: BoxDecoration(
+          color: Colors.red, borderRadius: BorderRadius.circular(6)),
+      constraints: BoxConstraints(minWidth: 12, minHeight: 12),
+      child: Text('$count',
+          style: TextStyle(color: Colors.white, fontSize: 8),
+          textAlign: TextAlign.center),
     );
   }
 }

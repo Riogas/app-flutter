@@ -218,6 +218,106 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  void _showRegisterDeviceDialog() {
+    final TextEditingController _documentController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Registrar Dispositivo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Por favor, ingrese su documento de identidad.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _documentController,
+                decoration: const InputDecoration(
+                  labelText: 'Documento',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Cierra el diálogo
+              },
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final document = _documentController.text.trim();
+                if (document.isNotEmpty) {
+                  Navigator.of(context).pop(); // Cierra el diálogo
+                  await _registerDevice(
+                      document); // Llama a la función con el documento
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Por favor, ingrese un documento válido.'),
+                      backgroundColor: Colors.red,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _registerDevice(String document) async {
+    try {
+      final response =
+          await RioGasService.registrarDispositivo(_deviceId, document);
+
+      if (response != null && response['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dispositivo registrado con éxito.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        setState(() {
+          _isDeviceRegistered = true;
+        });
+
+        var box = await Hive.openBox('sessionBox');
+        await box.put('NombreUsuario', response['NombreUsuario']);
+        print(
+            'NombreUsuario guardado en sessionBox: ${response['NombreUsuario']}');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text(response?['message'] ?? 'Error al registrar dispositivo.'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error al registrar dispositivo: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error al registrar dispositivo.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -291,9 +391,30 @@ class _LoginPageState extends State<LoginPage> {
                                 textStyle: TextStyle(fontSize: 18),
                               ),
                             ),
+                            SizedBox(height: 20),
+                            if (!_isDeviceRegistered)
+                              ElevatedButton(
+                                onPressed: () => _showRegisterDeviceDialog(),
+                                child: Text('Registrar Dispositivo'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.grey,
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 50, vertical: 15),
+                                  textStyle: TextStyle(fontSize: 18),
+                                ),
+                              ),
                           ],
                         ),
                       ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Text(
+                      _appVersion,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
                 ],

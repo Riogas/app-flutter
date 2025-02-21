@@ -16,6 +16,7 @@ import 'package:geolocator_apple/geolocator_apple.dart';
 import 'package:google_maps_flutter_ios/google_maps_flutter_ios.dart';
 import 'package:path_provider_foundation/path_provider_foundation.dart';
 import 'package:url_launcher_ios/url_launcher_ios.dart';
+import 'package:battery_plus/battery_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_local_notifications_linux/flutter_local_notifications_linux.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -128,6 +129,15 @@ class _PluginRegistrant {
       }
 
     } else if (Platform.isLinux) {
+      try {
+        BatteryPlusLinuxPlugin.registerWith();
+      } catch (err) {
+        print(
+          '`battery_plus` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
       try {
         DeviceInfoPlusLinuxPlugin.registerWith();
       } catch (err) {

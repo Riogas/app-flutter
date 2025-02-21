@@ -4,10 +4,13 @@ import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:battery_plus/battery_plus.dart';
+import 'package:geolocator/geolocator.dart';
 
 class SessionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Uuid _uuid = Uuid();
+  final Battery _battery = Battery();
 
   Future<void> saveSession({
     required String idUsuario,
@@ -24,6 +27,9 @@ class SessionService {
     String idTerminal = box.get('deviceId') ?? 'UnknownDevice';
     String infoDispositivo = await _getDeviceInfo();
     String nombreUsuario = (box.get('NombreUsuario') ?? 'Sin Nombre').trim();
+    String versionAndroid = await _getAndroidVersion();
+    int nivelBateria = await _getBatteryLevel();
+    bool gpsActivado = await _isGpsEnabled();
 
     // ✅ Evitar error con valores Timestamp (Firebase no soporta Timestamp en Hive)
     DateTime now = DateTime.now();
@@ -66,6 +72,9 @@ class SessionService {
       'ultUbicacion':
           GeoPoint(primeraUbicacion.latitude, primeraUbicacion.longitude),
       'versionApp': versionApp,
+      'versionAndroid': versionAndroid,
+      'nivelBateria': nivelBateria,
+      'gpsActivado': gpsActivado,
     };
 
     print('Guardando sesión en Firestore con los siguientes datos:');
@@ -107,5 +116,27 @@ class SessionService {
     }
 
     return deviceInfoString;
+  }
+
+  Future<String> _getAndroidVersion() async {
+    if (Platform.isAndroid) {
+      DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+      AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+      return androidInfo.version.release;
+    }
+    return 'N/A';
+  }
+
+  Future<int> _getBatteryLevel() async {
+    try {
+      return await _battery.batteryLevel;
+    } catch (e) {
+      print('⚠️ Error al obtener nivel de batería: $e');
+      return -1; // 🔹 Devuelve -1 si no se puede obtener
+    }
+  }
+
+  Future<bool> _isGpsEnabled() async {
+    return await Geolocator.isLocationServiceEnabled();
   }
 }

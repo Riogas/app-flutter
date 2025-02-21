@@ -33,6 +33,7 @@ dependencies:
   url_launcher: ^6.0.20
   font_awesome_flutter: ^10.1.0
   flutter_local_notifications: ^18.0.0
+  battery_plus: ^6.2.1
 
 dev_dependencies:
   flutter_test: 
