@@ -32,6 +32,12 @@
       "languageVersion": "2.12"
     },
     {
+      "name": "android_intent_plus",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/android_intent_plus-4.0.3",
+      "packageUri": "lib/",
+      "languageVersion": "2.18"
+    },
+    {
       "name": "archive",
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/archive-3.6.1",
       "packageUri": "lib/",
@@ -1004,7 +1010,7 @@
       "languageVersion": "3.6"
     }
   ],
-  "generated": "2025-02-21T13:34:23.596190Z",
+  "generated": "2025-02-21T16:22:30.635454Z",
   "generator": "pub",
   "generatorVersion": "3.7.0-323.2.beta",
   "flutterRoot": "file:///C:/flutter",

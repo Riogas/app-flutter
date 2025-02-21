@@ -10,6 +10,7 @@ import 'dart:async';
 import '../services/session_service.dart';
 import '../services/firebase_service.dart';
 import '../services/location_service.dart'; // 🔹 Importamos LocationService
+import 'package:latlong2/latlong.dart';
 import 'main_.dart';
 
 class HomePage extends StatefulWidget {
@@ -19,8 +20,10 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final FirebaseService _firebaseService = FirebaseService();
+  late StreamSubscription<LatLng>
+      _locationSubscription; // 🔹 Guardamos la suscripción
   final LocationService _locationService =
-      LocationService(); // 🔹 Instancia del servicio
+      LocationService(); // 🔹 Definimos _locationService
   int _selectedIndex = 0;
   int _unreadMessages = 0;
   int _newOrders = 0;
@@ -39,16 +42,37 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _initializeHomePage();
-    _locationService
-        .initializeLocationUpdates(); // 🔹 Se inicia el servicio de ubicación
+    _initializeLocationService(); // 🔹 Ahora con mejor control
   }
 
   @override
   void dispose() {
     _ordersSubscription.cancel();
+    _locationSubscription.cancel(); // 🔹 Cancelamos el stream de ubicación
     _locationService
-        .stopLocationUpdates(); // 🔹 Detiene las actualizaciones al salir
+        .stopLocationUpdates(); // 🔹 Detenemos el servicio correctamente
     super.dispose();
+  }
+
+  /// 🔹 **Inicializa el servicio de ubicación y maneja el stream**
+  Future<void> _initializeLocationService() async {
+    try {
+      await _locationService
+          .initializeLocationUpdates(); // ⏳ Esperamos a que se inicie correctamente
+
+      // 🔹 Iniciamos la escucha de coordenadas
+      _locationSubscription = _locationService.locationStream.listen(
+        (LatLng position) {
+          print('📍 Nueva coordenada recibida en HomePage: '
+              '${position.latitude}, ${position.longitude}');
+        },
+        onError: (error) {
+          print("❌ Error en el stream de ubicación: $error");
+        },
+      );
+    } catch (e) {
+      print('❌ Error al inicializar el servicio de ubicación: $e');
+    }
   }
 
   Future<void> _initializeHomePage() async {
