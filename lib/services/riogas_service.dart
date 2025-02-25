@@ -13,6 +13,17 @@ class RioGasService {
   static Future<Map<String, dynamic>?> _post(
       String endpoint, Map<String, dynamic> body) async {
     try {
+      // Procesar el valor de la versión para que solo incluya el número
+      if (body.containsKey('version')) {
+        body['version'] = body['version'].replaceAll(RegExp(r'[^0-9.]'), '');
+      }
+
+      print('Ejecutando servicio: $endpoint');
+      print('Solicitud (request):');
+      print('URL: $baseUrl$endpoint');
+      print('Headers: $headers');
+      print('Body: ${jsonEncode({...body, 'token': token})}');
+
       final response = await http.post(
         Uri.parse('$baseUrl$endpoint'),
         headers: headers,
