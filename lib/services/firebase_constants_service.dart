@@ -3,9 +3,13 @@ import 'package:hive/hive.dart';
 
 class ConstantsService {
   static Future<void> loadAndSaveConstants() async {
-    QuerySnapshot querySnapshot =
-        await FirebaseFirestore.instance.collection('Constantes-1000').get();
     var box = await Hive.openBox('sessionBox');
+    String escenario = box.get('escenario', defaultValue: '1000');
+
+    QuerySnapshot querySnapshot = await FirebaseFirestore.instance
+        .collection('Constantes-$escenario')
+        .get();
+    var constantBox = await Hive.openBox('constantBox');
 
     for (var doc in querySnapshot.docs) {
       Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
@@ -17,7 +21,10 @@ class ConstantsService {
         }
       });
 
-      await box.put(doc.id, data);
+      await constantBox.put(doc.id, data);
     }
+
+    print("📦 Contenido de constantBox después de guardar las constantes:");
+    constantBox.toMap().forEach((key, value) => print('$key: $value'));
   }
 }

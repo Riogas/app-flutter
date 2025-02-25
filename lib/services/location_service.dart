@@ -46,18 +46,24 @@ class LocationService {
 
   /// 🔹 Carga el intervalo de actualización desde Hive
   Future<void> _loadUpdateInterval() async {
-    var box = await Hive.openBox('sessionBox');
-    var frecuenciaEnvio = box.get(
-      'Frecuencia envio coordenadas a Riogas (segs)',
-      defaultValue: {'Valor': 30, 'Estado': 'I'},
-    );
+    var box = await Hive.openBox('constantBox');
+    var data = box.get('31');
 
-    if (frecuenciaEnvio['Estado'] == 'A') {
-      _updateInterval = frecuenciaEnvio['Valor'];
+    if (data != null) {
+      print("📦 Contenido del documento con ID '31': $data");
+
+      if (data['Estado'] == 'A') {
+        _updateInterval = data['Valor'];
+        print(
+            "✅ Estado es 'A'. Intervalo de actualización configurado a $_updateInterval segundos.");
+      } else {
+        print(
+            "❌ Estado no es 'A'. Usando el intervalo por defecto de $_updateInterval segundos.");
+      }
+    } else {
+      print(
+          "❌ No se encontró el documento con ID '31'. Usando el intervalo por defecto de $_updateInterval segundos.");
     }
-
-    print(
-        "🔄 Intervalo de actualización de coordenadas: $_updateInterval segundos");
   }
 
   /// 🔹 Manejo de permisos para primer y segundo plano
@@ -174,9 +180,14 @@ class LocationService {
 
       print(
           '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
+      _updateCoordinatesInFirestore(position);
     } catch (e) {
       print('❌ Error al obtener ubicación: $e');
     }
+  }
+
+  Future<void> _updateCoordinatesInFirestore(Position position) async {
+    // Implementación de la actualización de coordenadas en Firestore
   }
 
   /// 🔹 Detiene la actualización de ubicación

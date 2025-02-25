@@ -47,7 +47,7 @@ class _HomePageState extends State<HomePage> {
     // 🔹 Resetear la bandera para futuros chequeos de sesión
     Future.delayed(Duration(seconds: 10), () async {
       var box = await Hive.openBox('sessionBox');
-      await box.put('firstLoginDone', false);
+      //await box.put('firstLoginDone', false);
       print(
           "🔄 Reset de la bandera firstLoginDone, futuras sesiones serán chequeadas normalmente.");
     });
@@ -99,10 +99,12 @@ class _HomePageState extends State<HomePage> {
   Future<void> _printConstantDocumentNames() async {
     if (!_constantsLoaded) {
       try {
+        var box = await Hive.openBox('sessionBox');
+        String escenario = box.get('escenario', defaultValue: '1000');
         QuerySnapshot querySnapshot = await FirebaseFirestore.instance
-            .collection('Constantes-1000')
+            .collection('Constantes-$escenario')
             .get();
-        print("📂 Documentos en 'Constantes-1000':");
+        print("📂 Documentos en 'Constantes-$escenario':");
         querySnapshot.docs.forEach((doc) => print('📝 ${doc.id}'));
 
         setState(() {
@@ -181,33 +183,34 @@ class _HomePageState extends State<HomePage> {
             print(
                 "🚀 Ignorando chequeo de logout forzado en el primer login manual...");
             return _widgetOptions.elementAt(_selectedIndex);
-          }
-
-          // ✅ Si no es el primer login, proceder con la validación en Firestore
-          return StreamBuilder<Map<String, dynamic>?>(
-            stream: _firebaseService.getSesionesStream(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              }
-
-              if (snapshot.hasData && !firstLoginDone) {
-                var data = snapshot.data;
-                if (data != null && data['idTerminal'] != box.get('deviceId')) {
-                  return _showForcedLogoutDialog(
-                      context, data['nomUsuario'], data['movil']);
+          } else {
+            // ✅ Si no es el primer login, proceder con la validación en Firestore
+            return StreamBuilder<Map<String, dynamic>?>(
+              stream: _firebaseService.getSesionesStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
                 }
-              } else {
-                return _showForcedLogoutDialog(
-                    context, 'Desconocido', 'Desconocido');
-              }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
 
-              return _widgetOptions.elementAt(_selectedIndex);
-            },
-          );
+                if (snapshot.hasData) {
+                  var data = snapshot.data;
+                  if (data != null &&
+                      data['idTerminal'] != box.get('deviceId')) {
+                    return _showForcedLogoutDialog(
+                        context, data['nomUsuario'], data['movil']);
+                  }
+                } else {
+                  return _showForcedLogoutDialog(
+                      context, 'Desconocido', 'Desconocido');
+                }
+
+                return _widgetOptions.elementAt(_selectedIndex);
+              },
+            );
+          }
         },
       ),
       bottomNavigationBar: BottomNavigationBar(
