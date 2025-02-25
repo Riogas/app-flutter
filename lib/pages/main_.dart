@@ -625,6 +625,7 @@ class _LoginPageState extends State<LoginPage> {
       var box = await Hive.openBox('sessionBox');
       await box.put('username', username);
       await box.put('movil', movil);
+      await box.put('firstLoginDone', true);
       print('Sesión guardada con los siguientes valores:');
       print('Username: $username');
       print('Movil: $movil');

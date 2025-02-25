@@ -43,9 +43,6 @@ class AuthService {
       await box.put('escenario', response['EscenarioId']);
       await box.put('NombreUsuario', response['NombreUsuario'].trim());
 
-      // 🔹 Guardar que es un login manual para evitar el logout forzado inmediato
-      await box.put('firstLoginDone', true);
-
       return true;
     }
     return false;

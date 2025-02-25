@@ -20,11 +20,6 @@ class SessionService {
   }) async {
     var box = await Hive.openBox('sessionBox');
 
-    // ✅ Guardar que es un login manual para evitar el logout forzado inmediato
-    await box.put('firstLoginDone', true);
-    await box.flush(); // 🔹 Asegurar que se escriba en Hive
-    print('✅ firstLoginDone guardado en Hive.');
-
     // ✅ Asegurar valores NO NULOS
     String escenarioId = box.get('escenario') ?? '0';
     String movil = box.get('movil') ?? 'Desconocido';

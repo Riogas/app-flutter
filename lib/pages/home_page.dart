@@ -47,7 +47,7 @@ class _HomePageState extends State<HomePage> {
     // 🔹 Resetear la bandera para futuros chequeos de sesión
     Future.delayed(Duration(seconds: 10), () async {
       var box = await Hive.openBox('sessionBox');
-      //await box.put('firstLoginDone', false);
+      await box.put('firstLoginDone', false);
       print(
           "🔄 Reset de la bandera firstLoginDone, futuras sesiones serán chequeadas normalmente.");
     });
@@ -176,7 +176,7 @@ class _HomePageState extends State<HomePage> {
           var box = Hive.box('sessionBox');
           bool firstLoginDone = box.get('firstLoginDone', defaultValue: false);
 
-          print('🔒 firstLoginDone: $firstLoginDone');
+          print('🔒 firstLoginDone home_page: $firstLoginDone');
 
           // ✅ Si es el primer login manual, ignorar completamente el chequeo de sesión activa
           if (firstLoginDone) {
@@ -184,6 +184,7 @@ class _HomePageState extends State<HomePage> {
                 "🚀 Ignorando chequeo de logout forzado en el primer login manual...");
             return _widgetOptions.elementAt(_selectedIndex);
           } else {
+            print("🔒 Chequeando logout forzado en Firestore...");
             // ✅ Si no es el primer login, proceder con la validación en Firestore
             return StreamBuilder<Map<String, dynamic>?>(
               stream: _firebaseService.getSesionesStream(),
