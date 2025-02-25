@@ -89,11 +89,24 @@ class SessionService {
       await sessionDocRef.set(sessionData);
       print('Sesión guardada correctamente en Firestore.');
 
-      // ✅ Borrar y crear la colección 'ultima'
-      await ultimaDocRef.delete();
-      print('Documento "ultima" borrado correctamente.');
+      // ✅ Verificar si existe un documento "activo"
+      DocumentSnapshot activeDocSnapshot = await ultimaDocRef.get();
+      if (activeDocSnapshot.exists) {
+        // 🔹 Hacer una copia del documento "activo" con el nombre basado en la hora actual
+        DocumentReference backupDocRef =
+            fechaDocRef.collection('Movil-$movil').doc(horaActual);
+        await backupDocRef
+            .set(activeDocSnapshot.data() as Map<String, dynamic>);
+        print('Documento "activo" copiado a $horaActual correctamente.');
+
+        // 🔹 Eliminar el documento "activo" actual
+        await ultimaDocRef.delete();
+        print('Documento "activo" borrado correctamente.');
+      }
+
+      // ✅ Crear el nuevo documento "activo"
       await ultimaDocRef.set(sessionData);
-      print('Documento "ultima" creado correctamente.');
+      print('Documento "activo" creado correctamente.');
     } catch (e) {
       print('❌ Error al guardar la sesión en Firestore: $e');
     }

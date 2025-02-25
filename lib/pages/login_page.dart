@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:hive/hive.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginPage extends StatefulWidget {
   @override
@@ -167,19 +168,85 @@ class _LoginPageState extends State<LoginPage> {
     print("📦 Contenido de sessionBox después de guardar firstLoginDone:");
     box.toMap().forEach((key, value) => print('$key: $value'));
 
-    // 🔹 Cargar y guardar constantes desde Firebase
-    await ConstantsService.loadAndSaveConstants();
+    // 🔹 Verificar si existe un documento "activo" con un idUsuario o idTerminal diferente
+    bool shouldProceed = await _checkActiveSession(response, selectedMovil);
 
-    // 🔹 Obtener ubicación actual
-    LatLng? currentLocation = await _getCurrentLocation();
+    if (shouldProceed) {
+      // 🔹 Cargar y guardar constantes desde Firebase
+      await ConstantsService.loadAndSaveConstants();
 
-    // 🔹 Guardar sesión en Firestore
-    await _saveSession(currentLocation);
+      // 🔹 Obtener ubicación actual
+      LatLng? currentLocation = await _getCurrentLocation();
 
-    // 🔹 Cerrar el diálogo de carga y navegar a HomePage
-    Navigator.pop(context);
-    Navigator.pushReplacement(
-        context, MaterialPageRoute(builder: (context) => HomePage()));
+      // 🔹 Guardar sesión en Firestore
+      await _saveSession(currentLocation);
+
+      // 🔹 Cerrar el diálogo de carga y navegar a HomePage
+      Navigator.pop(context);
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (context) => HomePage()));
+    } else {
+      // 🔹 Cerrar el diálogo de carga
+      Navigator.pop(context);
+    }
+  }
+
+  Future<bool> _checkActiveSession(
+      Map<String, dynamic> response, String? selectedMovil) async {
+    var box = await Hive.openBox('sessionBox');
+    String escenario = box.get('escenario', defaultValue: '1000');
+    String idUsuario = box.get('username');
+    String idTerminal = box.get('deviceId');
+    String nombreUsuario = box.get('NombreUsuario');
+
+    DocumentReference ultimaDocRef = FirebaseFirestore.instance
+        .collection('Sesiones-$escenario')
+        .doc(DateTime.now().toIso8601String().split('T')[0].replaceAll('-', ''))
+        .collection('Movil-$selectedMovil')
+        .doc('activo');
+
+    DocumentSnapshot activeDocSnapshot = await ultimaDocRef.get();
+
+    if (activeDocSnapshot.exists) {
+      var data = activeDocSnapshot.data() as Map<String, dynamic>;
+      if (data['idUsuario'] != idUsuario || data['idTerminal'] != idTerminal) {
+        bool shouldProceed =
+            await _showActiveSessionDialog(selectedMovil!, data['nomUsuario']);
+        return shouldProceed;
+      }
+    }
+    return true;
+  }
+
+  Future<bool> _showActiveSessionDialog(
+      String selectedMovil, String activeUser) async {
+    bool shouldProceed = false;
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Sesión Activa Encontrada'),
+          content: Text(
+              'Usted se está intentando conectar al móvil $selectedMovil, el cual está logueado el usuario $activeUser. ¿Desea continuar?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                shouldProceed = true;
+                Navigator.of(context).pop();
+              },
+              child: Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+    return shouldProceed;
   }
 
   Future<void> _saveSession(LatLng? location) async {
