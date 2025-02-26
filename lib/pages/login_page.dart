@@ -44,6 +44,8 @@ class _LoginPageState extends State<LoginPage> {
       _deviceId,
     );
 
+    print("Antes del login");
+
     if (response != null && response['OK'] == 0) {
       // 🔹 Extraer lista de móviles de la respuesta
       List<dynamic> listaMoviles = jsonDecode(response['ListaMoviles']);
@@ -52,11 +54,9 @@ class _LoginPageState extends State<LoginPage> {
           .toList();
 
       if (_availableMoviles.isNotEmpty) {
+        print("Mostrar selección de móviles antes de continuar");
         // 🔹 Mostrar selección de móviles antes de continuar
         await _showMobileSelectionDialog(response);
-      } else {
-        // Si no hay móviles disponibles, continuar directamente
-        await _proceedAfterMobileSelection(response, null);
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -71,6 +71,8 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _showMobileSelectionDialog(Map<String, dynamic> response) async {
     String? selectedMovil;
     bool isLoading = false;
+
+    print("Mostrar diálogo de selección de móviles");
 
     await showDialog(
       context: context,
@@ -126,6 +128,8 @@ class _LoginPageState extends State<LoginPage> {
 
                         Navigator.of(dialogContext).pop();
 
+                        print("Continuar luego de seleccionado un movil");
+
                         // 🔹 Continuar con el flujo después de la selección del móvil
                         await _proceedAfterMobileSelection(
                             response, selectedMovil);
@@ -150,6 +154,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _proceedAfterMobileSelection(
       Map<String, dynamic> response, String? selectedMovil) async {
+    print("Proceder después de seleccionar un móvil");
     _showLoadingDialog();
 
     print("Antes de guardar en hive");
@@ -173,6 +178,7 @@ class _LoginPageState extends State<LoginPage> {
 
     if (shouldProceed) {
       // 🔹 Cargar y guardar constantes desde Firebase
+      print("Cargando y guardando constantes desde Firebase...");
       await ConstantsService.loadAndSaveConstants();
 
       // 🔹 Obtener ubicación actual
@@ -186,6 +192,10 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (context) => HomePage()));
     } else {
+      // 🔹 Cargar y guardar constantes desde Firebase
+      print("Cargando y guardando constantes desde Firebase...");
+      await ConstantsService.loadAndSaveConstants();
+
       // 🔹 Cerrar el diálogo de carga
       Navigator.pop(context);
     }

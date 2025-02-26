@@ -45,14 +45,18 @@ class SessionService {
     String fechaActual =
         now.toIso8601String().split('T')[0].replaceAll('-', '');
     String horaActual = now.toIso8601String().split('T')[1].split('.')[0];
+    String mesActual = fechaActual.substring(0, 6); // yyyymm
+    String diaActual = fechaActual.substring(6, 8); // dd
 
     // 🔹 Referencias en Firestore
-    DocumentReference fechaDocRef =
-        _firestore.collection('Sesiones-$escenarioId').doc(fechaActual);
+    DocumentReference mesDocRef =
+        _firestore.collection('Sesiones-$escenarioId').doc(mesActual);
+    DocumentReference diaDocRef =
+        mesDocRef.collection(diaActual).doc(diaActual);
     DocumentReference sessionDocRef =
-        fechaDocRef.collection('Movil-$movil').doc(horaActual);
+        mesDocRef.collection(diaActual).doc(horaActual);
     DocumentReference ultimaDocRef =
-        fechaDocRef.collection('Movil-$movil').doc('activo');
+        mesDocRef.collection(diaActual).doc('activo');
 
     Map<String, dynamic> sessionData = {
       'distanciaRecorridaMts': distanciaRecorridaMts,
@@ -81,9 +85,14 @@ class SessionService {
     print(sessionData);
 
     try {
-      // ✅ Asegurar que el documento padre (fecha) tenga un campo para ser reconocido
-      await fechaDocRef.set({'FchHoraCreacion': now}, SetOptions(merge: true));
-      print('Documento padre asegurado en Firestore con FchHoraCreacion.');
+      // ✅ Asegurar que el documento padre (mes) tenga un campo para ser reconocido
+      await mesDocRef.set({'FchHoraCreacion': now}, SetOptions(merge: true));
+      print(
+          'Documento padre (mes) asegurado en Firestore con FchHoraCreacion.');
+
+      // ✅ Asegurar que el documento del día tenga un campo para ser reconocido
+      await diaDocRef.set({'FchHoraCreacion': now}, SetOptions(merge: true));
+      print('Documento del día asegurado en Firestore con FchHoraCreacion.');
 
       // ✅ Guardar la sesión actual
       await sessionDocRef.set(sessionData);
@@ -94,7 +103,7 @@ class SessionService {
       if (activeDocSnapshot.exists) {
         // 🔹 Hacer una copia del documento "activo" con el nombre basado en la hora actual
         DocumentReference backupDocRef =
-            fechaDocRef.collection('Movil-$movil').doc(horaActual);
+            mesDocRef.collection(diaActual).doc(horaActual);
         await backupDocRef
             .set(activeDocSnapshot.data() as Map<String, dynamic>);
         print('Documento "activo" copiado a $horaActual correctamente.');

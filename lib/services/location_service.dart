@@ -25,7 +25,12 @@ class LocationService {
   /// 🔹 Inicializa el servicio de ubicación en primer y segundo plano
   Future<void> initializeLocationUpdates() async {
     await _requestIgnoreBatteryOptimizations();
-    await _loadUpdateInterval();
+    bool intervalLoaded = await _loadUpdateInterval();
+    if (!intervalLoaded) {
+      print(
+          "❌ No se pudo cargar el intervalo de actualización. No se iniciarán las actualizaciones de ubicación.");
+      return;
+    }
     await _getLocationPermission();
     await ensureCorrectLocationPermission(); // 🔹 Verifica y solicita permiso en background
     await _enableBackgroundExecution();
@@ -45,7 +50,7 @@ class LocationService {
   }
 
   /// 🔹 Carga el intervalo de actualización desde Hive
-  Future<void> _loadUpdateInterval() async {
+  Future<bool> _loadUpdateInterval() async {
     var box = await Hive.openBox('constantBox');
     var data = box.get('31');
 
@@ -56,13 +61,16 @@ class LocationService {
         _updateInterval = data['Valor'];
         print(
             "✅ Estado es 'A'. Intervalo de actualización configurado a $_updateInterval segundos.");
+        return true;
       } else {
         print(
-            "❌ Estado no es 'A'. Usando el intervalo por defecto de $_updateInterval segundos.");
+            "❌ Estado no es 'A'. No se iniciarán las actualizaciones de ubicación.");
+        return false;
       }
     } else {
       print(
-          "❌ No se encontró el documento con ID '31'. Usando el intervalo por defecto de $_updateInterval segundos.");
+          "❌ No se encontró el documento con ID '31'. No se iniciarán las actualizaciones de ubicación.");
+      return false;
     }
   }
 

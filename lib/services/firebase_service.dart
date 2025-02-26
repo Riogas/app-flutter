@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
+import '../utils/config.dart'; // Importa el archivo de configuración
 
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -17,6 +18,23 @@ class FirebaseService {
       print('Firebase initialized successfully');
     } catch (e) {
       print('Error initializing Firebase: $e');
+    }
+
+    // Autenticar al usuario
+    await signInWithEmailAndPassword();
+  }
+
+  Future<void> signInWithEmailAndPassword() async {
+    try {
+      UserCredential userCredential =
+          await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: Config.firestoreEmail, // Utiliza la variable global
+        password: Config.firestorePassword, // Utiliza la variable global
+      );
+      _user = userCredential.user;
+      print("User signed in: ${_user?.email}");
+    } on FirebaseAuthException catch (e) {
+      print("Error signing in: $e");
     }
   }
 
@@ -102,9 +120,6 @@ class FirebaseService {
         .replaceAll('-', '');
     int fechaActual = int.tryParse(fechaActualStr) ?? 0;
 
-    //print('Fetching pedidos from collection: $collectionName');
-    //print('Filters - Movil: $movil, FchPara: $fechaActual');
-
     yield* _firestore
         .collection(collectionName)
         .where('Movil', isEqualTo: movil)
@@ -115,11 +130,11 @@ class FirebaseService {
             descending: false) // Ordenar por FchHoraPara en forma ascendente
         .snapshots()
         .handleError((error) {
-      //print('Error fetching pedidos: $error');
+      print('Error fetching pedidos: $error');
     }).map((snapshot) {
-      //print('Fetched ${snapshot.docs.length} pedidos');
+      print('Fetched ${snapshot.docs.length} pedidos');
       snapshot.docs.forEach((doc) {
-        //print('Pedido: ${doc.data()}');
+        print('Pedido: ${doc.data()}');
       });
       return snapshot.docs;
     });
@@ -139,9 +154,6 @@ class FirebaseService {
         .replaceAll('-', '');
     int fechaActual = int.tryParse(fechaActualStr) ?? 0;
 
-    //print('Fetching pedidos cumplidos from collection: $collectionName');
-    //print('Filters - Movil: $movil, FchPara: $fechaActual');
-
     yield* _firestore
         .collection(collectionName)
         .where('Movil', isEqualTo: movil)
@@ -152,11 +164,11 @@ class FirebaseService {
             descending: false) // Ordenar por FchHoraPara en forma ascendente
         .snapshots()
         .handleError((error) {
-      //print('Error fetching pedidos cumplidos: $error');
+      print('Error fetching pedidos cumplidos: $error');
     }).map((snapshot) {
-      //print('Fetched ${snapshot.docs.length} pedidos cumplidos');
+      print('Fetched ${snapshot.docs.length} pedidos cumplidos');
       snapshot.docs.forEach((doc) {
-        //print('Pedido cumplido: ${doc.data()}');
+        print('Pedido cumplido: ${doc.data()}');
       });
       return snapshot.docs;
     });
@@ -167,16 +179,15 @@ class FirebaseService {
     String escenarioId = box.get('escenario', defaultValue: '0');
     String collectionName = 'Constantes-$escenarioId';
 
-    //print('Fetching constantes from collection: $collectionName');
     yield* _firestore
         .collection(collectionName)
         .snapshots()
         .handleError((error) {
-      //print('Error fetching constantes: $error');
+      print('Error fetching constantes: $error');
     }).map((snapshot) {
-      //print('Fetched ${snapshot.docs.length} constantes');
+      print('Fetched ${snapshot.docs.length} constantes');
       snapshot.docs.forEach((doc) {
-        //print('Constante: ${doc.data()}');
+        print('Constante: ${doc.data()}');
       });
       return snapshot.docs;
     });
@@ -196,9 +207,6 @@ class FirebaseService {
         .replaceAll('-', '');
     int fechaActual = int.tryParse(fechaActualStr) ?? 0;
 
-    //print('Fetching mensajes from collection: $collectionName');
-    //print('Filters - Movil: $movil, FchMsj: $fechaActual');
-
     yield* _firestore
         .collection(collectionName)
         .where('Movil', isEqualTo: movil)
@@ -206,11 +214,11 @@ class FirebaseService {
         .where('FchMsj', isEqualTo: fechaActual)
         .snapshots()
         .handleError((error) {
-      //print('Error fetching mensajes: $error');
+      print('Error fetching mensajes: $error');
     }).map((snapshot) {
-      //print('Fetched ${snapshot.docs.length} mensajes');
+      print('Fetched ${snapshot.docs.length} mensajes');
       snapshot.docs.forEach((doc) {
-        //print('Mensaje: ${doc.data()}');
+        print('Mensaje: ${doc.data()}');
       });
       return snapshot.docs;
     });
@@ -221,16 +229,15 @@ class FirebaseService {
     String escenarioId = box.get('escenario', defaultValue: '0');
     String collectionName = 'Moviles-$escenarioId';
 
-    //print('Fetching moviles from collection: $collectionName');
     yield* _firestore
         .collection(collectionName)
         .snapshots()
         .handleError((error) {
-      //print('Error fetching moviles: $error');
+      print('Error fetching moviles: $error');
     }).map((snapshot) {
-      //print('Fetched ${snapshot.docs.length} moviles');
+      print('Fetched ${snapshot.docs.length} moviles');
       snapshot.docs.forEach((doc) {
-        //print('Movil: ${doc.data()}');
+        print('Movil: ${doc.data()}');
       });
       return snapshot.docs;
     });
