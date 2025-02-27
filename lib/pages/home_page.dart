@@ -51,6 +51,9 @@ class _HomePageState extends State<HomePage> {
       print(
           "🔄 Reset de la bandera firstLoginDone, futuras sesiones serán chequeadas normalmente.");
     });
+
+    // 🔹 Inicializar el servicio de ubicación
+    _initializeLocationService();
   }
 
   @override
@@ -69,6 +72,14 @@ class _HomePageState extends State<HomePage> {
     _listenToMessages();
     _listenToPendingOrders();
     _printConstantDocumentNames();
+  }
+
+  Future<void> _initializeLocationService() async {
+    await _locationService.initializeLocationUpdates();
+    _locationSubscription = _locationService.locationStream.listen((location) {
+      print('📍 Nueva ubicación recibida en HomePage: $location');
+    });
+    _locationServiceCompleter.complete();
   }
 
   Future<void> _loadSessionData() async {

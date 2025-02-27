@@ -58,7 +58,7 @@ class LocationService {
       print("📦 Contenido del documento con ID '31': $data");
 
       if (data['Estado'] == 'A') {
-        _updateInterval = data['Valor'];
+        _updateInterval = int.parse(data['Valor']); // Convertir a int
         print(
             "✅ Estado es 'A'. Intervalo de actualización configurado a $_updateInterval segundos.");
         return true;
