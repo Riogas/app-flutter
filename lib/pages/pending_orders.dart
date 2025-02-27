@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PendingOrdersPage extends StatefulWidget {
   @override
@@ -61,17 +62,12 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(child: Text('No hay pedidos pendientes.'));
           } else {
-            var newOrders = snapshot.data!.where((order) {
-              var orderData = order.data() as Map<String, dynamic>?;
-              return orderData == null ||
-                  !orderData.containsKey('FechaHoraLeido') ||
-                  orderData['FechaHoraLeido'] == null;
-            }).toList();
+            var orders = snapshot.data!;
 
             return ListView.builder(
-              itemCount: newOrders.length,
+              itemCount: orders.length,
               itemBuilder: (context, index) {
-                var pedido = newOrders[index].data() as Map<String, dynamic>;
+                var pedido = orders[index].data() as Map<String, dynamic>;
                 bool isNew = !pedido.containsKey('FechaHoraLeido') ||
                     pedido['FechaHoraLeido'] == null;
                 String tipo = pedido['Tipo'] ?? 'Pedido';
@@ -80,11 +76,31 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                     ? direccion.substring(0, 20) + '...'
                     : direccion;
 
+                // Determinar el estado del pedido y la etiqueta correspondiente
+                String etiquetaTexto;
+                Color etiquetaColor;
+
+                if (isNew) {
+                  etiquetaTexto = 'Nuevo';
+                  etiquetaColor = Colors.red;
+                } else if (pedido['EstadoNro'] == 1 &&
+                    pedido['Procesando'] == true) {
+                  etiquetaTexto = 'Procesando';
+                  etiquetaColor = Colors.lightBlue;
+                } else if (pedido['EstadoNro'] == 1 &&
+                    pedido['Enviando'] == true) {
+                  etiquetaTexto = 'Enviando';
+                  etiquetaColor = Colors.orange;
+                } else {
+                  etiquetaTexto = 'Leido';
+                  etiquetaColor = Colors.grey;
+                }
+
                 return Padding(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8.0, vertical: 4.0),
                   child: Card(
-                    color: isNew ? Colors.lightBlue : Colors.orange,
+                    color: isNew ? Colors.lightBlue : Colors.blueGrey,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10.0),
                     ),
@@ -96,30 +112,72 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                         children: [
                           Row(
                             children: [
-                              if (isNew)
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 6.0, vertical: 2.0),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    borderRadius: BorderRadius.circular(8.0),
-                                  ),
-                                  child: Text(
-                                    'Nuevo',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12.0,
-                                    ),
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 6.0, vertical: 2.0),
+                                decoration: BoxDecoration(
+                                  color: etiquetaColor,
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                                child: Text(
+                                  etiquetaTexto,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.0,
                                   ),
                                 ),
+                              ),
                               Spacer(),
-                              Icon(
-                                tipo == 'Servicio'
-                                    ? Icons.build
-                                    : Icons.shopping_cart,
-                                color: Colors.white,
-                                size: 20.0,
+                              Row(
+                                children: [
+                                  if (pedido.containsKey('urlwaze'))
+                                    GestureDetector(
+                                      onTap: () async {
+                                        var url = pedido['urlwaze'];
+                                        if (await canLaunch(url)) {
+                                          await launch(url);
+                                        } else {
+                                          throw 'Could not launch $url';
+                                        }
+                                      },
+                                      child: Icon(
+                                        Icons.location_on,
+                                        color: Colors.white,
+                                        size: 20.0,
+                                      ),
+                                    ),
+                                  if (pedido.containsKey('urlwaze'))
+                                    SizedBox(
+                                        width: 8.0), // Espaciado entre iconos
+                                  if (pedido.containsKey('urltelefono'))
+                                    GestureDetector(
+                                      onTap: () async {
+                                        var url =
+                                            'tel:${pedido['urltelefono']}';
+                                        if (await canLaunch(url)) {
+                                          await launch(url);
+                                        } else {
+                                          throw 'Could not launch $url';
+                                        }
+                                      },
+                                      child: Icon(
+                                        Icons.phone,
+                                        color: Colors.white,
+                                        size: 20.0,
+                                      ),
+                                    ),
+                                  if (pedido.containsKey('urltelefono'))
+                                    SizedBox(
+                                        width: 8.0), // Espaciado entre iconos
+                                  Icon(
+                                    tipo == 'Servicio'
+                                        ? Icons.build
+                                        : Icons.local_shipping,
+                                    color: Colors.white,
+                                    size: 20.0,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -141,7 +199,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                             ),
                           ),
                           Text(
-                            'Teléfono: ${pedido['ClienteTel'] ?? 'Desconocido'}',
+                            tipo == 'Pedido'
+                                ? 'Servicio: ${pedido['ServicioNombre'] ?? 'Desconocido'}'
+                                : 'Defecto: ${pedido['Defecto'] ?? 'Desconocido'}',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 12.0,

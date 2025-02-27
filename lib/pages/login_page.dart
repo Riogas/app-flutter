@@ -425,7 +425,7 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(
         backgroundColor: Colors.blue,
         title: Text(
-          'MOVEIT',
+          '',
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -454,38 +454,61 @@ class _LoginPageState extends State<LoginPage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Image.asset('assets/logo-riogas.png'),
-                            SizedBox(height: 20),
                             Image.asset(
                               'assets/logomoveit.png',
                               width: 150,
                               height: 150,
                             ),
                             SizedBox(height: 20),
-                            Text(
-                              'Device ID: $_deviceId',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.black,
-                              ),
-                            ),
                             SizedBox(height: 20),
                             TextField(
                               controller: _usernameController,
+                              style: TextStyle(color: Colors.black),
                               decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Colors.transparent,
                                 labelText: 'Usuario',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.person),
+                                labelStyle: TextStyle(color: Colors.black),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.black),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.black),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.black),
+                                ),
+                                prefixIcon:
+                                    Icon(Icons.person, color: Colors.black),
                               ),
                             ),
                             SizedBox(height: 10),
                             TextField(
                               controller: _passwordController,
                               obscureText: true,
+                              style: TextStyle(color: Colors.black),
                               decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Colors.transparent,
                                 labelText: 'Contraseña',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.lock),
+                                labelStyle: TextStyle(color: Colors.black),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.black),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.black),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.black),
+                                ),
+                                prefixIcon:
+                                    Icon(Icons.lock, color: Colors.black),
                               ),
                             ),
                             SizedBox(height: 20),
@@ -520,10 +543,33 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   Padding(
                     padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      _appVersion,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    child: Stack(
+                      children: [
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text(
+                            _appVersion,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'ID: $_deviceId',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Image.asset(
+                            'assets/logo-riogas.png',
+                            width: 70,
+                            height: 20,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

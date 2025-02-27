@@ -59,7 +59,8 @@ class LocationService {
       print("📦 Contenido del documento con ID '31': $data");
 
       if (data['Estado'] == 'A') {
-        _updateInterval = int.parse(data['Valor']); // Convertir a int
+        _updateInterval =
+            _parseUpdateInterval(data['Valor']); // Convertir a int
         print(
             "✅ Estado es 'A'. Intervalo de actualización configurado a $_updateInterval segundos.");
         return true;
@@ -73,6 +74,13 @@ class LocationService {
           "❌ No se encontró el documento con ID '31'. No se iniciarán las actualizaciones de ubicación.");
       return false;
     }
+  }
+
+  int _parseUpdateInterval(dynamic value, {int defaultValue = 30}) {
+    if (value is String) {
+      return int.tryParse(value) ?? defaultValue;
+    }
+    return defaultValue;
   }
 
   /// 🔹 Manejo de permisos para primer y segundo plano

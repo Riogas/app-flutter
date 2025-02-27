@@ -30,6 +30,7 @@ class _HomePageState extends State<HomePage> {
   bool _constantsLoaded = false;
   late StreamSubscription _ordersSubscription;
   final Completer<void> _locationServiceCompleter = Completer<void>();
+  String _movil = '0';
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -86,6 +87,9 @@ class _HomePageState extends State<HomePage> {
     var box = await Hive.openBox('sessionBox');
     print("📦 Contenido de sessionBox:");
     box.toMap().forEach((key, value) => print('$key: $value'));
+    setState(() {
+      _movil = box.get('movil', defaultValue: '0');
+    });
   }
 
   Future<void> _printConstantDocumentNames() async {
@@ -157,7 +161,33 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('MoveIT'), toolbarHeight: 40.0),
+      appBar: AppBar(
+        title: Text('MoveIT'),
+        toolbarHeight: 40.0,
+        backgroundColor: Colors.lightBlueAccent,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Icon(Icons.network_cell, color: Colors.green),
+                SizedBox(width: 5),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Movil:$_movil - Activo',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
       body: FutureBuilder(
         future: Hive.openBox('sessionBox'),
         builder: (context, snapshot) {
