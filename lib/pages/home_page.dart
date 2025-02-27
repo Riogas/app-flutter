@@ -11,7 +11,7 @@ import '../services/session_service.dart';
 import '../services/firebase_service.dart';
 import '../services/location_service.dart'; // 🔹 Importamos LocationService
 import 'package:latlong2/latlong.dart';
-import 'main_.dart';
+import 'package:MoveIT/pages/login_page.dart';
 
 class HomePage extends StatefulWidget {
   @override

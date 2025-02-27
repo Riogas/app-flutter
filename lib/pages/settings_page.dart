@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:MoveIT/pages/main_.dart';
+import 'package:MoveIT/pages/login_page.dart';
 import 'package:hive/hive.dart';
+import '../services/session_service.dart';
+import 'package:latlong2/latlong.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -29,6 +31,35 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  Future<void> _logout() async {
+    var sessionBox = await Hive.openBox('sessionBox');
+    var constantBox = await Hive.openBox('constantBox');
+
+    // Llamar a SessionService para eliminar el documento activo y crear una copia
+    SessionService sessionService = SessionService();
+    await sessionService.saveSession(
+      idUsuario: idUsuario!,
+      nomUsuario: nombreUsuario!,
+      primeraUbicacion:
+          LatLng(0, 0), // Reemplaza con la ubicación real si es necesario
+      versionApp: '1.0.0', // Reemplaza con la versión real de la app
+      tipoDeCierreDeSesion: 'logoutUser',
+    );
+
+    // Eliminar los datos de sesión de Hive
+    await sessionBox.deleteFromDisk();
+    await constantBox.deleteFromDisk();
+
+    // Navegar a la pantalla de inicio de sesión
+    Future.microtask(() {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => LoginPage(),
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -46,19 +77,7 @@ class _SettingsPageState extends State<SettingsPage> {
             if (deviceId != null) Text('ID de Dispositivo: $deviceId'),
             SizedBox(height: 20),
             ElevatedButton.icon(
-              onPressed: () async {
-                // Eliminar los datos de sesión de Hive
-                var box = await Hive.openBox('sessionBox');
-                await box.deleteFromDisk();
-
-                // Navegar a la pantalla de inicio de sesión
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        LoginPage(), // Reemplaza LoginPage con tu pantalla de inicio de sesión
-                  ),
-                );
-              },
+              onPressed: _logout,
               icon: Icon(Icons.power_settings_new, color: Colors.blue),
               label: Text('Cerrar sesión'),
               style: ElevatedButton.styleFrom(

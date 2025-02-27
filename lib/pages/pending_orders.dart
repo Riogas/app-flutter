@@ -25,19 +25,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     await _firebaseService.initializeFirebase();
   }
 
-  void _checkForNewOrders(List<DocumentSnapshot> orders) {
-    int newOrders = 0;
-    for (var order in orders) {
-      if (!_readOrderIds.contains(order.id)) {
-        _readOrderIds.add(order.id);
-        newOrders++;
-      }
-    }
-    setState(() {
-      _newOrderCount = newOrders;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -53,9 +40,13 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
               return Text('Pedidos Pendientes (0)');
             } else {
               _orderCount = snapshot.data!.length;
-              _checkForNewOrders(snapshot.data!);
-              return Text(
-                  'Pedidos Pendientes ($_orderCount) (Nuevos: $_newOrderCount)');
+              int newOrderCount = snapshot.data!.where((order) {
+                var orderData = order.data() as Map<String, dynamic>?;
+                return orderData == null ||
+                    !orderData.containsKey('FechaHoraLeido') ||
+                    orderData['FechaHoraLeido'] == null;
+              }).length;
+              return Text('Pedidos ($_orderCount)');
             }
           },
         ),

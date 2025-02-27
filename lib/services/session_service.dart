@@ -17,6 +17,7 @@ class SessionService {
     required String nomUsuario,
     required LatLng primeraUbicacion,
     required String versionApp,
+    required String tipoDeCierreDeSesion,
   }) async {
     var box = await Hive.openBox('sessionBox');
 
@@ -49,14 +50,12 @@ class SessionService {
     String diaActual = fechaActual.substring(6, 8); // dd
 
     // 🔹 Referencias en Firestore
-    DocumentReference mesDocRef =
-        _firestore.collection('Sesiones-$escenarioId').doc(mesActual);
-    DocumentReference diaDocRef =
-        mesDocRef.collection(diaActual).doc(diaActual);
-    DocumentReference sessionDocRef =
-        mesDocRef.collection(diaActual).doc(horaActual);
-    DocumentReference ultimaDocRef =
-        mesDocRef.collection(diaActual).doc('activo');
+    DocumentReference fechaDocRef =
+        _firestore.collection('Sesiones-$escenarioId').doc(fechaActual);
+    CollectionReference movilCollectionRef =
+        fechaDocRef.collection('Movil-$movil');
+    DocumentReference sessionDocRef = movilCollectionRef.doc(horaActual);
+    DocumentReference ultimaDocRef = movilCollectionRef.doc('activo');
 
     Map<String, dynamic> sessionData = {
       'distanciaRecorridaMts': distanciaRecorridaMts,
@@ -85,27 +84,35 @@ class SessionService {
     print(sessionData);
 
     try {
-      // ✅ Asegurar que el documento padre (mes) tenga un campo para ser reconocido
-      await mesDocRef.set({'FchHoraCreacion': now}, SetOptions(merge: true));
+      // ✅ Asegurar que el documento padre (fecha) tenga un campo para ser reconocido
+      await fechaDocRef.set({'FchHoraCreacion': now}, SetOptions(merge: true));
       print(
-          'Documento padre (mes) asegurado en Firestore con FchHoraCreacion.');
+          'Documento padre (fecha) asegurado en Firestore con FchHoraCreacion.');
 
-      // ✅ Asegurar que el documento del día tenga un campo para ser reconocido
-      await diaDocRef.set({'FchHoraCreacion': now}, SetOptions(merge: true));
-      print('Documento del día asegurado en Firestore con FchHoraCreacion.');
-
-      // ✅ Guardar la sesión actual
+      /*// ✅ Guardar la sesión actual
       await sessionDocRef.set(sessionData);
       print('Sesión guardada correctamente en Firestore.');
-
+      */
       // ✅ Verificar si existe un documento "activo"
       DocumentSnapshot activeDocSnapshot = await ultimaDocRef.get();
       if (activeDocSnapshot.exists) {
+        var activeData = activeDocSnapshot.data() as Map<String, dynamic>;
+
+        // 🔹 Calcular el tiempo de sesión y la distancia recorrida
+        DateTime fchHoraInicioActiva =
+            (activeData['fchHoraInicio'] as Timestamp).toDate();
+        int tiempoLogueoMins = now.difference(fchHoraInicioActiva).inMinutes;
+        int distanciaRecorridaMts = activeData['distanciaRecorridaMts'] ?? 0;
+
+        // 🔹 Actualizar los datos de la copia del documento "activo"
+        activeData['tiempoLogueoMins'] = tiempoLogueoMins;
+        activeData['distanciaRecorridaMts'] = distanciaRecorridaMts;
+        activeData['estado'] = 'Cerrada';
+        activeData['tipoDeCierreDeSesion'] = tipoDeCierreDeSesion;
+
         // 🔹 Hacer una copia del documento "activo" con el nombre basado en la hora actual
-        DocumentReference backupDocRef =
-            mesDocRef.collection(diaActual).doc(horaActual);
-        await backupDocRef
-            .set(activeDocSnapshot.data() as Map<String, dynamic>);
+        DocumentReference backupDocRef = movilCollectionRef.doc(horaActual);
+        await backupDocRef.set(activeData);
         print('Documento "activo" copiado a $horaActual correctamente.');
 
         // 🔹 Eliminar el documento "activo" actual
@@ -113,9 +120,11 @@ class SessionService {
         print('Documento "activo" borrado correctamente.');
       }
 
-      // ✅ Crear el nuevo documento "activo"
-      await ultimaDocRef.set(sessionData);
-      print('Documento "activo" creado correctamente.');
+      if (tipoDeCierreDeSesion == "") {
+        // ✅ Crear el nuevo documento "activo"
+        await ultimaDocRef.set(sessionData);
+        print('Documento "activo" creado correctamente.');
+      }
     } catch (e) {
       print('❌ Error al guardar la sesión en Firestore: $e');
     }

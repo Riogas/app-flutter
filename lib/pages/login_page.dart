@@ -23,6 +23,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = true;
   bool _isDeviceRegistered = true;
   List<String> _availableMoviles = [];
+  bool _wasActiveSessionForAnotherUser = false;
 
   @override
   void initState() {
@@ -165,6 +166,7 @@ class _LoginPageState extends State<LoginPage> {
     await box.put('username', _usernameController.text);
     await box.put('escenario', response['EscenarioId']);
     await box.put('NombreUsuario', response['NombreUsuario'].trim());
+    await box.put('deviceId', _deviceId);
 
     // 🔹 Guardar que es un login manual para evitar el logout forzado inmediato
     await box.put('firstLoginDone', true);
@@ -205,10 +207,18 @@ class _LoginPageState extends State<LoginPage> {
   Future<bool> _checkActiveSession(
       Map<String, dynamic> response, String? selectedMovil) async {
     var box = await Hive.openBox('sessionBox');
-    String escenario = box.get('escenario', defaultValue: '1000');
-    String idUsuario = box.get('username');
-    String idTerminal = box.get('deviceId');
-    String nombreUsuario = box.get('NombreUsuario');
+    String? escenario = box.get('escenario');
+    String? idUsuario = box.get('username');
+    String? idTerminal = box.get('deviceId');
+    String? nombreUsuario = box.get('NombreUsuario');
+
+    // Verificar si hay datos en sessionBox
+    if (escenario == null ||
+        idUsuario == null ||
+        idTerminal == null ||
+        nombreUsuario == null) {
+      return false;
+    }
 
     DocumentReference ultimaDocRef = FirebaseFirestore.instance
         .collection('Sesiones-$escenario')
@@ -221,6 +231,7 @@ class _LoginPageState extends State<LoginPage> {
     if (activeDocSnapshot.exists) {
       var data = activeDocSnapshot.data() as Map<String, dynamic>;
       if (data['idUsuario'] != idUsuario || data['idTerminal'] != idTerminal) {
+        _wasActiveSessionForAnotherUser = true;
         bool shouldProceed =
             await _showActiveSessionDialog(selectedMovil!, data['nomUsuario']);
         return shouldProceed;
@@ -238,7 +249,7 @@ class _LoginPageState extends State<LoginPage> {
         return AlertDialog(
           title: Text('Sesión Activa Encontrada'),
           content: Text(
-              'Usted se está intentando conectar al móvil $selectedMovil, el cual está logueado el usuario $activeUser. ¿Desea continuar?'),
+              'Usted se está intentando conectar al móvil $selectedMovil, en el cual está logueado el usuario $activeUser. ¿Desea continuar?'),
           actions: <Widget>[
             TextButton(
               onPressed: () {
@@ -271,6 +282,8 @@ class _LoginPageState extends State<LoginPage> {
         nomUsuario: nombreUsuario,
         primeraUbicacion: location ?? LatLng(0.0, 0.0),
         versionApp: _appVersion,
+        tipoDeCierreDeSesion:
+            _wasActiveSessionForAnotherUser ? 'logoutForzadoPorOtroLogin' : '',
       );
     }
   }

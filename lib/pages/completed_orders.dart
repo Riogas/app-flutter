@@ -13,14 +13,14 @@ class CompletedOrdersPage extends StatelessWidget {
           stream: _firebaseService.getPedidosCumplidosStream(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return Text('Pedidos Cumplidos (Cargando...)');
+              return Text('Finalizados (Cargando...)');
             } else if (snapshot.hasError) {
-              return Text('Pedidos Cumplidos (Error)');
+              return Text('Finalizados (Error)');
             } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Text('Pedidos Cumplidos (0)');
+              return Text('Finalizados (0)');
             } else {
               int orderCount = snapshot.data!.length;
-              return Text('Pedidos Cumplidos ($orderCount)');
+              return Text('Finalizados ($orderCount)');
             }
           },
         ),
@@ -33,7 +33,7 @@ class CompletedOrdersPage extends StatelessWidget {
           } else if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text('No hay pedidos cumplidos disponibles.'));
+            return Center(child: Text('No hay Finalizados disponibles.'));
           } else {
             return ListView.builder(
               itemCount: snapshot.data!.length,

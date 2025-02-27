@@ -45,11 +45,9 @@ class FirebaseService {
     String collectionName = 'Sesiones-$escenarioId';
 
     // Obtener la fecha actual en formato yyyymmdd
+    DateTime now = DateTime.now();
     String fechaActual =
-        DateTime.now().toIso8601String().split('T')[0].replaceAll('-', '');
-
-    // Nombre del documento de la fecha actual
-    String fechaDocName = fechaActual;
+        now.toIso8601String().split('T')[0].replaceAll('-', '');
 
     // Nombre de la colección del móvil
     String movilCollectionName = 'Movil-$movil';
@@ -60,7 +58,7 @@ class FirebaseService {
     // Obtener la referencia del documento "activo"
     DocumentReference activoDocRef = FirebaseFirestore.instance
         .collection(collectionName)
-        .doc(fechaDocName)
+        .doc(fechaActual)
         .collection(movilCollectionName)
         .doc(activoDocName);
 
