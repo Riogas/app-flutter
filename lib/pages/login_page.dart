@@ -32,6 +32,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _initialize() async {
     _deviceId = await AuthService.getDeviceId();
+    print("Device ID iniciado: $_deviceId");
     _appVersion = await AuthService.getAppVersion();
     _isDeviceRegistered = await AuthService.validateDevice(_deviceId);
     setState(() => _isLoading = false);
@@ -440,12 +441,20 @@ class _LoginPageState extends State<LoginPage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Image.asset('assets/logo.png'),
+                            Image.asset('assets/logo-riogas.png'),
                             SizedBox(height: 20),
                             Image.asset(
-                              'assets/garrafa.png',
+                              'assets/logomoveit.png',
                               width: 150,
                               height: 150,
+                            ),
+                            SizedBox(height: 20),
+                            Text(
+                              'Device ID: $_deviceId',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.black,
+                              ),
                             ),
                             SizedBox(height: 20),
                             TextField(

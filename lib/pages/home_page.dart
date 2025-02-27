@@ -29,6 +29,7 @@ class _HomePageState extends State<HomePage> {
   int _newOrders = 0;
   bool _constantsLoaded = false;
   late StreamSubscription _ordersSubscription;
+  final Completer<void> _locationServiceCompleter = Completer<void>();
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -42,7 +43,6 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _initializeHomePage();
-    _initializeLocationService(); // 🔹 Ahora con mejor control
 
     // 🔹 Resetear la bandera para futuros chequeos de sesión
     Future.delayed(Duration(seconds: 10), () async {
@@ -56,31 +56,12 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _ordersSubscription.cancel();
-    _locationSubscription.cancel(); // 🔹 Cancelamos el stream de ubicación
-    _locationService
-        .stopLocationUpdates(); // 🔹 Detenemos el servicio correctamente
+    _locationServiceCompleter.future.then((_) {
+      _locationSubscription.cancel(); // 🔹 Cancelamos el stream de ubicación
+      _locationService
+          .stopLocationUpdates(); // 🔹 Detenemos el servicio correctamente
+    });
     super.dispose();
-  }
-
-  /// 🔹 **Inicializa el servicio de ubicación y maneja el stream**
-  Future<void> _initializeLocationService() async {
-    try {
-      await _locationService
-          .initializeLocationUpdates(); // ⏳ Esperamos a que se inicie correctamente
-
-      // 🔹 Iniciamos la escucha de coordenadas
-      _locationSubscription = _locationService.locationStream.listen(
-        (LatLng position) {
-          print('📍 Nueva coordenada recibida en HomePage: '
-              '${position.latitude}, ${position.longitude}');
-        },
-        onError: (error) {
-          print("❌ Error en el stream de ubicación: $error");
-        },
-      );
-    } catch (e) {
-      print('❌ Error al inicializar el servicio de ubicación: $e');
-    }
   }
 
   Future<void> _initializeHomePage() async {
