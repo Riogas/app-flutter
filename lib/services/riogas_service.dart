@@ -1,5 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:hive/hive.dart';
+import '../utils/error_event.dart';
 
 class RioGasService {
   static const String baseUrl = 'https://www.riogas.uy/ica_geos_/appservices/';
@@ -35,12 +37,28 @@ class RioGasService {
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
+      } else {
+        await _logError('HTTP Error',
+            'Código de respuesta: ${response.statusCode}', response.body);
       }
       return null;
     } catch (e) {
       print('❌ Error en [$endpoint]: $e');
+      await _logError('Exception', e.toString());
       return null;
     }
+  }
+
+  static Future<void> _logError(String type, String message,
+      [String? additionalInfo]) async {
+    var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
+    var errorEvent = ErrorEvent(
+      type: type,
+      message: message,
+      timestamp: DateTime.now(),
+      additionalInfo: additionalInfo,
+    );
+    await errorBox.add(errorEvent);
   }
 
   static Future<Map<String, dynamic>?> validarUsuario(

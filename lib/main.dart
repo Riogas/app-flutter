@@ -8,6 +8,7 @@ import 'services/auth_service.dart';
 import 'services/notifications_service.dart';
 import 'services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa url_launcher
+import 'utils/error_event.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +17,9 @@ void main() async {
 
   // 🔹 Inicializa Hive antes de cualquier acceso a Hive.openBox()
   await Hive.initFlutter();
+  Hive.registerAdapter(ErrorEventAdapter());
   await Hive.openBox('sessionBox');
+  await Hive.openBox<ErrorEvent>('errorBox');
 
   await NotificationsService.initialize();
 

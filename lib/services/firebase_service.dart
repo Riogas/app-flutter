@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
+import '../utils/error_event.dart';
 import '../utils/config.dart'; // Importa el archivo de configuración
 
 class FirebaseService {
@@ -18,6 +19,7 @@ class FirebaseService {
       print('Firebase initialized successfully');
     } catch (e) {
       print('Error initializing Firebase: $e');
+      await _logError('Firebase Initialization Error', e.toString());
     }
 
     // Autenticar al usuario
@@ -35,6 +37,7 @@ class FirebaseService {
       print("User signed in: ${_user?.email}");
     } on FirebaseAuthException catch (e) {
       print("Error signing in: $e");
+      await _logError('Firebase Auth Error', e.toString());
     }
   }
 
@@ -78,6 +81,7 @@ class FirebaseService {
       }
     } catch (error) {
       print('❌ Error al obtener sesión desde el servidor: $error');
+      await _logError('Firestore Error', error.toString());
       yield null;
     }
 
@@ -86,6 +90,7 @@ class FirebaseService {
         .snapshots(includeMetadataChanges: true)
         .handleError((error) {
       print('❌ Error al escuchar cambios en Firestore: $error');
+      _logError('Firestore Error', error.toString());
     }).map((snapshot) {
       if (snapshot.exists) {
         var data = snapshot.data() as Map<String, dynamic>;
@@ -129,6 +134,7 @@ class FirebaseService {
         .snapshots()
         .handleError((error) {
       print('Error fetching pedidos: $error');
+      _logError('Firestore Error', error.toString());
     }).map((snapshot) {
       print('Fetched ${snapshot.docs.length} pedidos');
       snapshot.docs.forEach((doc) {
@@ -163,6 +169,7 @@ class FirebaseService {
         .snapshots()
         .handleError((error) {
       print('Error fetching pedidos cumplidos: $error');
+      _logError('Firestore Error', error.toString());
     }).map((snapshot) {
       print('Fetched ${snapshot.docs.length} pedidos cumplidos');
       snapshot.docs.forEach((doc) {
@@ -182,6 +189,7 @@ class FirebaseService {
         .snapshots()
         .handleError((error) {
       print('Error fetching constantes: $error');
+      _logError('Firestore Error', error.toString());
     }).map((snapshot) {
       print('Fetched ${snapshot.docs.length} constantes');
       snapshot.docs.forEach((doc) {
@@ -213,6 +221,7 @@ class FirebaseService {
         .snapshots()
         .handleError((error) {
       print('Error fetching mensajes: $error');
+      _logError('Firestore Error', error.toString());
     }).map((snapshot) {
       print('Fetched ${snapshot.docs.length} mensajes');
       snapshot.docs.forEach((doc) {
@@ -232,6 +241,7 @@ class FirebaseService {
         .snapshots()
         .handleError((error) {
       print('Error fetching moviles: $error');
+      _logError('Firestore Error', error.toString());
     }).map((snapshot) {
       print('Fetched ${snapshot.docs.length} moviles');
       snapshot.docs.forEach((doc) {
@@ -242,4 +252,16 @@ class FirebaseService {
   }
 
   // Agrega más métodos para otras consultas según sea necesario
+
+  static Future<void> _logError(String type, String message,
+      [String? additionalInfo]) async {
+    var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
+    var errorEvent = ErrorEvent(
+      type: type,
+      message: message,
+      timestamp: DateTime.now(),
+      additionalInfo: additionalInfo,
+    );
+    await errorBox.add(errorEvent);
+  }
 }
