@@ -6,6 +6,7 @@ import 'package:flutter_background/flutter_background.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LocationService {
   static final LocationService _instance = LocationService._internal();
@@ -188,14 +189,47 @@ class LocationService {
 
       print(
           '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
-      _updateCoordinatesInFirestore(position);
+      await _updateCoordinatesInFirestore(position);
     } catch (e) {
       print('❌ Error al obtener ubicación: $e');
     }
   }
 
   Future<void> _updateCoordinatesInFirestore(Position position) async {
-    // Implementación de la actualización de coordenadas en Firestore
+    var box = await Hive.openBox('sessionBox');
+    String? escenario = box.get('escenario');
+    String? movil = box.get('movil');
+
+    if (escenario == null || movil == null) {
+      print('❌ No se pudo obtener el escenario o el móvil de Hive.');
+      return;
+    }
+
+    DateTime now = DateTime.now();
+    String fechaActual =
+        now.toIso8601String().split('T')[0].replaceAll('-', '');
+    String horaActual = now.toIso8601String().split('T')[1].split('.')[0];
+
+    DocumentReference fechaDocRef = FirebaseFirestore.instance
+        .collection('CoordenadasMoviles-$escenario')
+        .doc(fechaActual);
+
+    // Agregar el campo fechahoraCreacion al documento yyyyMMdd
+    await fechaDocRef.set({
+      'fechahoraCreacion': now,
+    }, SetOptions(merge: true));
+
+    DocumentReference movilDocRef =
+        fechaDocRef.collection('Movil-$movil').doc(horaActual);
+
+    Map<String, dynamic> coordinatesData = {
+      'latitude': position.latitude,
+      'longitude': position.longitude,
+      'timestamp': now,
+    };
+
+    await movilDocRef.set(coordinatesData, SetOptions(merge: true));
+    print('📍 Coordenadas guardadas en Firestore: $coordinatesData');
   }
 
   /// 🔹 Detiene la actualización de ubicación
