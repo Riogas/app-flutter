@@ -153,10 +153,10 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                   ),
                                 ),
                                 Spacer(),
-                                if (pedido.containsKey('urlwaze'))
+                                if (pedido.containsKey('WazeUrl'))
                                   GestureDetector(
                                     onTap: () async {
-                                      var url = pedido['urlwaze'];
+                                      var url = pedido['WazeUrl'];
                                       if (await canLaunch(url)) {
                                         await launch(url);
                                       } else {
@@ -213,7 +213,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                             Row(
                               children: [
                                 Text(
-                                  'Fecha y Hora: ${_formatTimestamp(pedido['FchHoraPara'])}',
+                                  'Fecha y Hora: ${_formatTimestamp(pedido['FchHoraMaxEntComp'])}',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 12.0,
