@@ -131,10 +131,10 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                               Spacer(),
                               Row(
                                 children: [
-                                  if (pedido.containsKey('urlwaze'))
+                                  if (pedido.containsKey('WazeUrl'))
                                     GestureDetector(
                                       onTap: () async {
-                                        var url = pedido['urlwaze'];
+                                        var url = pedido['WazeUrl'];
                                         if (await canLaunch(url)) {
                                           await launch(url);
                                         } else {
@@ -147,7 +147,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                         size: 20.0,
                                       ),
                                     ),
-                                  if (pedido.containsKey('urlwaze'))
+                                  if (pedido.containsKey('WazeUrl'))
                                     SizedBox(
                                         width: 8.0), // Espaciado entre iconos
                                   if (pedido.containsKey('urltelefono'))
