@@ -129,7 +129,7 @@ class FirebaseService {
         .where('FchPara', isEqualTo: fechaActual)
         .where('VisibleEnApp', isEqualTo: 'S')
         .where('EstadoNro', isEqualTo: 1)
-        .orderBy('FchHoraPara',
+        .orderBy('FchHoraMaxEntComp',
             descending: false) // Ordenar por FchHoraPara en forma ascendente
         .snapshots()
         .handleError((error) {

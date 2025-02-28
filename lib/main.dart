@@ -9,6 +9,7 @@ import 'services/notifications_service.dart';
 import 'services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa url_launcher
 import 'utils/error_event.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +29,7 @@ void main() async {
   // 🔹 Validar la versión de la aplicación
   await _validateAppVersion();
 
+  WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
   runApp(MyApp(isLoggedIn: isLoggedIn));
 }
 

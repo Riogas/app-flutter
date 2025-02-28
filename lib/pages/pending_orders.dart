@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'order_detail_page.dart'; // Importa la nueva página de detalles
 
 class PendingOrdersPage extends StatefulWidget {
   @override
@@ -70,7 +71,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                 var pedido = orders[index].data() as Map<String, dynamic>;
                 bool isNew = !pedido.containsKey('FechaHoraLeido') ||
                     pedido['FechaHoraLeido'] == null;
-                String tipo = pedido['Tipo'] ?? 'Pedido';
+                String tipo = pedido['Tipo'] ?? 'Pedidos';
                 String direccion = pedido['ClienteDireccion'] ?? 'Desconocida';
                 String direccionCorta = direccion.length > 20
                     ? direccion.substring(0, 20) + '...'
@@ -96,125 +97,180 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                   etiquetaColor = Colors.grey;
                 }
 
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8.0, vertical: 4.0),
-                  child: Card(
-                    color: isNew ? Colors.lightBlue : Colors.blueGrey,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    elevation: 5,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 6.0, vertical: 2.0),
-                                decoration: BoxDecoration(
-                                  color: etiquetaColor,
-                                  borderRadius: BorderRadius.circular(8.0),
+                // Depuración: imprimir el valor de urltelefono
+                if (pedido.containsKey('urltelefono')) {
+                  print('urltelefono: ${pedido['urltelefono']}');
+                }
+
+                return GestureDetector(
+                  onTap: () {
+                    if (pedido.containsKey('DetalleHTML') &&
+                        pedido['DetalleHTML'].isNotEmpty) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => OrderDetailPage(
+                            detalleHtml: pedido['DetalleHTML'],
+                          ),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('No hay detalles disponibles')),
+                      );
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8.0, vertical: 4.0),
+                    child: Card(
+                      color: isNew ? Colors.lightBlue : Colors.blueGrey,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10.0),
+                      ),
+                      elevation: 5,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 6.0, vertical: 2.0),
+                                  decoration: BoxDecoration(
+                                    color: etiquetaColor,
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  child: Text(
+                                    etiquetaTexto,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.0,
+                                    ),
+                                  ),
                                 ),
-                                child: Text(
-                                  etiquetaTexto,
+                                Spacer(),
+                                if (pedido.containsKey('urlwaze'))
+                                  GestureDetector(
+                                    onTap: () async {
+                                      var url = pedido['urlwaze'];
+                                      if (await canLaunch(url)) {
+                                        await launch(url);
+                                      } else {
+                                        throw 'Could not launch $url';
+                                      }
+                                    },
+                                    child: Icon(
+                                      Icons.location_on,
+                                      color: Colors.white,
+                                      size: 20.0,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            SizedBox(height: 4.0),
+                            Row(
+                              children: [
+                                Text(
+                                  'Número: ${pedido['id'] ?? 'Desconocido'}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    fontSize: 14.0,
+                                  ),
+                                ),
+                                Spacer(),
+                                Icon(
+                                  tipo == 'Servicios'
+                                      ? Icons.build
+                                      : Icons.local_shipping,
+                                  color: Colors.white,
+                                  size: 20.0,
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 4.0),
+                            Text(
+                              'Dirección: $direccionCorta',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12.0,
+                              ),
+                            ),
+                            Text(
+                              tipo == 'Pedidos'
+                                  ? 'Servicio: ${pedido['ServicioNombre'] ?? 'Desconocido'}'
+                                  : 'Defecto: ${pedido['Defecto'] ?? 'Desconocido'}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12.0,
+                              ),
+                            ),
+                            SizedBox(height: 4.0),
+                            Row(
+                              children: [
+                                Text(
+                                  'Fecha y Hora: ${_formatTimestamp(pedido['FchHoraPara'])}',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontWeight: FontWeight.bold,
                                     fontSize: 12.0,
                                   ),
                                 ),
-                              ),
-                              Spacer(),
-                              Row(
-                                children: [
-                                  if (pedido.containsKey('WazeUrl'))
-                                    GestureDetector(
-                                      onTap: () async {
-                                        var url = pedido['WazeUrl'];
-                                        if (await canLaunch(url)) {
-                                          await launch(url);
-                                        } else {
-                                          throw 'Could not launch $url';
-                                        }
-                                      },
-                                      child: Icon(
-                                        Icons.location_on,
-                                        color: Colors.white,
-                                        size: 20.0,
-                                      ),
+                                Spacer(),
+                                if (pedido.containsKey('urltelefono'))
+                                  GestureDetector(
+                                    onTap: () async {
+                                      var url = 'tel:${pedido['urltelefono']}';
+                                      if (await canLaunch(url)) {
+                                        await launch(url);
+                                      } else {
+                                        throw 'Could not launch $url';
+                                      }
+                                    },
+                                    child: Icon(
+                                      Icons.phone,
+                                      color: Colors.white,
+                                      size: 20.0,
                                     ),
-                                  if (pedido.containsKey('WazeUrl'))
-                                    SizedBox(
-                                        width: 8.0), // Espaciado entre iconos
-                                  if (pedido.containsKey('urltelefono'))
-                                    GestureDetector(
-                                      onTap: () async {
-                                        var url =
-                                            'tel:${pedido['urltelefono']}';
-                                        if (await canLaunch(url)) {
-                                          await launch(url);
-                                        } else {
-                                          throw 'Could not launch $url';
-                                        }
-                                      },
-                                      child: Icon(
-                                        Icons.phone,
-                                        color: Colors.white,
-                                        size: 20.0,
-                                      ),
-                                    ),
-                                  if (pedido.containsKey('urltelefono'))
-                                    SizedBox(
-                                        width: 8.0), // Espaciado entre iconos
-                                  Icon(
-                                    tipo == 'Servicio'
-                                        ? Icons.build
-                                        : Icons.local_shipping,
-                                    color: Colors.white,
-                                    size: 20.0,
                                   ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 4.0),
-                          Text(
-                            'Número: ${pedido['id'] ?? 'Desconocido'}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              fontSize: 14.0,
+                              ],
                             ),
-                          ),
-                          SizedBox(height: 4.0),
-                          Text(
-                            'Dirección: $direccionCorta',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.0,
+                            SizedBox(height: 4.0),
+                            StreamBuilder<int>(
+                              stream:
+                                  Stream.periodic(Duration(minutes: 1), (_) {
+                                DateTime now = DateTime.now();
+                                DateTime fchHoraPara =
+                                    (pedido['FchHoraMaxEntComp'] as Timestamp)
+                                        .toDate();
+                                return fchHoraPara.difference(now).inMinutes;
+                              }),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) {
+                                  return Text(
+                                    'Calculando...',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.0,
+                                    ),
+                                  );
+                                } else {
+                                  int minutesLeft = snapshot.data!;
+                                  return Text(
+                                    'Minutos restantes: $minutesLeft',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.0,
+                                    ),
+                                  );
+                                }
+                              },
                             ),
-                          ),
-                          Text(
-                            tipo == 'Pedido'
-                                ? 'Servicio: ${pedido['ServicioNombre'] ?? 'Desconocido'}'
-                                : 'Defecto: ${pedido['Defecto'] ?? 'Desconocido'}',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.0,
-                            ),
-                          ),
-                          Text(
-                            'Fecha y Hora: ${_formatTimestamp(pedido['FchHoraPara'])}',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.0,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
