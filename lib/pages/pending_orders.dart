@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hive/hive.dart';
 import 'order_detail_page.dart'; // Importa la nueva página de detalles
+import 'dart:async';
 
 class PendingOrdersPage extends StatefulWidget {
   @override
@@ -17,13 +18,17 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   int _newOrderCount = 0;
   late Stream<List<DocumentSnapshot>> _ordersStream;
   late Box constantBox;
+  late Box pedidosBox;
 
   @override
   void initState() {
     super.initState();
     _initializeFirebase();
     _ordersStream = _firebaseService.getPedidosStream().asBroadcastStream();
-    _initializeHive();
+    _initializeHive().then((_) {
+      setState(
+          () {}); // Actualiza el estado una vez que Hive se haya inicializado
+    });
   }
 
   Future<void> _initializeFirebase() async {
@@ -32,13 +37,14 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
   Future<void> _initializeHive() async {
     constantBox = await Hive.openBox('constantBox');
+    pedidosBox = await Hive.openBox('pedidosBox');
   }
 
   Map<String, Color> colorMap = {
     "Red": Colors.red,
     "Pink": Colors.pink,
     "Green": Colors.green,
-    "Yellow": Colors.yellow,
+    "Yellow": Colors.orange,
     // Agrega más colores según sea necesario
   };
 
@@ -79,6 +85,15 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!Hive.isBoxOpen('pedidosBox')) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Pedidos Pendientes (Cargando...)'),
+        ),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: StreamBuilder<List<DocumentSnapshot>>(
@@ -119,8 +134,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
               itemCount: orders.length,
               itemBuilder: (context, index) {
                 var pedido = orders[index].data() as Map<String, dynamic>;
-                bool isNew = !pedido.containsKey('FechaHoraLeido') ||
-                    pedido['FechaHoraLeido'] == null;
+                int pedidoId = pedido['id'] ?? -1;
                 String tipo = pedido['Tipo'] ?? 'Pedidos';
                 String direccion = pedido['ClienteDireccion'] ?? 'Desconocida';
                 String direccionCorta = direccion.length > 20
@@ -131,20 +145,22 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                 String etiquetaTexto;
                 Color etiquetaColor;
 
-                if (isNew) {
-                  etiquetaTexto = 'Nuevo';
-                  etiquetaColor = Colors.red;
-                } else if (pedido['EstadoNro'] == 1 &&
-                    pedido['Procesando'] == true) {
+                var pedidoEstado = pedidosBox.get(pedidoId);
+                if (pedidoEstado == null) {
+                  etiquetaTexto = 'No Leído';
+                  etiquetaColor = Colors.black;
+                } else if (pedidoEstado == 'Leido') {
+                  etiquetaTexto = 'Leído';
+                  etiquetaColor = Colors.grey;
+                } else if (pedidoEstado == 'Procesando') {
                   etiquetaTexto = 'Procesando';
                   etiquetaColor = Colors.lightBlue;
-                } else if (pedido['EstadoNro'] == 1 &&
-                    pedido['Enviando'] == true) {
+                } else if (pedidoEstado == 'Enviando') {
                   etiquetaTexto = 'Enviando';
                   etiquetaColor = Colors.orange;
                 } else {
-                  etiquetaTexto = 'Leido';
-                  etiquetaColor = Colors.grey;
+                  etiquetaTexto = 'Desconocido';
+                  etiquetaColor = Colors.red;
                 }
 
                 // Depuración: imprimir el valor de urltelefono
@@ -153,10 +169,11 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                 }
 
                 return GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     if (pedido.containsKey('DetalleHTML') &&
                         pedido['DetalleHTML'].isNotEmpty) {
-                      Navigator.push(
+                      await pedidosBox.put(pedidoId, 'Leido');
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => OrderDetailPage(
@@ -164,6 +181,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                           ),
                         ),
                       );
+                      setState(
+                          () {}); // Actualiza el estado al volver de la pantalla de detalles
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('No hay detalles disponibles')),
@@ -174,7 +193,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8.0, vertical: 4.0),
                     child: Card(
-                      color: isNew ? Colors.lightBlue : Colors.blueGrey,
+                      color: pedidoEstado == null
+                          ? Colors.lightBlue
+                          : Colors.blueGrey,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10.0),
                       ),
@@ -184,22 +205,35 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            SizedBox(height: 4.0),
                             Row(
                               children: [
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 6.0, vertical: 2.0),
-                                  decoration: BoxDecoration(
-                                    color: etiquetaColor,
-                                    borderRadius: BorderRadius.circular(8.0),
+                                Text(
+                                  'Número: $pedidoId',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    fontSize: 14.0,
                                   ),
-                                  child: Text(
-                                    etiquetaTexto,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12.0,
-                                    ),
+                                ),
+                                Spacer(),
+                                Icon(
+                                  tipo == 'Services'
+                                      ? Icons.build
+                                      : Icons.local_shipping,
+                                  color: Colors.white,
+                                  size: 20.0,
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 4.0),
+                            Row(
+                              children: [
+                                Text(
+                                  'Dirección: $direccionCorta',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.0,
                                   ),
                                 ),
                                 Spacer(),
@@ -222,34 +256,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                               ],
                             ),
                             SizedBox(height: 4.0),
-                            Row(
-                              children: [
-                                Text(
-                                  'Número: ${pedido['id'] ?? 'Desconocido'}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                    fontSize: 14.0,
-                                  ),
-                                ),
-                                Spacer(),
-                                Icon(
-                                  tipo == 'Servicios'
-                                      ? Icons.build
-                                      : Icons.local_shipping,
-                                  color: Colors.white,
-                                  size: 20.0,
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 4.0),
-                            Text(
-                              'Dirección: $direccionCorta',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12.0,
-                              ),
-                            ),
                             Text(
                               tipo == 'Pedidos'
                                   ? 'Servicio: ${pedido['ServicioNombre'] ?? 'Desconocido'}'
@@ -262,11 +268,22 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                             SizedBox(height: 4.0),
                             Row(
                               children: [
-                                Text(
-                                  'Fecha y Hora: ${_formatTimestamp(pedido['FchHoraMaxEntComp'])}',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12.0,
+                                _buildMinutesLeftStream(pedido),
+                                SizedBox(width: 8.0),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 6.0, vertical: 2.0),
+                                  decoration: BoxDecoration(
+                                    color: etiquetaColor,
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  child: Text(
+                                    etiquetaTexto,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.0,
+                                    ),
                                   ),
                                 ),
                                 Spacer(),
@@ -288,68 +305,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                   ),
                               ],
                             ),
-                            SizedBox(height: 4.0),
-                            StreamBuilder<int>(
-                              stream:
-                                  Stream.periodic(Duration(minutes: 1), (_) {
-                                DateTime now = DateTime.now();
-                                DateTime fchHoraPara =
-                                    (pedido['FchHoraMaxEntComp'] as Timestamp)
-                                        .toDate();
-                                return fchHoraPara.difference(now).inMinutes;
-                              }),
-                              builder: (context, snapshot) {
-                                if (!snapshot.hasData) {
-                                  return Text(
-                                    'Calculando...',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12.0,
-                                    ),
-                                  );
-                                } else {
-                                  int minutesLeft = snapshot.data!;
-                                  var delayInfo = getDelayInfo(minutesLeft);
-                                  return delayInfo != null
-                                      ? Container(
-                                          padding: EdgeInsets.symmetric(
-                                              horizontal: 6.0, vertical: 2.0),
-                                          decoration: BoxDecoration(
-                                            color: delayInfo["Color"],
-                                            borderRadius:
-                                                BorderRadius.circular(8.0),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Text(
-                                                'Minutos restantes: $minutesLeft',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 12.0,
-                                                ),
-                                              ),
-                                              SizedBox(width: 8.0),
-                                              Text(
-                                                delayInfo["Etiqueta"],
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12.0,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : Text(
-                                          'Minutos restantes: $minutesLeft',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12.0,
-                                          ),
-                                        );
-                                }
-                              },
-                            ),
                           ],
                         ),
                       ),
@@ -361,6 +316,64 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           }
         },
       ),
+    );
+  }
+
+  Widget _buildMinutesLeftStream(Map<String, dynamic> pedido) {
+    final StreamController<int> controller = StreamController<int>();
+    DateTime now = DateTime.now();
+    DateTime fchHoraPara = (pedido['FchHoraMaxEntComp'] as Timestamp).toDate();
+    controller.add(fchHoraPara.difference(now).inMinutes);
+
+    Timer.periodic(Duration(minutes: 1), (_) {
+      now = DateTime.now();
+      controller.add(fchHoraPara.difference(now).inMinutes);
+    });
+
+    return StreamBuilder<int>(
+      stream: controller.stream,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Text(
+            'Calculando...',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12.0,
+            ),
+          );
+        } else {
+          int minutesLeft = snapshot.data!;
+          var delayInfo = getDelayInfo(minutesLeft);
+          return Row(
+            children: [
+              Text(
+                'Min restantes: $minutesLeft',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.0,
+                ),
+              ),
+              SizedBox(width: 8.0),
+              if (delayInfo != null)
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                  decoration: BoxDecoration(
+                    color: delayInfo["Color"],
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  child: Text(
+                    delayInfo["Etiqueta"],
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12.0,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        }
+      },
     );
   }
 
