@@ -197,42 +197,48 @@ class _HomePageState extends State<HomePage> {
 
           var box = Hive.box('sessionBox');
           bool firstLoginDone = box.get('firstLoginDone', defaultValue: false);
+          bool existeSession = Hive.isBoxOpen('sessionBox');
 
           print('🔒 firstLoginDone home_page: $firstLoginDone');
+          print('🔒 existeSession home_page: $existeSession');
 
           // ✅ Si es el primer login manual, ignorar completamente el chequeo de sesión activa
-          if (firstLoginDone) {
+          if (firstLoginDone && existeSession) {
             print(
                 "🚀 Ignorando chequeo de logout forzado en el primer login manual...");
             return _widgetOptions.elementAt(_selectedIndex);
           } else {
-            print("🔒 Chequeando logout forzado en Firestore...");
-            // ✅ Si no es el primer login, proceder con la validación en Firestore
-            return StreamBuilder<Map<String, dynamic>?>(
-              stream: _firebaseService.getSesionesStream(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-
-                if (snapshot.hasData) {
-                  var data = snapshot.data;
-                  if (data != null &&
-                      data['idTerminal'] != box.get('deviceId')) {
-                    return _showForcedLogoutDialog(
-                        context, data['nomUsuario'], data['movil']);
+            if (existeSession) {
+              print("🔒 Chequeando logout forzado en Firestore...");
+              // ✅ Si no es el primer login, proceder con la validación en Firestore
+              return StreamBuilder<Map<String, dynamic>?>(
+                stream: _firebaseService.getSesionesStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(child: CircularProgressIndicator());
                   }
-                } else {
-                  return _showForcedLogoutDialog(
-                      context, 'Desconocido', 'Desconocido');
-                }
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
 
-                return _widgetOptions.elementAt(_selectedIndex);
-              },
-            );
+                  if (snapshot.hasData) {
+                    var data = snapshot.data;
+                    if (data != null &&
+                        data['idTerminal'] != box.get('deviceId')) {
+                      return _showForcedLogoutDialog(
+                          context, data['nomUsuario'], data['movil']);
+                    }
+                  } else {
+                    return _showForcedLogoutDialog(
+                        context, 'Desconocido', 'Desconocido');
+                  }
+
+                  return _widgetOptions.elementAt(_selectedIndex);
+                },
+              );
+            } else {
+              return _widgetOptions.elementAt(_selectedIndex);
+            }
           }
         },
       ),

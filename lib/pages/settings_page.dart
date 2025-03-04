@@ -14,6 +14,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? movil;
   String? idUsuario;
   String? deviceId;
+  String? releaseNotes;
 
   @override
   void initState() {
@@ -28,12 +29,19 @@ class _SettingsPageState extends State<SettingsPage> {
       movil = box.get('movil');
       idUsuario = box.get('username');
       deviceId = box.get('deviceId');
+      releaseNotes = box.get('ReleaseNotes');
     });
   }
 
   Future<void> _logout() async {
     var sessionBox = await Hive.openBox('sessionBox');
     var constantBox = await Hive.openBox('constantBox');
+
+    sessionBox.put('firstLoginDone', true);
+
+    // Eliminar los datos de sesión de Hive
+    await sessionBox.deleteFromDisk();
+    await constantBox.deleteFromDisk();
 
     // Llamar a SessionService para eliminar el documento activo y crear una copia
     SessionService sessionService = SessionService();
@@ -46,10 +54,6 @@ class _SettingsPageState extends State<SettingsPage> {
       tipoDeCierreDeSesion: 'logoutUser',
     );
 
-    // Eliminar los datos de sesión de Hive
-    await sessionBox.deleteFromDisk();
-    await constantBox.deleteFromDisk();
-
     // Navegar a la pantalla de inicio de sesión
     Future.microtask(() {
       Navigator.of(context).pushReplacement(
@@ -60,33 +64,167 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  void _showReleaseNotesDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Notas de la Versión'),
+          content: SingleChildScrollView(
+            child:
+                Text(releaseNotes ?? 'No hay notas de la versión disponibles.'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cerrar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Settings'),
+        title: Text('Configuración'),
+        backgroundColor: Colors.blueAccent,
       ),
-      body: Center(
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (nombreUsuario != null)
-              Text('Nombre de Usuario: $nombreUsuario'),
-            if (movil != null) Text('Móvil: $movil'),
-            if (idUsuario != null) Text('ID de Usuario: $idUsuario'),
-            if (deviceId != null) Text('ID de Dispositivo: $deviceId'),
+            _buildProfileSection(),
             SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _logout,
-              icon: Icon(Icons.power_settings_new, color: Colors.blue),
-              label: Text('Cerrar sesión'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.blue,
-                side: BorderSide(color: Colors.blue),
-              ),
+            _buildInfoSection(),
+            SizedBox(height: 20),
+            _buildLogoutButton(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileSection() {
+    return Card(
+      elevation: 4.0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10.0),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 30,
+              backgroundColor: Colors.blueAccent,
+              child: Icon(Icons.person, size: 40, color: Colors.white),
+            ),
+            SizedBox(width: 20),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (nombreUsuario != null)
+                  Text(
+                    nombreUsuario!,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                if (idUsuario != null)
+                  Text(
+                    'ID de Usuario: $idUsuario',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+              ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoSection() {
+    return Card(
+      elevation: 4.0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10.0),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (movil != null)
+              _buildInfoRow(Icons.local_shipping, 'Móvil', movil!),
+            if (deviceId != null)
+              _buildInfoRow(Icons.devices, 'DeviceID', deviceId!,
+                  isLongText: true),
+            if (releaseNotes != null)
+              GestureDetector(
+                onTap: _showReleaseNotesDialog,
+                child: _buildInfoRow(
+                    Icons.info_outline, 'Notas de la Versión', 'Mas Info',
+                    isLongText: true),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String title, String value,
+      {bool isLongText = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment:
+            isLongText ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.blueAccent),
+          SizedBox(width: 10),
+          Text(
+            '$title: ',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+              overflow:
+                  isLongText ? TextOverflow.visible : TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton() {
+    return Center(
+      child: ElevatedButton.icon(
+        onPressed: _logout,
+        icon: Icon(Icons.power_settings_new, color: Colors.blue),
+        label: Text('Cerrar sesión'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.blue,
+          side: BorderSide(color: Colors.blue),
         ),
       ),
     );

@@ -172,6 +172,15 @@ class _LoginPageState extends State<LoginPage> {
     await box.put('firstLoginDone', true);
     await box.flush(); // ✅ Asegura que el valor se escriba inmediatamente
 
+    // Obtener datos de la versión actual y guardar ReleaseNotes en Hive
+    var versionData =
+        await RioGasService.DatosVersionActual(_appVersion, _deviceId);
+    if (versionData != null && versionData.containsKey('ReleaseNotes')) {
+      await box.put('ReleaseNotes', versionData['ReleaseNotes']);
+      print(
+          "?? ReleaseNotes guardado en sessionBox: ${versionData['ReleaseNotes']}");
+    }
+
     // 🔹 Imprimir el contenido de sessionBox después de asegurarnos que se guardó correctamente
     print("📦 Contenido de sessionBox después de guardar firstLoginDone:");
     box.toMap().forEach((key, value) => print('$key: $value'));

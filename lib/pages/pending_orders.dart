@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:hive/hive.dart';
 import 'order_detail_page.dart'; // Importa la nueva página de detalles
 
 class PendingOrdersPage extends StatefulWidget {
@@ -15,16 +16,65 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   int _orderCount = 0;
   int _newOrderCount = 0;
   late Stream<List<DocumentSnapshot>> _ordersStream;
+  late Box constantBox;
 
   @override
   void initState() {
     super.initState();
     _initializeFirebase();
     _ordersStream = _firebaseService.getPedidosStream().asBroadcastStream();
+    _initializeHive();
   }
 
   Future<void> _initializeFirebase() async {
     await _firebaseService.initializeFirebase();
+  }
+
+  Future<void> _initializeHive() async {
+    constantBox = await Hive.openBox('constantBox');
+  }
+
+  Map<String, Color> colorMap = {
+    "Red": Colors.red,
+    "Pink": Colors.pink,
+    "Green": Colors.green,
+    "Yellow": Colors.yellow,
+    // Agrega más colores según sea necesario
+  };
+
+  Color getColorFromName(String colorName) {
+    return colorMap[colorName] ??
+        Colors.white; // Devuelve blanco si el color no se encuentra
+  }
+
+  Map<String, dynamic>? getDelayInfo(int delayMinutes) {
+    for (int id in [40, 41, 42, 43]) {
+      var data = constantBox.get(id.toString());
+      print("🔍 Leyendo constante con ID $id: $data");
+      if (data != null && data['Estado'] == 'A') {
+        print("✅ Estado es 'A' para ID $id");
+        print(
+            "🔢 Comparando delayMinutes: $delayMinutes con ValorMin: ${data['ValorMin']} y ValorMax: ${data['ValorMax']}");
+        if ((delayMinutes >= data['ValorMin'] &&
+                delayMinutes <= data['ValorMax']) ||
+            (delayMinutes <= data['ValorMin'] &&
+                delayMinutes >= data['ValorMax'])) {
+          print(
+              "⏳ Delay $delayMinutes está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+          return {
+            "Color": getColorFromName(data['Color']),
+            "Etiqueta": data['Etiqueta'],
+          };
+        } else {
+          print(
+              "❌ Delay $delayMinutes no está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+        }
+      } else {
+        print("❌ Estado no es 'A' para ID $id o data es null");
+      }
+    }
+    print("❌ No se encontró un rango válido para delay $delayMinutes");
+    return null;
   }
 
   @override
@@ -153,10 +203,10 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                   ),
                                 ),
                                 Spacer(),
-                                if (pedido.containsKey('WazeUrl'))
+                                if (pedido.containsKey('WazeURL'))
                                   GestureDetector(
                                     onTap: () async {
-                                      var url = pedido['WazeUrl'];
+                                      var url = pedido['WazeURL'];
                                       if (await canLaunch(url)) {
                                         await launch(url);
                                       } else {
@@ -220,10 +270,10 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                   ),
                                 ),
                                 Spacer(),
-                                if (pedido.containsKey('urltelefono'))
+                                if (pedido.containsKey('TelURL'))
                                   GestureDetector(
                                     onTap: () async {
-                                      var url = 'tel:${pedido['urltelefono']}';
+                                      var url = 'tel:${pedido['TelURL']}';
                                       if (await canLaunch(url)) {
                                         await launch(url);
                                       } else {
@@ -259,13 +309,44 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                   );
                                 } else {
                                   int minutesLeft = snapshot.data!;
-                                  return Text(
-                                    'Minutos restantes: $minutesLeft',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12.0,
-                                    ),
-                                  );
+                                  var delayInfo = getDelayInfo(minutesLeft);
+                                  return delayInfo != null
+                                      ? Container(
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 6.0, vertical: 2.0),
+                                          decoration: BoxDecoration(
+                                            color: delayInfo["Color"],
+                                            borderRadius:
+                                                BorderRadius.circular(8.0),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Text(
+                                                'Minutos restantes: $minutesLeft',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12.0,
+                                                ),
+                                              ),
+                                              SizedBox(width: 8.0),
+                                              Text(
+                                                delayInfo["Etiqueta"],
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12.0,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      : Text(
+                                          'Minutos restantes: $minutesLeft',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12.0,
+                                          ),
+                                        );
                                 }
                               },
                             ),

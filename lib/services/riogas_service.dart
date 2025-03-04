@@ -82,4 +82,11 @@ class RioGasService {
       String version, String deviceId) {
     return _post('ValidarVersion', {'version': version, 'DeviceId': deviceId});
   }
+
+  // Nuevo método para obtener datos de la versión
+  static Future<Map<String, dynamic>?> DatosVersionActual(
+      String version, String deviceId) {
+    return _post(
+        'DatosVersionActual', {'version': version, 'DeviceId': deviceId});
+  }
 }
