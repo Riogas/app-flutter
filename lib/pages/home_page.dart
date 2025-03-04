@@ -255,6 +255,13 @@ class _HomePageState extends State<HomePage> {
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
+        backgroundColor: Colors.white,
+        type: BottomNavigationBarType.fixed,
+        elevation: 10,
+        selectedLabelStyle: TextStyle(fontWeight: FontWeight.bold),
+        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.normal),
+        showSelectedLabels: true,
+        showUnselectedLabels: false,
       ),
     );
   }
@@ -264,7 +271,7 @@ class _HomePageState extends State<HomePage> {
     return BottomNavigationBarItem(
       icon: Stack(
         children: [
-          Icon(icon),
+          Icon(icon, size: 20),
           if (badgeCount > 0)
             Positioned(
               right: 0,
