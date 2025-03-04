@@ -238,15 +238,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                 ),
                                 Spacer(),
                                 if (pedido.containsKey('WazeURL'))
-                                  GestureDetector(
-                                    onTap: () async {
-                                      var url = pedido['WazeURL'];
-                                      if (await canLaunch(url)) {
-                                        await launch(url);
-                                      } else {
-                                        throw 'Could not launch $url';
-                                      }
-                                    },
+                                  Container(
                                     child: Icon(
                                       Icons.location_on,
                                       color: Colors.white,
@@ -256,15 +248,43 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                               ],
                             ),
                             SizedBox(height: 4.0),
-                            Text(
-                              tipo == 'Pedidos'
-                                  ? 'Servicio: ${pedido['ServicioNombre'] ?? 'Desconocido'}'
-                                  : 'Defecto: ${pedido['Defecto'] ?? 'Desconocido'}',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12.0,
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  tipo == 'Pedidos'
+                                      ? 'Servicio: ${pedido['ServicioNombre'] ?? 'Desconocido'}'
+                                      : 'Defecto: ${pedido['Defecto'] ?? 'Desconocido'}',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.0,
+                                  ),
+                                ),
+                                Spacer(),
+                                if (pedido.containsKey('Precio'))
+                                  Text(
+                                    'Importe: ${pedido['Precio']}',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.0,
+                                    ),
+                                  ),
+                              ],
                             ),
+                            if (pedido.containsKey('PedidoObs') &&
+                                pedido['PedidoObs'].isNotEmpty)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(height: 4.0),
+                                  Text(
+                                    'Observaciones: ${pedido['PedidoObs']}',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             SizedBox(height: 4.0),
                             Row(
                               children: [
