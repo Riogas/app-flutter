@@ -258,8 +258,10 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: Colors.white,
         type: BottomNavigationBarType.fixed,
         elevation: 10,
-        selectedLabelStyle: TextStyle(fontWeight: FontWeight.bold),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.normal),
+        selectedLabelStyle:
+            TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+        unselectedLabelStyle:
+            TextStyle(fontWeight: FontWeight.normal, fontSize: 10),
         showSelectedLabels: true,
         showUnselectedLabels: false,
       ),

@@ -216,6 +216,23 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                     fontSize: 14.0,
                                   ),
                                 ),
+                                SizedBox(width: 8.0),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 6.0, vertical: 2.0),
+                                  decoration: BoxDecoration(
+                                    color: etiquetaColor,
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  child: Text(
+                                    etiquetaTexto,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.0,
+                                    ),
+                                  ),
+                                ),
                                 Spacer(),
                                 Icon(
                                   tipo == 'Services'
@@ -290,39 +307,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                               children: [
                                 _buildMinutesLeftStream(pedido),
                                 SizedBox(width: 8.0),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 6.0, vertical: 2.0),
-                                  decoration: BoxDecoration(
-                                    color: etiquetaColor,
-                                    borderRadius: BorderRadius.circular(8.0),
-                                  ),
-                                  child: Text(
-                                    etiquetaTexto,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12.0,
-                                    ),
-                                  ),
-                                ),
-                                Spacer(),
-                                if (pedido.containsKey('TelURL'))
-                                  GestureDetector(
-                                    onTap: () async {
-                                      var url = 'tel:${pedido['TelURL']}';
-                                      if (await canLaunch(url)) {
-                                        await launch(url);
-                                      } else {
-                                        throw 'Could not launch $url';
-                                      }
-                                    },
-                                    child: Icon(
-                                      Icons.phone,
-                                      color: Colors.white,
-                                      size: 20.0,
-                                    ),
-                                  ),
                               ],
                             ),
                           ],
