@@ -1,32 +1,33 @@
 import 'package:hive/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:flutter/services.dart';
 import 'riogas_service.dart';
 
 class AuthService {
+  static const MethodChannel _channel = MethodChannel('device_info');
+
   static Future<bool> checkIsLoggedIn() async {
     var box = await Hive.openBox('sessionBox');
     return box.get('username') != null && box.get('movil') != null;
   }
 
   static Future<String> getDeviceId() async {
-    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
     try {
-      if (deviceInfo.androidInfo != null) {
-        return (await deviceInfo.androidInfo).id;
-      } else if (deviceInfo.iosInfo != null) {
-        return (await deviceInfo.iosInfo).identifierForVendor ?? 'Unknown';
-      }
+      final String deviceId = await _channel.invokeMethod('getAndroidId');
+      return deviceId;
     } catch (e) {
       return 'Error obteniendo ID';
     }
-    return 'Unknown';
   }
 
   static Future<String> getAppVersion() async {
     final packageInfo = await PackageInfo.fromPlatform();
     return 'Versión ${packageInfo.version}';
+  }
+
+  static Future<String> getAppVersionNro() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    return packageInfo.version;
   }
 
   static Future<bool> login(String username, String password) async {
@@ -53,8 +54,10 @@ class AuthService {
     return response != null ? response['Existe'] ?? false : false;
   }
 
-  static Future<bool> registerDevice(String deviceId, String document) async {
-    var response = await RioGasService.registrarDispositivo(deviceId, document);
+  static Future<bool> registerDevice(
+      String deviceId, String document, String version) async {
+    var response =
+        await RioGasService.registrarDispositivo(deviceId, document, version);
     return response != null ? response['success'] ?? false : false;
   }
 }

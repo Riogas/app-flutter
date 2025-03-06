@@ -72,9 +72,9 @@ class RioGasService {
   }
 
   static Future<Map<String, dynamic>?> registrarDispositivo(
-      String deviceId, String documento) {
-    return _post(
-        'RegistrarDispositivo', {'DeviceId': deviceId, 'Documento': documento});
+      String deviceId, String documento, String version) {
+    return _post('RegistrarDispositivo',
+        {'DeviceId': deviceId, 'Documento': documento, 'version': version});
   }
 
   // Nuevo método para validar la versión

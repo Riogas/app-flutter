@@ -20,6 +20,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _passwordController = TextEditingController();
   String _deviceId = 'Cargando...';
   String _appVersion = 'Versión desconocida';
+  String _appNroVersion = '0.0.0';
   bool _isLoading = true;
   bool _isDeviceRegistered = true;
   List<String> _availableMoviles = [];
@@ -35,6 +36,7 @@ class _LoginPageState extends State<LoginPage> {
     _deviceId = await AuthService.getDeviceId();
     print("Device ID iniciado: $_deviceId");
     _appVersion = await AuthService.getAppVersion();
+    _appNroVersion = await AuthService.getAppVersionNro();
     _isDeviceRegistered = await AuthService.validateDevice(_deviceId);
     setState(() => _isLoading = false);
   }
@@ -49,24 +51,199 @@ class _LoginPageState extends State<LoginPage> {
     print("Antes del login");
 
     if (response != null && response['OK'] == 0) {
+      print("✅ Login exitoso. Verificando dispositivo...");
+
+      // 🔹 Validar dispositivo antes de mostrar selección de móviles
+      bool isDeviceValid = await _validateDevice();
+      print(
+          "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}");
+
+      if (!isDeviceValid) {
+        print("🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
+        bool shouldRegister = await _showRegisterDeviceDialog();
+
+        if (shouldRegister) {
+          print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
+          bool registrationSuccess =
+              await _registerDevice(_usernameController.text);
+
+          if (registrationSuccess) {
+            print(
+                "✅ Dispositivo registrado con éxito. Esperando aprobación...");
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            return; // Volver al login
+          } else {
+            print("❌ Error al registrar el dispositivo.");
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error al registrar dispositivo.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return; // Volver al login
+          }
+        } else {
+          print("🔙 Usuario canceló el registro. Volviendo al login...");
+          return; // Volver al login
+        }
+      }
+
       // 🔹 Extraer lista de móviles de la respuesta
+      print("📥 Extrayendo lista de móviles...");
       List<dynamic> listaMoviles = jsonDecode(response['ListaMoviles']);
       _availableMoviles = listaMoviles
           .map((movil) => movil['SDT_Mov_MovMat'].toString())
           .toList();
 
       if (_availableMoviles.isNotEmpty) {
-        print("Mostrar selección de móviles antes de continuar");
+        print("📋 Móviles disponibles para seleccionar: $_availableMoviles");
+        print("🛑 Mostrando selección de móviles antes de continuar...");
+
+        // 🔹 Mostrar selección de móviles antes de continuar
+        await _showMobileSelectionDialog(response);
+      }
+    } else if (response != null && response['OK'] == 9) {
+      // 🔹 Validar dispositivo antes de mostrar selección de móviles
+      bool isDeviceValid = await _validateDevice();
+      print(
+          "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}");
+
+      if (!isDeviceValid) {
+        print("🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
+        bool shouldRegister = await _showRegisterDeviceDialog();
+
+        if (shouldRegister) {
+          print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
+          bool registrationSuccess =
+              await _registerDevice(_usernameController.text);
+
+          if (registrationSuccess) {
+            print(
+                "✅ Dispositivo registrado con éxito. Esperando aprobación...");
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            return; // Volver al login
+          } else {
+            print("❌ Error al registrar el dispositivo.");
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error al registrar dispositivo.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return; // Volver al login
+          }
+        }
+      }
+
+      // 🔹 Extraer lista de móviles de la respuesta
+      print("📥 Extrayendo lista de móviles...");
+      List<dynamic> listaMoviles = jsonDecode(response['ListaMoviles']);
+      _availableMoviles = listaMoviles
+          .map((movil) => movil['SDT_Mov_MovMat'].toString())
+          .toList();
+
+      if (_availableMoviles.isNotEmpty) {
+        print("📋 Móviles disponibles para seleccionar: $_availableMoviles");
+        print("🛑 Mostrando selección de móviles antes de continuar...");
+
         // 🔹 Mostrar selección de móviles antes de continuar
         await _showMobileSelectionDialog(response);
       }
     } else {
+      print("❌ Error al iniciar sesión. Respuesta: $response");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al iniciar sesión'),
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<bool> _validateDevice() async {
+    _isDeviceRegistered = await AuthService.validateDevice(_deviceId);
+    return _isDeviceRegistered;
+  }
+
+  Future<bool> _showRegisterDeviceDialog() async {
+    bool shouldRegister = false;
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Dispositivo No Registrado'),
+          content: Text(
+              'Su dispositivo no se encuentra registrado en el sistema. ¿Desea registrarlo?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                shouldRegister = true;
+                Navigator.of(context).pop();
+              },
+              child: Text('Registrar'),
+            ),
+          ],
+        );
+      },
+    );
+    return shouldRegister;
+  }
+
+  Future<bool> _registerDevice(String document) async {
+    try {
+      final response = await RioGasService.registrarDispositivo(
+          _deviceId, document, _appNroVersion);
+
+      if (response != null && response['OK'] == 0) {
+        var box = await Hive.openBox('sessionBox');
+        await box.put('NombreUsuario', response['NombreUsuario']);
+        await box.put('Habilitado', response['habilitar']);
+        print(
+            '✅ NombreUsuario guardado en sessionBox: ${response['NombreUsuario']}');
+        return true;
+      } else {
+        // 🔹 Si el servicio devuelve un mensaje de error, lo mostramos en el SnackBar
+        String errorMessage = response?['message'] ??
+            'Error desconocido al registrar el dispositivo';
+        print("❌ Error en respuesta del servicio: $errorMessage");
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return false;
+      }
+    } catch (e) {
+      print('❌ Excepción atrapada en _registerDevice: $e');
+
+      // 🔹 Mostrar el mensaje de error en un SnackBar
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error de conexión: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
     }
   }
 
@@ -328,106 +505,6 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  void _showRegisterDeviceDialog() {
-    final TextEditingController _documentController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Registrar Dispositivo'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Por favor, ingrese su documento de identidad.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _documentController,
-                decoration: const InputDecoration(
-                  labelText: 'Documento',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Cierra el diálogo
-              },
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final document = _documentController.text.trim();
-                if (document.isNotEmpty) {
-                  Navigator.of(context).pop(); // Cierra el diálogo
-                  await _registerDevice(
-                      document); // Llama a la función con el documento
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Por favor, ingrese un documento válido.'),
-                      backgroundColor: Colors.red,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
-              child: const Text('Confirmar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _registerDevice(String document) async {
-    try {
-      final response =
-          await RioGasService.registrarDispositivo(_deviceId, document);
-
-      if (response != null && response['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Dispositivo registrado con éxito.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-        setState(() {
-          _isDeviceRegistered = true;
-        });
-
-        var box = await Hive.openBox('sessionBox');
-        await box.put('NombreUsuario', response['NombreUsuario']);
-        print(
-            'NombreUsuario guardado en sessionBox: ${response['NombreUsuario']}');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(response?['message'] ?? 'Error al registrar dispositivo.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error al registrar dispositivo: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error al registrar dispositivo.'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -540,18 +617,6 @@ class _LoginPageState extends State<LoginPage> {
                                   TextStyle(fontSize: 14, color: Colors.grey),
                             ),
                             SizedBox(height: 20),
-                            if (!_isDeviceRegistered)
-                              ElevatedButton(
-                                onPressed: () => _showRegisterDeviceDialog(),
-                                child: Text('Registrar Dispositivo'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.grey,
-                                  foregroundColor: Colors.white,
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 50, vertical: 15),
-                                  textStyle: TextStyle(fontSize: 18),
-                                ),
-                              ),
                           ],
                         ),
                       ),
