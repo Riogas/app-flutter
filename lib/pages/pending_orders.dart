@@ -149,9 +149,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                 if (pedidoEstado == null) {
                   etiquetaTexto = 'No Leído';
                   etiquetaColor = Colors.black;
-                } else if (pedidoEstado == 'Leido') {
-                  etiquetaTexto = 'Leído';
-                  etiquetaColor = Colors.grey;
                 } else if (pedidoEstado == 'Procesando') {
                   etiquetaTexto = 'Procesando';
                   etiquetaColor = Colors.lightBlue;
