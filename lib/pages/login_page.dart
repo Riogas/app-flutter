@@ -532,6 +532,13 @@ class _LoginPageState extends State<LoginPage> {
                                 textStyle: TextStyle(fontSize: 18),
                               ),
                             ),
+                            SizedBox(height: 10),
+                            Text(
+                              _appVersion,
+                              textAlign: TextAlign.center,
+                              style:
+                                  TextStyle(fontSize: 14, color: Colors.grey),
+                            ),
                             SizedBox(height: 20),
                             if (!_isDeviceRegistered)
                               ElevatedButton(
@@ -555,27 +562,19 @@ class _LoginPageState extends State<LoginPage> {
                     child: Stack(
                       children: [
                         Align(
-                          alignment: Alignment.center,
-                          child: Text(
-                            _appVersion,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ),
-                        Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
                             'ID: $_deviceId',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
                           ),
                         ),
                         Align(
                           alignment: Alignment.centerRight,
                           child: Image.asset(
                             'assets/logo-riogas.png',
-                            width: 70,
-                            height: 20,
+                            width: 100,
+                            height: 30,
                           ),
                         ),
                       ],
