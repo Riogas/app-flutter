@@ -142,8 +142,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                     : direccion;
 
                 // Determinar el estado del pedido y la etiqueta correspondiente
-                String etiquetaTexto;
-                Color etiquetaColor;
+                String etiquetaTexto = '';
+                Color etiquetaColor = Colors.transparent;
 
                 var pedidoEstado = pedidosBox.get(pedidoId);
                 if (pedidoEstado == null) {
@@ -155,9 +155,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                 } else if (pedidoEstado == 'Enviando') {
                   etiquetaTexto = 'Enviando';
                   etiquetaColor = Colors.orange;
-                } else {
-                  etiquetaTexto = 'Desconocido';
-                  etiquetaColor = Colors.red;
                 }
 
                 // Depuración: imprimir el valor de urltelefono
@@ -221,14 +218,16 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                     color: etiquetaColor,
                                     borderRadius: BorderRadius.circular(8.0),
                                   ),
-                                  child: Text(
-                                    etiquetaTexto,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12.0,
-                                    ),
-                                  ),
+                                  child: etiquetaTexto.isNotEmpty
+                                      ? Text(
+                                          etiquetaTexto,
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12.0,
+                                          ),
+                                        )
+                                      : SizedBox.shrink(),
                                 ),
                                 Spacer(),
                                 Icon(

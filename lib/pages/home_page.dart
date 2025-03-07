@@ -1,3 +1,4 @@
+import 'package:MoveIT/main.dart';
 import 'package:flutter/material.dart';
 import 'pending_orders.dart';
 import 'completed_orders.dart';
@@ -12,6 +13,8 @@ import '../services/firebase_service.dart';
 import '../services/location_service.dart'; // 🔹 Importamos LocationService
 import 'package:latlong2/latlong.dart';
 import 'package:MoveIT/pages/login_page.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase_messaging
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Importa flutter_local_notifications
 
 class HomePage extends StatefulWidget {
   @override
@@ -55,6 +58,9 @@ class _HomePageState extends State<HomePage> {
 
     // 🔹 Inicializar el servicio de ubicación
     _initializeLocationService();
+
+    // 🔹 Escuchar cambios en Firestore para pedidos y mensajes
+    _listenToFirestoreChanges();
   }
 
   @override
@@ -129,6 +135,52 @@ class _HomePageState extends State<HomePage> {
         _newOrders = orders.length;
       });
     });
+  }
+
+  void _listenToFirestoreChanges() {
+    FirebaseFirestore.instance
+        .collection('Pedidos')
+        .snapshots()
+        .listen((snapshot) {
+      for (var doc in snapshot.docChanges) {
+        if (doc.type == DocumentChangeType.added) {
+          _showNotification(
+              'Nuevo Pedido', 'Tienes un nuevo pedido pendiente.');
+        }
+      }
+    });
+
+    FirebaseFirestore.instance
+        .collection('Mensajes')
+        .snapshots()
+        .listen((snapshot) {
+      for (var doc in snapshot.docChanges) {
+        if (doc.type == DocumentChangeType.added) {
+          _showNotification('Nuevo Mensaje', 'Tienes un nuevo mensaje.');
+        }
+      }
+    });
+  }
+
+  Future<void> _showNotification(String title, String body) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'high_importance_channel',
+      'High Importance Notifications',
+      channelDescription: 'This channel is used for important notifications.',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: false,
+    );
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      title,
+      body,
+      platformChannelSpecifics,
+      payload: 'item x',
+    );
   }
 
   void _onItemTapped(int index) {

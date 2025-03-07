@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart'; // Importa HiveFlutter
+import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase_messaging
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Importa flutter_local_notifications
 import 'utils/firebase_options.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
@@ -10,6 +12,9 @@ import 'services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa url_launcher
 import 'utils/error_event.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,8 +34,79 @@ void main() async {
   // 🔹 Validar la versión de la aplicación
   await _validateAppVersion();
 
+  // 🔹 Inicializar Firebase Messaging
+  await _initializeFirebaseMessaging();
+
   WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
   runApp(MyApp(isLoggedIn: isLoggedIn));
+}
+
+Future<void> _initializeFirebaseMessaging() async {
+  FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+  // Solicitar permisos para iOS
+  NotificationSettings settings = await messaging.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+    print('Usuario concedió permisos de notificación');
+  } else {
+    print('Usuario no concedió permisos de notificación');
+  }
+
+  // Configurar el canal de notificaciones
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'high_importance_channel', // id
+    'High Importance Notifications', // title
+    description:
+        'This channel is used for important notifications.', // description
+    importance: Importance.high,
+  );
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  // Inicializar las notificaciones locales
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  final InitializationSettings initializationSettings =
+      InitializationSettings(android: initializationSettingsAndroid);
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+  // Configurar el manejo de mensajes en foreground
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    RemoteNotification? notification = message.notification;
+    AndroidNotification? android = message.notification?.android;
+
+    if (notification != null && android != null) {
+      flutterLocalNotificationsPlugin.show(
+        notification.hashCode,
+        notification.title,
+        notification.body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            channel.id,
+            channel.name,
+            channelDescription: channel.description,
+            icon: android.smallIcon,
+          ),
+        ),
+      );
+    }
+  });
+
+  // Configurar el manejo de mensajes en background
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+}
+
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print('Handling a background message: ${message.messageId}');
 }
 
 Future<void> _validateAppVersion() async {
