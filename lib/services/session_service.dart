@@ -120,7 +120,8 @@ class SessionService {
         print('Documento "activo" borrado correctamente.');
       }
 
-      if (tipoDeCierreDeSesion == "") {
+      if (tipoDeCierreDeSesion == "" ||
+          tipoDeCierreDeSesion == "logoutForzadoPorOtroLogin") {
         // ✅ Crear el nuevo documento "activo"
         await ultimaDocRef.set(sessionData);
         print('Documento "activo" creado correctamente.');

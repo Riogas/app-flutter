@@ -68,16 +68,40 @@ class _LoginPageState extends State<LoginPage> {
               await _registerDevice(_usernameController.text);
 
           if (registrationSuccess) {
-            print(
-                "✅ Dispositivo registrado con éxito. Esperando aprobación...");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            return; // Volver al login
+            var box = await Hive.openBox('sessionBox');
+            String habilitado = box.get('Habilitado', defaultValue: 'N');
+
+            if (habilitado == 'N') {
+              print(
+                  "✅ Dispositivo registrado con éxito. Esperando aprobación...");
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              return; // Volver al login
+            } else {
+              // 🔹 Extraer lista de móviles de la respuesta
+              print("📥 Extrayendo lista de móviles...");
+              List<dynamic> listaMoviles = response['ListaMoviles'] != null
+                  ? jsonDecode(response['ListaMoviles'])
+                  : [];
+              _availableMoviles = listaMoviles
+                  .map((movil) => movil['SDT_Mov_MovMat'].toString())
+                  .toList();
+
+              if (_availableMoviles.isNotEmpty) {
+                print(
+                    "📋 Móviles disponibles para seleccionar: $_availableMoviles");
+                print(
+                    "🛑 Mostrando selección de móviles antes de continuar...");
+
+                // 🔹 Mostrar selección de móviles antes de continuar
+                await _showMobileSelectionDialog(response);
+              }
+            }
           } else {
             print("❌ Error al registrar el dispositivo.");
             ScaffoldMessenger.of(context).showSnackBar(
@@ -96,7 +120,9 @@ class _LoginPageState extends State<LoginPage> {
 
       // 🔹 Extraer lista de móviles de la respuesta
       print("📥 Extrayendo lista de móviles...");
-      List<dynamic> listaMoviles = jsonDecode(response['ListaMoviles']);
+      List<dynamic> listaMoviles = response['ListaMoviles'] != null
+          ? jsonDecode(response['ListaMoviles'])
+          : [];
       _availableMoviles = listaMoviles
           .map((movil) => movil['SDT_Mov_MovMat'].toString())
           .toList();
@@ -124,16 +150,57 @@ class _LoginPageState extends State<LoginPage> {
               await _registerDevice(_usernameController.text);
 
           if (registrationSuccess) {
-            print(
-                "✅ Dispositivo registrado con éxito. Esperando aprobación...");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            return; // Volver al login
+            var box = await Hive.openBox('sessionBox');
+            String habilitado = box.get('Habilitado', defaultValue: 'N');
+
+            if (habilitado == 'N') {
+              print(
+                  "✅ Dispositivo registrado con éxito. Esperando aprobación...");
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              return; // Volver al login
+            } else {
+              var response = await RioGasService.validarUsuario(
+                _usernameController.text,
+                _passwordController.text,
+                _deviceId,
+              );
+
+              print("Antes del login");
+
+              if (response != null && response['OK'] == 0) {
+                print("✅ Login exitoso. Verificando dispositivo...");
+
+                // 🔹 Validar dispositivo antes de mostrar selección de móviles
+                bool isDeviceValid = await _validateDevice();
+                print(
+                    "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}");
+
+                // 🔹 Extraer lista de móviles de la respuesta
+                print("📥 Extrayendo lista de móviles...");
+                List<dynamic> listaMoviles = response['ListaMoviles'] != null
+                    ? jsonDecode(response['ListaMoviles'])
+                    : [];
+                _availableMoviles = listaMoviles
+                    .map((movil) => movil['SDT_Mov_MovMat'].toString())
+                    .toList();
+
+                if (_availableMoviles.isNotEmpty) {
+                  print(
+                      "📋 Móviles disponibles para seleccionar: $_availableMoviles");
+                  print(
+                      "🛑 Mostrando selección de móviles antes de continuar...");
+
+                  // 🔹 Mostrar selección de móviles antes de continuar
+                  await _showMobileSelectionDialog(response);
+                }
+              }
+            }
           } else {
             print("❌ Error al registrar el dispositivo.");
             ScaffoldMessenger.of(context).showSnackBar(
@@ -144,31 +211,11 @@ class _LoginPageState extends State<LoginPage> {
             );
             return; // Volver al login
           }
+        } else {
+          print("🔙 Usuario canceló el registro. Volviendo al login...");
+          return; // Volver al login
         }
       }
-
-      // 🔹 Extraer lista de móviles de la respuesta
-      print("📥 Extrayendo lista de móviles...");
-      List<dynamic> listaMoviles = jsonDecode(response['ListaMoviles']);
-      _availableMoviles = listaMoviles
-          .map((movil) => movil['SDT_Mov_MovMat'].toString())
-          .toList();
-
-      if (_availableMoviles.isNotEmpty) {
-        print("📋 Móviles disponibles para seleccionar: $_availableMoviles");
-        print("🛑 Mostrando selección de móviles antes de continuar...");
-
-        // 🔹 Mostrar selección de móviles antes de continuar
-        await _showMobileSelectionDialog(response);
-      }
-    } else {
-      print("❌ Error al iniciar sesión. Respuesta: $response");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al iniciar sesión'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -412,7 +459,23 @@ class _LoginPageState extends State<LoginPage> {
         .collection('Movil-$selectedMovil')
         .doc('activo');
 
-    DocumentSnapshot activeDocSnapshot = await ultimaDocRef.get();
+    DocumentSnapshot activeDocSnapshot;
+    try {
+      activeDocSnapshot = await ultimaDocRef.get();
+    } catch (e) {
+      if (e is FirebaseException && e.code == 'permission-denied') {
+        print('❌ Error de permisos al acceder a Firestore: ${e.message}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de permisos al acceder a Firestore.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return false;
+      } else {
+        rethrow;
+      }
+    }
 
     if (activeDocSnapshot.exists) {
       var data = activeDocSnapshot.data() as Map<String, dynamic>;
