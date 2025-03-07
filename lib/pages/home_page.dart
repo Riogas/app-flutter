@@ -82,7 +82,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _initializeLocationService() async {
-    await _locationService.initializeLocationUpdates();
+    await _locationService.initializeLocationUpdates(context);
     _locationSubscription = _locationService.locationStream.listen((location) {
       print('📍 Nueva ubicación recibida en HomePage: $location');
     });
@@ -134,6 +134,10 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _newOrders = orders.length;
       });
+      // 🔹 Mostrar notificación para nuevas órdenes
+      if (orders.isNotEmpty) {
+        _showNotification('Nuevo Pedido', 'Tienes un nuevo pedido pendiente.');
+      }
     });
   }
 

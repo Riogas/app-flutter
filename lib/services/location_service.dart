@@ -7,6 +7,7 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 class LocationService {
   static final LocationService _instance = LocationService._internal();
@@ -24,7 +25,7 @@ class LocationService {
   Stream<LatLng> get locationStream => _locationStreamController.stream;
 
   /// 🔹 Inicializa el servicio de ubicación en primer y segundo plano
-  Future<void> initializeLocationUpdates() async {
+  Future<void> initializeLocationUpdates(BuildContext context) async {
     await _requestIgnoreBatteryOptimizations();
     bool intervalLoaded = await _loadUpdateInterval();
     if (!intervalLoaded) {
@@ -33,7 +34,8 @@ class LocationService {
       return;
     }
     await _getLocationPermission();
-    await ensureCorrectLocationPermission(); // 🔹 Verifica y solicita permiso en background
+    await ensureCorrectLocationPermission(
+        context); // 🔹 Verifica y solicita permiso en background
     await _enableBackgroundExecution();
     _startLocationUpdates();
   }
@@ -146,21 +148,68 @@ class LocationService {
   }
 
   /// ✅ **Verifica si el usuario otorgó el permiso "Permitir todo el tiempo"**
-  Future<void> ensureCorrectLocationPermission() async {
+  Future<void> ensureCorrectLocationPermission(BuildContext context) async {
     LocationPermission permission = await Geolocator.checkPermission();
 
     if (permission == LocationPermission.whileInUse) {
       print(
           "⚠️ El usuario solo concedió 'Mientras se usa la app'. Solicitando 'Permitir todo el tiempo'...");
 
-      // 🔹 Redirige al usuario a la configuración para que habilite el permiso correcto
-      final intent = AndroidIntent(
-        action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
-        data: 'package:com.example.appmovil',
-        flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
-      );
-      await intent.launch();
+      // 🔹 Muestra un popup antes de redirigir a la configuración
+      bool shouldRedirect = await _showPermissionDialog(context);
+      if (shouldRedirect) {
+        final intent = AndroidIntent(
+          action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
+          data: 'package:com.example.appmovil',
+          flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+        );
+        await intent.launch();
+      }
     }
+  }
+
+  Future<bool> _showPermissionDialog(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Text('Permiso de ubicación requerido'),
+              content: Text.rich(
+                TextSpan(
+                  text: 'La app ',
+                  children: <TextSpan>[
+                    TextSpan(
+                      text: 'REQUIERE',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                    TextSpan(
+                      text:
+                          ' que se habiliten los permisos de acceder a la ubicación TODO EL TIEMPO para poder funcionar, por favor habilítelos.',
+                    ),
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  child: Text('Cancelar'),
+                  onPressed: () {
+                    Navigator.of(context).pop(false);
+                  },
+                ),
+                TextButton(
+                  child: Text('Continuar'),
+                  onPressed: () {
+                    Navigator.of(context).pop(true);
+                  },
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
   }
 
   /// 🔹 Inicia la actualización de ubicación en primer y segundo plano

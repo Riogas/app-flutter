@@ -36,12 +36,20 @@ dependencies:
   battery_plus: ^6.2.1
   android_intent_plus: ^4.0.0
   webview_flutter: ^4.10.0
+  flutter_launcher_icons: ^0.13.1
 
 dev_dependencies:
   flutter_test: 
     sdk: flutter
   hive_generator: ^2.0.1
   build_runner: ^2.3.3
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/moveit_icon_adjusted.png"  # Ruta del icono en primer plano
+  adaptive_icon_background: "assets/icon/android_512.png" # Ruta del icono de fondo
+  adaptive_icon_foreground: "assets/icon/android_96.png" # Ruta del icono en primer plano
 
 flutter:
   uses-material-design: true
