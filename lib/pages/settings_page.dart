@@ -3,6 +3,7 @@ import 'package:MoveIT/pages/login_page.dart';
 import 'package:hive/hive.dart';
 import '../services/session_service.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -16,11 +17,13 @@ class _SettingsPageState extends State<SettingsPage> {
   String? deviceId;
   String? releaseNotes;
   String appVersion = '1.0.0'; // Reemplaza con la versión real de la app
+  int completedOrdersCount = 0;
 
   @override
   void initState() {
     super.initState();
     _loadSessionData();
+    _loadCompletedOrdersCount();
   }
 
   Future<void> _loadSessionData() async {
@@ -31,6 +34,33 @@ class _SettingsPageState extends State<SettingsPage> {
       idUsuario = box.get('username');
       deviceId = box.get('deviceId');
       releaseNotes = box.get('ReleaseNotes');
+    });
+  }
+
+  Future<void> _loadCompletedOrdersCount() async {
+    var box = await Hive.openBox('sessionBox');
+    String escenarioId = box.get('escenario', defaultValue: '0');
+    int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
+
+    String collectionName = 'Pedidos-$escenarioId';
+    String fechaActualStr = DateTime.now()
+        .toUtc()
+        .subtract(Duration(hours: 3))
+        .toIso8601String()
+        .split('T')[0]
+        .replaceAll('-', '');
+    int fechaActual = int.tryParse(fechaActualStr) ?? 0;
+
+    var snapshot = await FirebaseFirestore.instance
+        .collection(collectionName)
+        .where('Movil', isEqualTo: movil)
+        .where('FchPara', isEqualTo: fechaActual)
+        .where('VisibleEnApp', isEqualTo: 'S')
+        .where('EstadoNro', isEqualTo: 2)
+        .get();
+
+    setState(() {
+      completedOrdersCount = snapshot.docs.length;
     });
   }
 
@@ -108,6 +138,10 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       },
     );
+  }
+
+  Future<void> _generateReport() async {
+    // Llamada al servicio para generar el reporte de pedidos finalizados
   }
 
   void _showReleaseNotesDialog() {
@@ -224,9 +258,46 @@ class _SettingsPageState extends State<SettingsPage> {
                     Icons.info_outline, 'Notas de la Versión', 'Mas Info',
                     isLongText: true),
               ),
+            _buildInfoRowWithButton(Icons.check_circle, 'Pedidos Finalizados',
+                '$completedOrdersCount', Icons.description, _generateReport),
             _buildInfoRow(Icons.verified, 'Versión de la App', appVersion),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRowWithButton(IconData icon, String title, String value,
+      IconData buttonIcon, VoidCallback onPressed) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.blueAccent),
+          SizedBox(width: 10),
+          Text(
+            '$title: ',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: Icon(buttonIcon, color: Colors.blueAccent),
+            onPressed: onPressed,
+          ),
+        ],
       ),
     );
   }
