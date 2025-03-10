@@ -231,23 +231,37 @@ class FirebaseService {
     });
   }
 
-  Stream<List<DocumentSnapshot>> getMovilesStream() async* {
+  Stream<DocumentSnapshot?> getMovilStream() async* {
+    var box = await Hive.openBox('sessionBox');
+    String escenarioId = box.get('escenario', defaultValue: '0');
+    String movil = box.get('movil', defaultValue: '0');
+    String collectionName = 'Moviles-$escenarioId';
+    String documentName = 'Moviles-$movil';
+
+    yield* _firestore
+        .collection(collectionName)
+        .doc(documentName)
+        .snapshots()
+        .handleError((error) {
+      print('Error fetching movil: $error');
+      _logError('Firestore Error', error.toString());
+    }).map((snapshot) {
+      print('Fetched movil: ${snapshot.data()}');
+      return snapshot;
+    });
+  }
+
+  Future<void> updateMovilEstado(String movilId, int estado) async {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0');
     String collectionName = 'Moviles-$escenarioId';
 
-    yield* _firestore
+    await _firestore
         .collection(collectionName)
-        .snapshots()
-        .handleError((error) {
-      print('Error fetching moviles: $error');
+        .doc(movilId)
+        .update({'EstadoNro': estado}).catchError((error) {
+      print('Error updating movil estado: $error');
       _logError('Firestore Error', error.toString());
-    }).map((snapshot) {
-      print('Fetched ${snapshot.docs.length} moviles');
-      snapshot.docs.forEach((doc) {
-        print('Movil: ${doc.data()}');
-      });
-      return snapshot.docs;
     });
   }
 

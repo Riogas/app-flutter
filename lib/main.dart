@@ -3,6 +3,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart'; // Importa HiveFlutter
 import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase_messaging
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Importa flutter_local_notifications
+import 'package:device_info_plus/device_info_plus.dart'; // Importa device_info_plus
+import 'package:battery_plus/battery_plus.dart'; // Importa battery_plus
 import 'utils/firebase_options.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
@@ -12,6 +14,7 @@ import 'services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa url_launcher
 import 'utils/error_event.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'dart:io'; // Importa dart:io para usar Platform
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -36,6 +39,9 @@ void main() async {
 
   // 🔹 Inicializar Firebase Messaging
   await _initializeFirebaseMessaging();
+
+  // 🔹 Verificar configuraciones de batería y actividad en segundo plano
+  await _checkBatteryAndBackgroundSettings();
 
   WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
   runApp(MyApp(isLoggedIn: isLoggedIn));
@@ -120,6 +126,27 @@ Future<void> _validateAppVersion() async {
       _showMessage(response['message']);
     } else if (response['OK'] == 2) {
       _showUpdateDialog(response['message'], response['link']);
+    }
+  }
+}
+
+Future<void> _checkBatteryAndBackgroundSettings() async {
+  DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  Battery battery = Battery();
+
+  // Verificar si la aplicación está en la lista de optimización de batería
+  bool isIgnoringBatteryOptimizations = await battery.isInBatterySaveMode;
+  if (!isIgnoringBatteryOptimizations) {
+    _showMessage(
+        'La aplicación está optimizada para batería. Esto puede afectar su rendimiento.');
+  }
+
+  // Verificar si la aplicación está en la lista de aplicaciones en segundo plano
+  if (Platform.isAndroid) {
+    AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+    if (await battery.isInBatterySaveMode) {
+      _showMessage(
+          'La aplicación está restringida para ejecutarse en segundo plano.');
     }
   }
 }

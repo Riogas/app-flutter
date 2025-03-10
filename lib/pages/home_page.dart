@@ -224,22 +224,43 @@ class _HomePageState extends State<HomePage> {
         actions: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Icon(Icons.network_cell, color: Colors.green),
-                SizedBox(width: 5),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    borderRadius: BorderRadius.circular(12),
+            child: StreamBuilder<DocumentSnapshot?>(
+              stream: _firebaseService.getMovilStream(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return Center(child: CircularProgressIndicator());
+                }
+
+                var movilDoc = snapshot.data!;
+                var data = movilDoc.data() as Map<String, dynamic>;
+                int estadoNro = data['EstadoNro'];
+                String estadoText = estadoNro == 3 ? 'Desactivado' : 'Activo';
+                Color estadoColor =
+                    estadoNro == 3 ? Colors.orange : Colors.green;
+
+                return GestureDetector(
+                  onTap: () =>
+                      _showEstadoDropdown(context, movilDoc.id, estadoNro),
+                  child: Row(
+                    children: [
+                      Icon(Icons.network_cell, color: estadoColor),
+                      SizedBox(width: 5),
+                      Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: estadoColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Movil:$_movil - $estadoText',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
                   ),
-                  child: Text(
-                    'Movil:$_movil - Activo',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
         ],
@@ -268,30 +289,29 @@ class _HomePageState extends State<HomePage> {
               print("🔒 Chequeando logout forzado en Firestore...");
               // ✅ Si no es el primer login, proceder con la validación en Firestore
               return StreamBuilder<Map<String, dynamic>?>(
-                stream: _firebaseService.getSesionesStream(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
-
-                  if (snapshot.hasData) {
-                    var data = snapshot.data;
-                    if (data != null &&
-                        data['idTerminal'] != box.get('deviceId')) {
-                      return _showForcedLogoutDialog(
-                          context, data['nomUsuario'], data['movil']);
+                  stream: _firebaseService.getSesionesStream(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
                     }
-                  } else {
-                    return _showForcedLogoutDialog(
-                        context, 'Desconocido', 'Desconocido');
-                  }
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Error: ${snapshot.error}'));
+                    }
 
-                  return _widgetOptions.elementAt(_selectedIndex);
-                },
-              );
+                    if (snapshot.hasData) {
+                      var data = snapshot.data;
+                      if (data != null &&
+                          data['idTerminal'] != box.get('deviceId')) {
+                        return _showForcedLogoutDialog(
+                            context, data['nomUsuario'], data['movil']);
+                      }
+                    } else {
+                      return _showForcedLogoutDialog(
+                          context, 'Desconocido', 'Desconocido');
+                    }
+
+                    return _widgetOptions.elementAt(_selectedIndex);
+                  });
             } else {
               return _widgetOptions.elementAt(_selectedIndex);
             }
@@ -350,6 +370,31 @@ class _HomePageState extends State<HomePage> {
       child: Text('$count',
           style: TextStyle(color: Colors.white, fontSize: 8),
           textAlign: TextAlign.center),
+    );
+  }
+
+  void _showEstadoDropdown(
+      BuildContext context, String movilId, int currentEstado) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Cambiar Estado del Móvil'),
+          content: DropdownButton<int>(
+            value: currentEstado,
+            items: [
+              DropdownMenuItem(value: 2, child: Text('Activo')),
+              DropdownMenuItem(value: 3, child: Text('Desactivado')),
+            ],
+            onChanged: (int? newValue) {
+              if (newValue != null) {
+                _firebaseService.updateMovilEstado(movilId, newValue);
+                Navigator.of(context).pop();
+              }
+            },
+          ),
+        );
+      },
     );
   }
 }
