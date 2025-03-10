@@ -15,6 +15,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? idUsuario;
   String? deviceId;
   String? releaseNotes;
+  String appVersion = '1.0.0'; // Reemplaza con la versión real de la app
 
   @override
   void initState() {
@@ -64,6 +65,51 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  Future<void> _changePassword() async {
+    TextEditingController oldPasswordController = TextEditingController();
+    TextEditingController newPasswordController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Cambiar Contraseña'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: oldPasswordController,
+                decoration: InputDecoration(labelText: 'Contraseña Anterior'),
+                obscureText: true,
+              ),
+              TextField(
+                controller: newPasswordController,
+                decoration: InputDecoration(labelText: 'Nueva Contraseña'),
+                obscureText: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () async {
+                // Llamada al servicio para cambiar la contraseña
+                // await changePasswordService(oldPasswordController.text, newPasswordController.text);
+                Navigator.of(context).pop();
+              },
+              child: Text('Aceptar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showReleaseNotesDialog() {
     showDialog(
       context: context,
@@ -103,6 +149,8 @@ class _SettingsPageState extends State<SettingsPage> {
             SizedBox(height: 20),
             _buildInfoSection(),
             SizedBox(height: 20),
+            _buildChangePasswordButton(),
+            SizedBox(height: 10),
             _buildLogoutButton(),
           ],
         ),
@@ -176,6 +224,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     Icons.info_outline, 'Notas de la Versión', 'Mas Info',
                     isLongText: true),
               ),
+            _buildInfoRow(Icons.verified, 'Versión de la App', appVersion),
           ],
         ),
       ),
@@ -211,6 +260,21 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildChangePasswordButton() {
+    return Center(
+      child: ElevatedButton.icon(
+        onPressed: _changePassword,
+        icon: Icon(Icons.lock, color: Colors.blue),
+        label: Text('Cambiar contraseña'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.blue,
+          side: BorderSide(color: Colors.blue),
+        ),
       ),
     );
   }
