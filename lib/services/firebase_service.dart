@@ -420,6 +420,40 @@ class FirebaseService {
     });
   }
 
+  Stream<List<Map<String, dynamic>>>
+      getSubEstadoFinalizacionPedidosStream() async* {
+    var box = await Hive.openBox('sessionBox');
+    String escenarioId = box.get('escenario', defaultValue: '0');
+    String collectionName = 'SubEstadoFinalizacionPedidos-$escenarioId';
+
+    yield* _firestore
+        .collection(collectionName)
+        .orderBy('Orden')
+        .snapshots()
+        .handleError((error) async {
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        await _logFirestorePermissionError(
+            error.message ?? 'Permission denied');
+      } else {
+        print('Error fetching subestado finalizacion pedidos: $error');
+        await _logError('Firestore Error', error.toString());
+      }
+      bool isConnected = await checkFirestoreConnectivity();
+      if (!isConnected) {
+        // Notificar al usuario sobre la pérdida de conectividad
+        print('⚠ Pérdida de conectividad con Firestore.');
+      }
+    }).map((snapshot) {
+      print('Fetched ${snapshot.docs.length} subestado finalizacion pedidos');
+      return snapshot.docs.map((doc) {
+        var data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id; // Add document ID to the data
+        print('SubEstadoFinalizacionPedido: $data');
+        return data;
+      }).toList();
+    });
+  }
+
   // Agrega más métodos para otras consultas según sea necesario
 
   static Future<void> _logError(String type, String message,

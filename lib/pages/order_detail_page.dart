@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/firebase_service.dart'; // Import FirebaseService
 
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
@@ -13,6 +15,9 @@ class OrderDetailPage extends StatefulWidget {
 
 class _OrderDetailPageState extends State<OrderDetailPage> {
   late final WebViewController _controller;
+  final FirebaseService _firebaseService = FirebaseService();
+  List<Map<String, dynamic>> _subEstados = [];
+  String? _selectedSubEstado;
 
   @override
   void initState() {
@@ -26,6 +31,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         document.body.style.overflowX = "hidden"; 
         document.body.style.width = "100%";
       ''');
+
+    _firebaseService
+        .getSubEstadoFinalizacionPedidosStream()
+        .listen((subEstados) {
+      setState(() {
+        _subEstados = subEstados;
+      });
+    });
   }
 
   void injectCSS() {
@@ -77,8 +90,49 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: ElevatedButton.icon(
-                onPressed: () {
-                  // Add your onPressed code here!
+                onPressed: () async {
+                  await showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        title: Text('Seleccione acción'),
+                        content: DropdownButton<String>(
+                          hint: Text('Ninguna'),
+                          value: _selectedSubEstado,
+                          onChanged: (newValue) {
+                            setState(() {
+                              _selectedSubEstado = newValue;
+                            });
+                            Navigator.of(context).pop();
+                          },
+                          items: _subEstados.map((subEstado) {
+                            return DropdownMenuItem<String>(
+                              value: subEstado['SubEstadoCod']
+                                  .toString(), // Convert to string
+                              child: Text(subEstado['SubEstadoDesc']),
+                            );
+                          }).toList(),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                            child: Text('Cancelar'),
+                          ),
+                          TextButton(
+                            onPressed: _selectedSubEstado == null
+                                ? null
+                                : () {
+                                    // Add your onPressed code here!
+                                    Navigator.of(context).pop();
+                                  },
+                            child: Text('Aceptar'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
                 },
                 icon: Icon(Icons.check, color: Colors.white),
                 label: Text('Finalizar Pedido',
