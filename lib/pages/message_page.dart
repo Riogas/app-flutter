@@ -19,6 +19,7 @@ class _MessagePageState extends State<MessagePage> {
     super.initState();
     _initializeNotifications();
     _listenToMessages();
+    _markMessagesAsRead(); // Mark messages as read when the page is accessed
   }
 
   void _initializeNotifications() {
@@ -65,6 +66,13 @@ class _MessagePageState extends State<MessagePage> {
       platformChannelSpecifics,
       payload: 'item x',
     );
+  }
+
+  Future<void> _markMessagesAsRead() async {
+    var messages = await _firebaseService.getUnreadMessages();
+    for (var message in messages) {
+      await _firebaseService.markMessageAsRead(message.id);
+    }
   }
 
   @override

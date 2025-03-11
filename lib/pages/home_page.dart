@@ -15,6 +15,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:MoveIT/pages/login_page.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase_messaging
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Importa flutter_local_notifications
+import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivity_plus
 
 class HomePage extends StatefulWidget {
   @override
@@ -34,6 +35,7 @@ class _HomePageState extends State<HomePage> {
   late StreamSubscription _ordersSubscription;
   final Completer<void> _locationServiceCompleter = Completer<void>();
   String _movil = '0';
+  late StreamSubscription _connectivitySubscription;
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -61,6 +63,9 @@ class _HomePageState extends State<HomePage> {
 
     // 🔹 Escuchar cambios en Firestore para pedidos y mensajes
     _listenToFirestoreChanges();
+
+    // 🔹 Inicializar la verificación de conectividad
+    _checkInternetConnectivity();
   }
 
   @override
@@ -71,6 +76,8 @@ class _HomePageState extends State<HomePage> {
       _locationService
           .stopLocationUpdates(); // 🔹 Detenemos el servicio correctamente
     });
+    _connectivitySubscription
+        .cancel(); // 🔹 Cancelar la suscripción de conectividad
     super.dispose();
   }
 
@@ -212,6 +219,63 @@ class _HomePageState extends State<HomePage> {
         ),
       ],
     );
+  }
+
+  Future<void> _checkInternetConnectivity() async {
+    print('🔍 Verificando conectividad a Internet...');
+    var connectivityResult = await Connectivity().checkConnectivity();
+    print('🔍 Resultado de conectividad: $connectivityResult');
+
+    if (connectivityResult == ConnectivityResult.none ||
+        (connectivityResult is List &&
+            connectivityResult.contains(ConnectivityResult.none))) {
+      print('❌ No hay conexión a Internet.');
+      _showNoInternetDialog(); // entra a modo "bloqueo"
+    } else {
+      print('✅ Conexión a Internet disponible.');
+      // Podés continuar con la app aquí si querés.
+    }
+  }
+
+  void _showNoInternetDialog() {
+    print('⚠️ Mostrando diálogo de "Sin Conexión a Internet".');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: navigatorKey.currentContext!,
+        barrierDismissible: false, // No puede cerrarse tocando fuera del dialog
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Sin Conexión a Internet'),
+            content: Text(
+                'No tienes conexión a Internet. Por favor, verifica tu conexión.'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () async {
+                  print('🔄 Reintentando conectividad a Internet...');
+                  Navigator.of(context).pop(); // Cierra el diálogo actual
+                  await _retryInternetConnectivity(); // Vuelve a chequear sin esperar
+                },
+                child: Text('Reintentar'),
+              ),
+            ],
+          );
+        },
+      );
+    });
+  }
+
+  Future<void> _retryInternetConnectivity() async {
+    print('🔁 Reintento de conexión iniciado...');
+    var connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none ||
+        (connectivityResult is List &&
+            connectivityResult.contains(ConnectivityResult.none))) {
+      print('🚫 Aún sin conexión. Mostrando diálogo nuevamente.');
+      _showNoInternetDialog(); // vuelve a mostrar el diálogo si sigue sin internet
+    } else {
+      print('✅ Conexión restaurada.');
+      // Aquí podés continuar con el flujo normal de tu app
+    }
   }
 
   @override

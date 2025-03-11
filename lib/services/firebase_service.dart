@@ -231,6 +231,44 @@ class FirebaseService {
     });
   }
 
+  Future<List<DocumentSnapshot>> getUnreadMessages() async {
+    var box = await Hive.openBox('sessionBox');
+    String escenarioId = box.get('escenario', defaultValue: '0');
+    int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
+
+    String collectionName = 'Mensajes-$escenarioId';
+    String fechaActualStr = DateTime.now()
+        .toUtc()
+        .subtract(Duration(hours: 3))
+        .toIso8601String()
+        .split('T')[0]
+        .replaceAll('-', '');
+    int fechaActual = int.tryParse(fechaActualStr) ?? 0;
+
+    QuerySnapshot snapshot = await _firestore
+        .collection(collectionName)
+        .where('Movil', isEqualTo: movil)
+        .where('VisibleEnApp', isEqualTo: 'S')
+        .where('FchMsj', isEqualTo: fechaActual)
+        .where('FchHoraLeido', isNull: true)
+        .get();
+
+    return snapshot.docs;
+  }
+
+  Future<void> markMessageAsRead(String messageId) async {
+    var box = await Hive.openBox('sessionBox');
+    String escenarioId = box.get('escenario', defaultValue: '0');
+    String collectionName = 'Mensajes-$escenarioId';
+
+    await _firestore.collection(collectionName).doc(messageId).update({
+      'FchHoraLeido': FieldValue.serverTimestamp(),
+    }).catchError((error) {
+      print('Error marking message as read: $error');
+      _logError('Firestore Error', error.toString());
+    });
+  }
+
   Stream<DocumentSnapshot?> getMovilStream() async* {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0');

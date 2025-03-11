@@ -15,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart'; // Importa url_launcher
 import 'utils/error_event.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:io'; // Importa dart:io para usar Platform
+import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivity_plus
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -23,6 +24,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // 🔹 Verificar conectividad a Internet
+  await _checkInternetConnectivity();
 
   // 🔹 Inicializa Hive antes de cualquier acceso a Hive.openBox()
   await Hive.initFlutter();
@@ -148,6 +152,63 @@ Future<void> _checkBatteryAndBackgroundSettings() async {
       _showMessage(
           'La aplicación está restringida para ejecutarse en segundo plano.');
     }
+  }
+}
+
+Future<void> _checkInternetConnectivity() async {
+  print('🔍 Verificando conectividad a Internet...');
+  var connectivityResult = await Connectivity().checkConnectivity();
+  print('🔍 Resultado de conectividad: $connectivityResult');
+
+  if (connectivityResult == ConnectivityResult.none ||
+      (connectivityResult is List &&
+          connectivityResult.contains(ConnectivityResult.none))) {
+    print('❌ No hay conexión a Internet.');
+    _showNoInternetDialog(); // entra a modo "bloqueo"
+  } else {
+    print('✅ Conexión a Internet disponible.');
+    // Podés continuar con la app aquí si querés.
+  }
+}
+
+void _showNoInternetDialog() {
+  print('⚠️ Mostrando diálogo de "Sin Conexión a Internet".');
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    showDialog(
+      context: navigatorKey.currentContext!,
+      barrierDismissible: false, // No puede cerrarse tocando fuera del dialog
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Sin Conexión a Internet'),
+          content: Text(
+              'No tienes conexión a Internet. Por favor, verifica tu conexión.'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () async {
+                print('🔄 Reintentando conectividad a Internet...');
+                Navigator.of(context).pop(); // Cierra el diálogo actual
+                await _retryInternetConnectivity(); // Vuelve a chequear sin esperar
+              },
+              child: Text('Reintentar'),
+            ),
+          ],
+        );
+      },
+    );
+  });
+}
+
+Future<void> _retryInternetConnectivity() async {
+  print('🔁 Reintento de conexión iniciado...');
+  var connectivityResult = await Connectivity().checkConnectivity();
+  if (connectivityResult == ConnectivityResult.none ||
+      (connectivityResult is List &&
+          connectivityResult.contains(ConnectivityResult.none))) {
+    print('🚫 Aún sin conexión. Mostrando diálogo nuevamente.');
+    _showNoInternetDialog(); // vuelve a mostrar el diálogo si sigue sin internet
+  } else {
+    print('✅ Conexión restaurada.');
+    // Aquí podés continuar con el flujo normal de tu app
   }
 }
 

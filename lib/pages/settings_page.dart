@@ -109,12 +109,12 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               TextField(
                 controller: oldPasswordController,
-                decoration: InputDecoration(labelText: 'Contraseña Anterior'),
+                decoration: InputDecoration(labelText: 'Nueva Contraseña'),
                 obscureText: true,
               ),
               TextField(
                 controller: newPasswordController,
-                decoration: InputDecoration(labelText: 'Nueva Contraseña'),
+                decoration: InputDecoration(labelText: 'Confirmar Contraseña'),
                 obscureText: true,
               ),
             ],
