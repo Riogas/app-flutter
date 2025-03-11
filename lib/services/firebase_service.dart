@@ -51,6 +51,11 @@ class FirebaseService {
     }
   }
 
+  Future<void> _logFirestorePermissionError(String message) async {
+    print('Firestore permission error: $message');
+    await _logError('Firestore Permission Error', message);
+  }
+
   Stream<Map<String, dynamic>?> getSesionesStream() async* {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0');
@@ -99,8 +104,13 @@ class FirebaseService {
     yield* activoDocRef
         .snapshots(includeMetadataChanges: true)
         .handleError((error) async {
-      print('❌ Error al escuchar cambios en Firestore: $error');
-      await _logError('Firestore Error', error.toString());
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        await _logFirestorePermissionError(
+            error.message ?? 'Permission denied');
+      } else {
+        print('❌ Error al escuchar cambios en Firestore: $error');
+        await _logError('Firestore Error', error.toString());
+      }
       bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
@@ -148,8 +158,13 @@ class FirebaseService {
             descending: false) // Ordenar por FchHoraPara en forma ascendente
         .snapshots()
         .handleError((error) async {
-      print('Error fetching pedidos: $error');
-      await _logError('Firestore Error', error.toString());
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        await _logFirestorePermissionError(
+            error.message ?? 'Permission denied');
+      } else {
+        print('Error fetching pedidos: $error');
+        await _logError('Firestore Error', error.toString());
+      }
       bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
@@ -188,8 +203,13 @@ class FirebaseService {
             descending: false) // Ordenar por FchHoraPara en forma ascendente
         .snapshots()
         .handleError((error) async {
-      print('Error fetching pedidos cumplidos: $error');
-      await _logError('Firestore Error', error.toString());
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        await _logFirestorePermissionError(
+            error.message ?? 'Permission denied');
+      } else {
+        print('Error fetching pedidos cumplidos: $error');
+        await _logError('Firestore Error', error.toString());
+      }
       bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
@@ -213,8 +233,13 @@ class FirebaseService {
         .collection(collectionName)
         .snapshots()
         .handleError((error) async {
-      print('Error fetching constantes: $error');
-      await _logError('Firestore Error', error.toString());
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        await _logFirestorePermissionError(
+            error.message ?? 'Permission denied');
+      } else {
+        print('Error fetching constantes: $error');
+        await _logError('Firestore Error', error.toString());
+      }
       bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
@@ -250,8 +275,13 @@ class FirebaseService {
         .where('FchMsj', isEqualTo: fechaActual)
         .snapshots()
         .handleError((error) async {
-      print('Error fetching mensajes: $error');
-      await _logError('Firestore Error', error.toString());
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        await _logFirestorePermissionError(
+            error.message ?? 'Permission denied');
+      } else {
+        print('Error fetching mensajes: $error');
+        await _logError('Firestore Error', error.toString());
+      }
       bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
@@ -321,8 +351,13 @@ class FirebaseService {
         .doc(documentName)
         .snapshots()
         .handleError((error) async {
-      print('Error fetching movil: $error');
-      await _logError('Firestore Error', error.toString());
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        await _logFirestorePermissionError(
+            error.message ?? 'Permission denied');
+      } else {
+        print('Error fetching movil: $error');
+        await _logError('Firestore Error', error.toString());
+      }
       bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
@@ -362,8 +397,13 @@ class FirebaseService {
         .collection(collectionName)
         .snapshots()
         .handleError((error) async {
-      print('Error fetching subestado moviles: $error');
-      await _logError('Firestore Error', error.toString());
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        await _logFirestorePermissionError(
+            error.message ?? 'Permission denied');
+      } else {
+        print('Error fetching subestado moviles: $error');
+        await _logError('Firestore Error', error.toString());
+      }
       bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad

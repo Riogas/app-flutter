@@ -4,6 +4,9 @@ import 'package:hive/hive.dart';
 import '../services/session_service.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/riogas_service.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../services/auth_service.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -24,6 +27,7 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _loadSessionData();
     _loadCompletedOrdersCount();
+    _loadAppVersion();
   }
 
   Future<void> _loadSessionData() async {
@@ -65,34 +69,64 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _logout() async {
-    var sessionBox = await Hive.openBox('sessionBox');
-    var constantBox = await Hive.openBox('constantBox');
+    bool? confirmLogout = await _showLogoutConfirmationDialog();
+    if (confirmLogout == true) {
+      var sessionBox = await Hive.openBox('sessionBox');
+      var constantBox = await Hive.openBox('constantBox');
 
-    sessionBox.put('firstLoginDone', true);
+      sessionBox.put('firstLoginDone', true);
 
-    // Eliminar los datos de sesión de Hive
-    await sessionBox.deleteFromDisk();
-    await constantBox.deleteFromDisk();
+      // Eliminar los datos de sesión de Hive
+      await sessionBox.deleteFromDisk();
+      await constantBox.deleteFromDisk();
 
-    // Llamar a SessionService para eliminar el documento activo y crear una copia
-    SessionService sessionService = SessionService();
-    await sessionService.saveSession(
-      idUsuario: idUsuario!,
-      nomUsuario: nombreUsuario!,
-      primeraUbicacion:
-          LatLng(0, 0), // Reemplaza con la ubicación real si es necesario
-      versionApp: '1.0.0', // Reemplaza con la versión real de la app
-      tipoDeCierreDeSesion: 'logoutUser',
-    );
-
-    // Navegar a la pantalla de inicio de sesión
-    Future.microtask(() {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => LoginPage(),
-        ),
+      // Llamar a SessionService para eliminar el documento activo y crear una copia
+      SessionService sessionService = SessionService();
+      await sessionService.saveSession(
+        idUsuario: idUsuario!,
+        nomUsuario: nombreUsuario!,
+        primeraUbicacion:
+            LatLng(0, 0), // Reemplaza con la ubicación real si es necesario
+        versionApp: '1.0.0', // Reemplaza con la versión real de la app
+        tipoDeCierreDeSesion: 'logoutUser',
       );
-    });
+
+      // Navegar a la pantalla de inicio de sesión
+      Future.microtask(() {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => LoginPage(),
+          ),
+        );
+      });
+    }
+  }
+
+  Future<bool?> _showLogoutConfirmationDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Confirmación de Cierre de Sesión'),
+          content: Text(
+              '¿Está seguro que desea cerrar sesión y salir de la aplicación?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+              child: Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(true);
+              },
+              child: Text('Aceptar'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _changePassword() async {
@@ -141,7 +175,88 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _generateReport() async {
-    // Llamada al servicio para generar el reporte de pedidos finalizados
+    DateTime? selectedDate = await _selectDate(context);
+    if (selectedDate != null) {
+      // Aquí puedes agregar el código para ejecutar el servicio de terceros
+      print('Fecha seleccionada para el reporte: $selectedDate');
+    }
+  }
+
+  Future<DateTime?> _selectDate(BuildContext context) async {
+    DateTime initialDate = DateTime.now();
+    DateTime firstDate = DateTime(2000);
+    DateTime lastDate = DateTime(2101);
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+    );
+    return picked;
+  }
+
+  Future<void> _checkForUpdate() async {
+    var response = await RioGasService.validarVersion(appVersion, deviceId!);
+
+    if (response != null) {
+      if (response['version'] == appVersion) {
+        _showMessage('Ya se encuentra en la última versión de la aplicación');
+      } else {
+        _showUpdateDialog(response['message'], response['link']);
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Información'),
+          content: Text(message),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Aceptar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showUpdateDialog(String message, String link) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Actualización Requerida'),
+          content: Text(message),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final Uri url = Uri.parse(link);
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                } else {
+                  _showMessage('No se pudo abrir el enlace $link');
+                }
+              },
+              child: Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showReleaseNotesDialog() {
@@ -165,6 +280,13 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       },
     );
+  }
+
+  Future<void> _loadAppVersion() async {
+    String version = await AuthService.getAppVersionNro();
+    setState(() {
+      appVersion = version;
+    });
   }
 
   @override
@@ -260,7 +382,8 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             _buildInfoRowWithButton(Icons.check_circle, 'Pedidos Finalizados',
                 '$completedOrdersCount', Icons.description, _generateReport),
-            _buildInfoRow(Icons.verified, 'Versión de la App', appVersion),
+            _buildInfoRowWithButton(Icons.verified, 'Versión de la App',
+                appVersion, Icons.update, _checkForUpdate),
           ],
         ),
       ),

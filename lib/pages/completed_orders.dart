@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'order_detail_page.dart'; // Importa la nueva página de detalles
 
 class CompletedOrdersPage extends StatelessWidget {
   final FirebaseService _firebaseService = FirebaseService();
@@ -40,63 +41,138 @@ class CompletedOrdersPage extends StatelessWidget {
               itemBuilder: (context, index) {
                 var pedido =
                     snapshot.data![index].data() as Map<String, dynamic>;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0, vertical: 8.0),
-                  child: Card(
-                    color: Colors.green,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15.0),
-                    ),
-                    elevation: 5,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Cliente: ${pedido['ClienteNombre'] ?? 'Desconocido'}',
+                return GestureDetector(
+                  onTap: () async {
+                    if (pedido.containsKey('DetalleHTML') &&
+                        pedido['DetalleHTML'].isNotEmpty) {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => OrderDetailPage(
+                            detalleHtml: pedido['DetalleHTML'],
+                          ),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('No hay detalles disponibles')),
+                      );
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8.0, vertical: 4.0),
+                    child: Card(
+                      color: Colors.green,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10.0),
+                      ),
+                      elevation: 5,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(height: 4.0),
+                            Row(
+                              children: [
+                                Text(
+                                  'Número: ${pedido['id'] ?? 'Desconocido'}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
-                                    fontSize: 16.0,
+                                    fontSize: 14.0,
                                   ),
                                 ),
+                                SizedBox(width: 8.0),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 6.0, vertical: 2.0),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green[800],
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  child: Text(
+                                    'Finalizado',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.0,
+                                    ),
+                                  ),
+                                ),
+                                Spacer(),
+                                Icon(
+                                  pedido['Tipo'] == 'Services'
+                                      ? Icons.build
+                                      : Icons.local_shipping,
+                                  color: Colors.white,
+                                  size: 20.0,
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 4.0),
+                            Row(
+                              children: [
+                                Text(
+                                  'Dirección: ${pedido['ClienteDireccion']?.length > 20 ? pedido['ClienteDireccion'].substring(0, 20) + '...' : pedido['ClienteDireccion'] ?? 'Desconocida'}',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.0,
+                                  ),
+                                ),
+                                Spacer(),
+                                if (pedido.containsKey('WazeURL'))
+                                  Container(
+                                    child: Icon(
+                                      Icons.location_on,
+                                      color: Colors.white,
+                                      size: 20.0,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            SizedBox(height: 4.0),
+                            Row(
+                              children: [
+                                Text(
+                                  pedido['Tipo'] == 'Pedidos'
+                                      ? 'Servicio: ${pedido['ServicioNombre'] ?? 'Desconocido'}'
+                                      : 'Defecto: ${pedido['Defecto'] ?? 'Desconocido'}',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.0,
+                                  ),
+                                ),
+                                Spacer(),
+                                if (pedido.containsKey('Precio'))
+                                  Text(
+                                    'Importe: ${pedido['Precio']}',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.0,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            if (pedido.containsKey('PedidoObs') &&
+                                pedido['PedidoObs'].isNotEmpty)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(height: 4.0),
+                                  Text(
+                                    'Observaciones: ${pedido['PedidoObs']}',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.0,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Icon(
-                                Icons.check_circle,
-                                color: Colors.white,
-                                size: 30,
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 8.0),
-                          Text(
-                            'Dirección: ${pedido['ClienteDireccion'] ?? 'Desconocida'}',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14.0,
-                            ),
-                          ),
-                          Text(
-                            'Teléfono: ${pedido['ClienteTel'] ?? 'Desconocido'}',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14.0,
-                            ),
-                          ),
-                          Text(
-                            'Fecha y Hora: ${_formatTimestamp(pedido['FchHoraPara'])}',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14.0,
-                            ),
-                          ),
-                          SizedBox(height: 8.0),
-                        ],
+                            SizedBox(height: 4.0),
+                          ],
+                        ),
                       ),
                     ),
                   ),

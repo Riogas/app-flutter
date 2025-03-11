@@ -27,7 +27,7 @@ class AuthService {
 
   static Future<String> getAppVersionNro() async {
     final packageInfo = await PackageInfo.fromPlatform();
-    return packageInfo.version;
+    return '${packageInfo.version}.${packageInfo.buildNumber}';
   }
 
   static Future<bool> login(String username, String password) async {
