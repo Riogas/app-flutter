@@ -172,6 +172,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                         MaterialPageRoute(
                           builder: (context) => OrderDetailPage(
                             detalleHtml: pedido['DetalleHTML'],
+                            estadoNro: pedido['EstadoNro'], // Add this line
                           ),
                         ),
                       );

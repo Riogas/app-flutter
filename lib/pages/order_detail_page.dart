@@ -3,8 +3,9 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
+  final int estadoNro; // Add this parameter to pass the order status
 
-  OrderDetailPage({required this.detalleHtml});
+  OrderDetailPage({required this.detalleHtml, required this.estadoNro});
 
   @override
   _OrderDetailPageState createState() => _OrderDetailPageState();
@@ -67,7 +68,29 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       appBar: AppBar(
         title: Text('Detalle del Pedido'),
       ),
-      body: WebViewWidget(controller: _controller),
+      body: Column(
+        children: [
+          Expanded(
+            child: WebViewWidget(controller: _controller),
+          ),
+          if (widget.estadoNro == 1) // Show button only if estadoNro is 1
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // Add your onPressed code here!
+                },
+                icon: Icon(Icons.check, color: Colors.white),
+                label: Text('Finalizar Pedido',
+                    style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.lightGreen,
+                  minimumSize: Size(double.infinity, 50), // Full width button
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
