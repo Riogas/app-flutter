@@ -289,40 +289,76 @@ class _HomePageState extends State<HomePage> {
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: StreamBuilder<DocumentSnapshot?>(
+              // Existing stream for Movil
               stream: _firebaseService.getMovilStream(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+              builder: (context, movilSnapshot) {
+                if (!movilSnapshot.hasData) {
                   return Center(child: CircularProgressIndicator());
                 }
 
-                var movilDoc = snapshot.data!;
-                var data = movilDoc.data() as Map<String, dynamic>;
-                int estadoNro = data['EstadoNro'];
-                String estadoText = estadoNro == 3 ? 'Desactivado' : 'Activo';
-                Color estadoColor =
-                    estadoNro == 3 ? Colors.orange : Colors.green;
+                var movilDoc = movilSnapshot.data!;
+                var movilData = movilDoc.data() as Map<String, dynamic>;
+                int estadoNro = movilData['EstadoNro'];
+                print('EstadoNro from Movil: $estadoNro'); // Log estadoNro
 
-                return GestureDetector(
-                  onTap: () =>
-                      _showEstadoDropdown(context, movilDoc.id, estadoNro),
-                  child: Row(
-                    children: [
-                      Icon(Icons.network_cell, color: estadoColor),
-                      SizedBox(width: 5),
-                      Container(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: estadoColor,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Movil:$_movil - $estadoText',
-                          style: TextStyle(color: Colors.white),
-                        ),
+                return StreamBuilder<List<Map<String, dynamic>>>(
+                  // New stream for SubEstadoMoviles
+                  stream: _firebaseService.getSubEstadoMovilesStream(),
+                  builder: (context, subEstadoSnapshot) {
+                    if (!subEstadoSnapshot.hasData) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    var subEstados = subEstadoSnapshot.data!;
+                    print('SubEstados fetched: $subEstados'); // Log subEstados
+
+                    var subEstado = subEstados.firstWhere(
+                      (element) =>
+                          int.tryParse(element['SubEstadoCod'].toString()) ==
+                          estadoNro,
+                      orElse: () => {
+                        'SubEstadoDesc': 'Desconocido',
+                        'CodColor': '000000'
+                      },
+                    );
+
+                    print(
+                        'Matched SubEstado: $subEstado'); // Log matched subEstado
+
+                    String estadoText = subEstado['SubEstadoDesc'];
+                    String codColor = subEstado['CodColor'];
+                    List<String> rgb = codColor.split(',');
+                    String hexColor = rgb.length == 3
+                        ? rgb
+                            .map((c) =>
+                                int.parse(c).toRadixString(16).padLeft(2, '0'))
+                            .join()
+                        : '000000';
+                    Color estadoColor = Color(int.parse('0xff$hexColor'));
+
+                    return GestureDetector(
+                      onTap: () =>
+                          _showEstadoDropdown(context, movilDoc.id, estadoNro),
+                      child: Row(
+                        children: [
+                          Icon(Icons.network_cell, color: estadoColor),
+                          SizedBox(width: 5),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: estadoColor,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Movil:$_movil - $estadoText',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -444,17 +480,29 @@ class _HomePageState extends State<HomePage> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Cambiar Estado del Móvil'),
-          content: DropdownButton<int>(
-            value: currentEstado,
-            items: [
-              DropdownMenuItem(value: 2, child: Text('Activo')),
-              DropdownMenuItem(value: 3, child: Text('Desactivado')),
-            ],
-            onChanged: (int? newValue) {
-              if (newValue != null) {
-                _firebaseService.updateMovilEstado(movilId, newValue);
-                Navigator.of(context).pop();
+          content: StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _firebaseService.getSubEstadoMovilesStream(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return Center(child: CircularProgressIndicator());
               }
+
+              var subEstados = snapshot.data!;
+              return DropdownButton<int>(
+                value: currentEstado,
+                items: subEstados.map((subEstado) {
+                  return DropdownMenuItem(
+                    value: int.tryParse(subEstado['SubEstadoCod'].toString()),
+                    child: Text(subEstado['SubEstadoDesc']),
+                  );
+                }).toList(),
+                onChanged: (int? newValue) {
+                  if (newValue != null) {
+                    _firebaseService.updateMovilEstado(movilId, newValue);
+                    Navigator.of(context).pop();
+                  }
+                },
+              );
             },
           ),
         );
