@@ -67,7 +67,7 @@ class DefaultFirebaseOptions {
     projectId: 'riogas-pedidos',
     databaseURL: 'https://riogas-pedidos-default-rtdb.firebaseio.com',
     storageBucket: 'riogas-pedidos.firebasestorage.app',
-    iosBundleId: 'com.example.appmovil',
+    iosBundleId: 'com.example.MoveIT',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -77,7 +77,7 @@ class DefaultFirebaseOptions {
     projectId: 'riogas-pedidos',
     databaseURL: 'https://riogas-pedidos-default-rtdb.firebaseio.com',
     storageBucket: 'riogas-pedidos.firebasestorage.app',
-    iosBundleId: 'com.example.appmovil',
+    iosBundleId: 'com.example.MoveIT',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

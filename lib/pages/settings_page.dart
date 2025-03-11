@@ -200,10 +200,13 @@ class _SettingsPageState extends State<SettingsPage> {
     var response = await RioGasService.validarVersion(appVersion, deviceId!);
 
     if (response != null) {
-      if (response['version'] == appVersion) {
-        _showMessage('Ya se encuentra en la última versión de la aplicación');
+      if (response['Ultversion'] == appVersion) {
+        _showMessage(response['message']);
       } else {
-        _showUpdateDialog(response['message'], response['link']);
+        _showUpdateDialog(
+          'Existe una nueva versión de la aplicación. ¿Desea realizar la actualización?',
+          response['link'],
+        );
       }
     }
   }
@@ -233,7 +236,7 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Actualización Requerida'),
+          title: Text('Actualización'),
           content: Text(message),
           actions: <Widget>[
             TextButton(

@@ -45,7 +45,7 @@ class LocationService {
     if (Platform.isAndroid) {
       final intent = AndroidIntent(
         action: 'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-        data: 'package:com.example.appmovil',
+        data: 'package:com.example.MoveIT',
         flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
       );
       await intent.launch();
@@ -160,7 +160,7 @@ class LocationService {
       if (shouldRedirect) {
         final intent = AndroidIntent(
           action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
-          data: 'package:com.example.appmovil',
+          data: 'package:com.example.MoveIT',
           flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
         );
         await intent.launch();

@@ -22,11 +22,15 @@ class AuthService {
 
   static Future<String> getAppVersion() async {
     final packageInfo = await PackageInfo.fromPlatform();
+    print(
+        'Package Info: version=${packageInfo.version}, buildNumber=${packageInfo.buildNumber}');
     return 'Versión ${packageInfo.version}.${packageInfo.buildNumber}';
   }
 
   static Future<String> getAppVersionNro() async {
     final packageInfo = await PackageInfo.fromPlatform();
+    print(
+        'Package Info: version=${packageInfo.version}, buildNumber=${packageInfo.buildNumber}');
     return '${packageInfo.version}.${packageInfo.buildNumber}';
   }
 

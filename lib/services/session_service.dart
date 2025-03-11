@@ -23,6 +23,10 @@ class SessionService {
 
     // ✅ Asegurar valores NO NULOS
     String escenarioId = box.get('escenario') ?? '0';
+    if (escenarioId == '0') {
+      print('❌ Error: No se pudo crear la sesión.');
+      return;
+    }
     String movil = box.get('movil') ?? 'Desconocido';
     String idSesion = _uuid.v4();
     String idTerminal = box.get('deviceId') ?? 'UnknownDevice';
