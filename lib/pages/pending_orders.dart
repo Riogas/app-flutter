@@ -189,8 +189,12 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                         horizontal: 8.0, vertical: 4.0),
                     child: Card(
                       color: pedidoEstado == null
-                          ? Colors.lightBlue
-                          : Colors.blueGrey,
+                          ? (tipo == 'Services'
+                              ? Colors.deepPurpleAccent
+                              : Colors.lightBlue)
+                          : (tipo == 'Services'
+                              ? Colors.deepPurple.withOpacity(0.7)
+                              : Colors.blueGrey),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10.0),
                       ),

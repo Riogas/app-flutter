@@ -182,8 +182,8 @@ class _HomePageState extends State<HomePage> {
       importance: Importance.high,
       priority: Priority.high,
       showWhen: false,
-      sound: RawResourceAndroidNotificationSound(
-          'custom_sound'), // Cambia 'custom_sound' por el nombre de tu archivo de sonido en res/raw
+      //sound: RawResourceAndroidNotificationSound(
+      //  'custom_sound'), // Cambia 'custom_sound' por el nombre de tu archivo de sonido en res/raw
       //vibrationPattern: Int64List.fromList([0, 1000, 500, 2000]), // Duración y fuerza de la vibración
     );
     const NotificationDetails platformChannelSpecifics =
