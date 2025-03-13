@@ -80,6 +80,14 @@ class _MessagePageState extends State<MessagePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Mensajes'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.delete, color: Colors.red),
+            onPressed: () {
+              // Acción para borrar todos los mensajes
+            },
+          ),
+        ],
       ),
       body: StreamBuilder<List<DocumentSnapshot>>(
         stream: _firebaseService.getMensajesStream(),
@@ -107,25 +115,26 @@ class _MessagePageState extends State<MessagePage> {
                     elevation: 5,
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            mensaje['Mensaje'] ?? 'Sin contenido',
-                            style: TextStyle(
-                              fontWeight:
-                                  isRead ? FontWeight.normal : FontWeight.bold,
-                              color: isRead ? Colors.black : Colors.red,
-                              fontSize: 16.0,
+                          Expanded(
+                            child: Text(
+                              mensaje['Mensaje'] ?? 'Sin contenido',
+                              style: TextStyle(
+                                fontWeight: isRead
+                                    ? FontWeight.normal
+                                    : FontWeight.bold,
+                                color: isRead ? Colors.black : Colors.red,
+                                fontSize: 16.0,
+                              ),
                             ),
                           ),
-                          SizedBox(height: 8.0),
-                          Text(
-                            'Fecha: ${mensaje['FchMsj'] ?? 'Desconocida'}',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12.0,
-                            ),
+                          IconButton(
+                            icon: Icon(Icons.delete, color: Colors.red),
+                            onPressed: () {
+                              // Acción para borrar el mensaje individual
+                            },
                           ),
                         ],
                       ),

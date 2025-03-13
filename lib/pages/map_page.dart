@@ -1,3 +1,4 @@
+import 'package:MoveIT/pages/order_detail_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -92,7 +93,10 @@ class _MapPageState extends State<MapPage> {
               iconSize: 40.0,
               onPressed: () {
                 _showOrderDetails(
-                    data['ClienteNombre'], data['ClienteDireccion']);
+                  data['id'].toString(),
+                  data['ClienteDireccion'],
+                  data['DetalleHTML'],
+                );
               },
             ),
           );
@@ -101,18 +105,44 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
-  void _showOrderDetails(String? name, String? address) {
+  void _showOrderDetails(String? id, String? address, String? detalleHtml) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(name ?? 'Desconocido'),
+        title: Text('Número: $id'),
         content: Text(address ?? 'Desconocida'),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-            },
-            child: Text('Cerrar'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                },
+                child: Text('Cerrar'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Navegar a la página de detalles
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => OrderDetailPage(
+                        detalleHtml: detalleHtml ?? '',
+                        estadoNro: 1, // Ajusta según sea necesario
+                      ),
+                    ),
+                  );
+                },
+                child: Text('Ver Detalle'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Espacio para redirección a URL de llamada
+                },
+                child: Text('Llamar'),
+              ),
+            ],
           ),
         ],
       ),
