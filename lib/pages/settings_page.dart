@@ -21,6 +21,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? releaseNotes;
   String appVersion = '1.0.0'; // Reemplaza con la versión real de la app
   int completedOrdersCount = 0;
+  int subCompletedOrdersCount = 0;
 
   @override
   void initState() {
@@ -60,11 +61,17 @@ class _SettingsPageState extends State<SettingsPage> {
         .where('Movil', isEqualTo: movil)
         .where('FchPara', isEqualTo: fechaActual)
         .where('VisibleEnApp', isEqualTo: 'S')
-        .where('EstadoNro', isEqualTo: 2)
         .get();
 
+    int totalOrders = snapshot.docs.length;
+    int completedOrders =
+        snapshot.docs.where((doc) => doc['EstadoNro'] == 2).length;
+    int subCompletedOrders =
+        snapshot.docs.where((doc) => doc['SubEstadoNro'] == 3).length;
+
     setState(() {
-      completedOrdersCount = snapshot.docs.length;
+      completedOrdersCount = completedOrders;
+      subCompletedOrdersCount = subCompletedOrders;
     });
   }
 
@@ -383,8 +390,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     Icons.info_outline, 'Notas de la Versión', 'Mas Info',
                     isLongText: true),
               ),
-            _buildInfoRowWithButton(Icons.check_circle, 'Pedidos Finalizados',
-                '$completedOrdersCount', Icons.description, _generateReport),
+            _buildInfoRowWithButton(
+                Icons.check_circle,
+                'Pedidos Finalizados',
+                '$subCompletedOrdersCount/$completedOrdersCount',
+                Icons.description,
+                _generateReport),
             _buildInfoRowWithButton(Icons.verified, 'Versión de la App',
                 appVersion, Icons.update, _checkForUpdate),
           ],

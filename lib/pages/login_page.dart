@@ -216,11 +216,26 @@ class _LoginPageState extends State<LoginPage> {
           return; // Volver al login
         }
       }
+    } else if (response == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'En este momento no es posible comunicarse con los servidores de RioGas. Favor intente más tarde.'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } else if (response != null && response['OK'] > 0 && response['OK'] != 9) {
       String errorMessage = response['message'] ?? 'Error desconocido';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(errorMessage),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else if (response != null && response.containsKey('error')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(response['error']),
           backgroundColor: Colors.red,
         ),
       );

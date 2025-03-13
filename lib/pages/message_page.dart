@@ -81,11 +81,19 @@ class _MessagePageState extends State<MessagePage> {
       appBar: AppBar(
         title: Text('Mensajes'),
         actions: [
-          IconButton(
-            icon: Icon(Icons.delete, color: Colors.red),
-            onPressed: () {
-              // Acción para borrar todos los mensajes
-            },
+          Row(
+            children: [
+              Text(
+                'Borrar Todo',
+                style: TextStyle(color: Colors.red),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete, color: Colors.red),
+                onPressed: () {
+                  // Acción para borrar todos los mensajes
+                },
+              ),
+            ],
           ),
         ],
       ),

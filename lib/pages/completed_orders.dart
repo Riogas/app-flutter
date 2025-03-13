@@ -65,7 +65,9 @@ class CompletedOrdersPage extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8.0, vertical: 4.0),
                     child: Card(
-                      color: Colors.green,
+                      color: pedido['SubEstadoNro'] == 3
+                          ? Colors.green
+                          : Colors.orange,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10.0),
                       ),
@@ -91,11 +93,13 @@ class CompletedOrdersPage extends StatelessWidget {
                                   padding: EdgeInsets.symmetric(
                                       horizontal: 6.0, vertical: 2.0),
                                   decoration: BoxDecoration(
-                                    color: Colors.green[800],
+                                    color: pedido['SubEstadoNro'] == 3
+                                        ? Colors.green[800]
+                                        : Colors.orange[800],
                                     borderRadius: BorderRadius.circular(8.0),
                                   ),
                                   child: Text(
-                                    'Finalizado',
+                                    pedido['SubEstadoDesc'] ?? 'Desconocido',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,

@@ -16,6 +16,8 @@ import 'utils/error_event.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:io'; // Importa dart:io para usar Platform
 import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivity_plus
+import 'package:http/http.dart'
+    as http; // Importa http para realizar solicitudes HTTP
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -166,8 +168,31 @@ Future<void> _checkInternetConnectivity() async {
     print('❌ No hay conexión a Internet.');
     _showNoInternetDialog(); // entra a modo "bloqueo"
   } else {
-    print('✅ Conexión a Internet disponible.');
-    // Podés continuar con la app aquí si querés.
+    print('✅ Conexión a Internet disponible. Verificando acceso a datos...');
+    bool hasDataAccess = await _checkDataAccess();
+    if (!hasDataAccess) {
+      print('❌ No hay acceso a datos. Posible falta de paquete de datos.');
+      _showNoDataAccessDialog();
+    } else {
+      print('✅ Acceso a datos confirmado.');
+      // Podés continuar con la app aquí si querés.
+    }
+  }
+}
+
+Future<bool> _checkDataAccess() async {
+  try {
+    final response = await http
+        .get(Uri.parse('https://www.google.com'))
+        .timeout(Duration(seconds: 5));
+    if (response.statusCode == 200) {
+      return true;
+    } else {
+      return false;
+    }
+  } catch (e) {
+    print('Error verificando acceso a datos: $e');
+    return false;
   }
 }
 
@@ -186,6 +211,33 @@ void _showNoInternetDialog() {
             TextButton(
               onPressed: () async {
                 print('🔄 Reintentando conectividad a Internet...');
+                Navigator.of(context).pop(); // Cierra el diálogo actual
+                await _retryInternetConnectivity(); // Vuelve a chequear sin esperar
+              },
+              child: Text('Reintentar'),
+            ),
+          ],
+        );
+      },
+    );
+  });
+}
+
+void _showNoDataAccessDialog() {
+  print('⚠️ Mostrando diálogo de "Sin Acceso a Datos".');
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    showDialog(
+      context: navigatorKey.currentContext!,
+      barrierDismissible: false, // No puede cerrarse tocando fuera del dialog
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Sin Acceso a Datos'),
+          content: Text(
+              'No tienes acceso a datos. Por favor, verifica tu paquete de datos o conéctate a una red Wi-Fi.'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () async {
+                print('🔄 Reintentando acceso a datos...');
                 Navigator.of(context).pop(); // Cierra el diálogo actual
                 await _retryInternetConnectivity(); // Vuelve a chequear sin esperar
               },
