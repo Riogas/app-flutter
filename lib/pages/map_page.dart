@@ -153,7 +153,7 @@ class _MapPageState extends State<MapPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Mapa de Pedidos'),
+        title: Text('Mapa'),
       ),
       body: _currentPosition == null
           ? Center(

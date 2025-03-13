@@ -100,11 +100,11 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           stream: _ordersStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return Text('Pedidos Pendientes (Cargando...)');
+              return Text('Visitas (Cargando...)');
             } else if (snapshot.hasError) {
-              return Text('Pedidos Pendientes (Error)');
+              return Text('Visitas (Error)');
             } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Text('Pedidos Pendientes (0)');
+              return Text('Visitas (0)');
             } else {
               _orderCount = snapshot.data!.length;
               int newOrderCount = snapshot.data!.where((order) {
@@ -113,7 +113,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                     !orderData.containsKey('FechaHoraLeido') ||
                     orderData['FechaHoraLeido'] == null;
               }).length;
-              return Text('Pedidos ($_orderCount)');
+              return Text('Visitas ($_orderCount)');
             }
           },
         ),
