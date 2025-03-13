@@ -491,8 +491,10 @@ class _HomePageState extends State<HomePage> {
               return DropdownButton<int>(
                 value: currentEstado,
                 items: subEstados.map((subEstado) {
+                  int subEstadoCod =
+                      int.tryParse(subEstado['SubEstadoCod'].toString()) ?? -1;
                   return DropdownMenuItem(
-                    value: int.tryParse(subEstado['SubEstadoCod'].toString()),
+                    value: subEstadoCod,
                     child: Text(subEstado['SubEstadoDesc']),
                   );
                 }).toList(),

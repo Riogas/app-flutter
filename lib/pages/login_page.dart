@@ -216,6 +216,14 @@ class _LoginPageState extends State<LoginPage> {
           return; // Volver al login
         }
       }
+    } else if (response != null && response['OK'] > 0 && response['OK'] != 9) {
+      String errorMessage = response['message'] ?? 'Error desconocido';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
