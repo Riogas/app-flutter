@@ -169,9 +169,25 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             TextButton(
               onPressed: () async {
-                // Llamada al servicio para cambiar la contraseña
-                // await changePasswordService(oldPasswordController.text, newPasswordController.text);
-                Navigator.of(context).pop();
+                if (oldPasswordController.text == newPasswordController.text) {
+                  var box = await Hive.openBox('sessionBox');
+                  String? nombreUsuario = box.get('username');
+                  if (nombreUsuario != null) {
+                    await RioGasService.cambioPassword(
+                      nombreUsuario,
+                      newPasswordController.text,
+                    );
+                    Navigator.of(context).pop();
+                  } else {
+                    // Handle error: NombreUsuario not found in Hive
+                    Navigator.of(context).pop();
+                    _showMessage('Error: NombreUsuario no encontrado.');
+                  }
+                } else {
+                  // Handle error: Passwords do not match
+                  Navigator.of(context).pop();
+                  _showMessage('Error: Las contraseñas no coinciden.');
+                }
               },
               child: Text('Aceptar'),
             ),

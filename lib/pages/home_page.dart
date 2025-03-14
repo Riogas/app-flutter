@@ -66,6 +66,12 @@ class _HomePageState extends State<HomePage> {
 
     // 🔹 Inicializar la verificación de conectividad
     _checkInternetConnectivity();
+
+    _connectivitySubscription = Connectivity()
+        .onConnectivityChanged
+        .listen((List<ConnectivityResult> results) {
+      // Handle connectivity changes
+    });
   }
 
   @override

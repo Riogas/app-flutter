@@ -89,4 +89,132 @@ class RioGasService {
     return _post(
         'DatosVersionActual', {'version': version, 'DeviceId': deviceId});
   }
+
+  static Future<Map<String, dynamic>?> cambioPassword(
+      String usuMobileLogin, String usuMobilePassword) {
+    return _post('CambioPassword', {
+      'UsuMobileLogin': usuMobileLogin,
+      'UsuMobilePassword': usuMobilePassword,
+    });
+  }
+
+  static Future<Map<String, dynamic>?> descargaLecturaMensajes(
+      int escenarioId,
+      int movilId,
+      int messageId,
+      String usuario,
+      String nroSesion,
+      String termMobileEquipo,
+      String lectDesc,
+      String fechaHoraCmbEst,
+      String inAux1,
+      String inAux2,
+      String latitud,
+      String longitud) {
+    return _post('DescargaLecturaMensajes', {
+      'EscenarioId': escenarioId,
+      'MovilId': movilId,
+      'MessageId': messageId,
+      'usuario': usuario,
+      'NroSesion': nroSesion,
+      'TermMobileEquipo': termMobileEquipo,
+      'LectDesc': lectDesc,
+      'FechaHoraCmbEst': fechaHoraCmbEst,
+      'INAux1': inAux1,
+      'INAux2': inAux2,
+      'Latitud': latitud,
+      'longitud': longitud,
+    });
+  }
+
+  static Future<Map<String, dynamic>?> descargaLecturaPedidos(
+      int escenarioId,
+      int pedidoId,
+      String pedidoTpo,
+      String usuario,
+      String nroSesion,
+      String termMobileEquipo,
+      String lectDesc,
+      String fechaHoraCmbEst,
+      String inAux1,
+      String inAux2,
+      String latitud,
+      String longitud) {
+    return _post('DescargaLecturaPedidos', {
+      'EscenarioId': escenarioId,
+      'PedidoId': pedidoId,
+      'PedidoTpo': pedidoTpo,
+      'usuario': usuario,
+      'NroSesion': nroSesion,
+      'TermMobileEquipo': termMobileEquipo,
+      'LectDesc': lectDesc,
+      'FechaHoraCmbEst': fechaHoraCmbEst,
+      'INAux1': inAux1,
+      'INAux2': inAux2,
+      'Latitud': latitud,
+      'longitud': longitud,
+    });
+  }
+
+  static Future<Map<String, dynamic>?> finalizarPedido(
+      int escenarioId,
+      int pedidoId,
+      String pedidoTpo,
+      String usuario,
+      String nroSesion,
+      String termMobileEquipo,
+      int estado,
+      int subEstado,
+      String formaPago,
+      String motCancel,
+      String fechaHoraCmbEst,
+      String inAux1,
+      String inAux2,
+      String latitud,
+      String longitud) {
+    return _post('FinalizarPedido', {
+      'EscenarioId': escenarioId,
+      'PedidoId': pedidoId,
+      'PedidoTpo': pedidoTpo,
+      'usuario': usuario,
+      'NroSesion': nroSesion,
+      'TermMobileEquipo': termMobileEquipo,
+      'Estado': estado,
+      'SubEstado': subEstado,
+      'FormaPago': formaPago,
+      'MotCancel': motCancel,
+      'FechaHoraCmbEst': fechaHoraCmbEst,
+      'INAux1': inAux1,
+      'INAux2': inAux2,
+      'Latitud': latitud,
+      'longitud': longitud,
+    });
+  }
+
+  static Future<Map<String, dynamic>?> actualizarMoviles(
+      int escenarioId,
+      int movilId,
+      String usuario,
+      String nroSesion,
+      String termMobileEquipo,
+      String estadoStr,
+      String latitud,
+      String longitud,
+      String fechaHoraCmbEst,
+      String inAux1,
+      String inAux2) {
+    return _post('ActualizarMoviles', {
+      'EscenarioId': escenarioId,
+      'MovilId': movilId,
+      'usuario': usuario,
+      'NroSesion': nroSesion,
+      'TermMobileEquipo': termMobileEquipo,
+      'EstadoStr': estadoStr,
+      'Latitud': latitud,
+      'longitud': longitud,
+      'FechaHoraCmbEst': fechaHoraCmbEst,
+      'INAux1': inAux1,
+      'INAux2': inAux2,
+    });
+  }
 }
