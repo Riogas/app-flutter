@@ -11,6 +11,7 @@ import 'dart:async';
 import '../services/session_service.dart';
 import '../services/firebase_service.dart';
 import '../services/location_service.dart'; // 🔹 Importamos LocationService
+import '../services/riogas_service.dart'; // 🔹 Importamos LocationService
 import 'package:latlong2/latlong.dart';
 import 'package:MoveIT/pages/login_page.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase_messaging
@@ -507,9 +508,10 @@ class _HomePageState extends State<HomePage> {
                     child: Text(subEstado['SubEstadoDesc']),
                   );
                 }).toList(),
-                onChanged: (int? newValue) {
+                onChanged: (int? newValue) async {
                   if (newValue != null) {
-                    _firebaseService.updateMovilEstado(movilId, newValue);
+                    await RioGasService.actualizarMovilesEstado(
+                        int.parse(movilId), newValue);
                     Navigator.of(context).pop();
                   }
                 },

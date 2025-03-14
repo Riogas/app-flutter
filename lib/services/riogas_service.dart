@@ -2,6 +2,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:hive/hive.dart';
 import '../utils/error_event.dart';
+import 'package:geolocator/geolocator.dart';
+import '../services/location_service.dart'; // Add this line to import LocationService
 
 class RioGasService {
   static const String baseUrl = 'https://www.riogas.uy/ica_geos_/appservices/';
@@ -215,6 +217,42 @@ class RioGasService {
       'FechaHoraCmbEst': fechaHoraCmbEst,
       'INAux1': inAux1,
       'INAux2': inAux2,
+    });
+  }
+
+  static Future<Map<String, dynamic>?> actualizarMovilesEstado(
+      int movilId, int estado) async {
+    var box = await Hive.openBox('sessionBox');
+    String? escenarioId = box.get('escenario');
+    String? usuario = box.get('username');
+    String? deviceId = box.get('deviceId');
+
+    if (escenarioId == null || usuario == null || deviceId == null) {
+      print('❌ No se pudo obtener el escenario, usuario o deviceId de Hive.');
+      return null;
+    }
+
+    Position? position = await LocationService().getCurrentLocation();
+    if (position == null) {
+      print('❌ No se pudo obtener la ubicación actual.');
+      return null;
+    }
+
+    DateTime now = DateTime.now();
+    String fechaHoraCmbEst = now.toIso8601String();
+
+    return _post('ActualizarMoviles', {
+      'EscenarioId': int.parse(escenarioId),
+      'MovilId': movilId,
+      'usuario': usuario,
+      'NroSesion': '',
+      'TermMobileEquipo': deviceId,
+      'EstadoStr': 'ACTIVO',
+      'Latitud': position.latitude.toString(),
+      'longitud': position.longitude.toString(),
+      'FechaHoraCmbEst': fechaHoraCmbEst,
+      'INAux1': '',
+      'INAux2': '',
     });
   }
 }
