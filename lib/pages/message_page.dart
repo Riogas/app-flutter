@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
+import 'dart:async'; // Import the dart:async package for StreamSubscription
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../services/riogas_service.dart'; // Import the RioGasService
 import 'package:intl/intl.dart'; // Import the intl package for date formatting
+import '../services/location_service.dart'; // Import the LocationService
+import 'package:geolocator/geolocator.dart'; // Import the Geolocator package
+import 'package:hive/hive.dart'; // Import the Hive package
 
 class MessagePage extends StatefulWidget {
   @override
@@ -15,13 +19,19 @@ class _MessagePageState extends State<MessagePage> {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
   List<String> _readMessageIds = [];
+  StreamSubscription<List<DocumentSnapshot>>? _messageSubscription;
 
   @override
   void initState() {
     super.initState();
     _initializeNotifications();
     _listenToMessages();
-    _markMessagesAsRead(); // Mark messages as read when the page is accessed
+  }
+
+  @override
+  void dispose() {
+    _messageSubscription?.cancel();
+    super.dispose();
   }
 
   void _initializeNotifications() {
@@ -33,10 +43,13 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   void _listenToMessages() {
-    _firebaseService.getMensajesStream().listen((messages) {
-      setState(() {
-        _checkForNewMessages(messages);
-      });
+    _messageSubscription =
+        _firebaseService.getMensajesStream().listen((messages) {
+      if (mounted) {
+        setState(() {
+          _checkForNewMessages(messages);
+        });
+      }
     });
   }
 
@@ -70,24 +83,107 @@ class _MessagePageState extends State<MessagePage> {
     );
   }
 
-  Future<void> _markMessagesAsRead() async {
-    var messages = await _firebaseService.getUnreadMessages();
+  Future<void> _markMessageAsRead(DocumentSnapshot message) async {
+    var box = await Hive.openBox('sessionBox');
+    String? escenario = box.get('escenario');
+    String? movil = box.get('movil');
+    String? username = box.get('username');
+    String? deviceId = box.get('deviceId');
+
+    print('📦 Datos obtenidos de Hive:');
+    print('Escenario: $escenario');
+    print('Movil: $movil');
+    print('Username: $username');
+    print('DeviceId: $deviceId');
+
+    if (escenario == null ||
+        movil == null ||
+        username == null ||
+        deviceId == null) {
+      print('❌ No se pudo obtener los datos necesarios de Hive.');
+      return;
+    }
+
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+      forceAndroidLocationManager: true,
+    );
+
+    print(
+        '📍 Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
+
+    var data = message.data() as Map<String, dynamic>;
+
+    // Extract numeric part from message.id
+    final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
+    if (numericIdMatch == null) {
+      print('❌ No se pudo extraer un ID numérico del mensaje: ${message.id}');
+      return;
+    }
+    int messageId = int.parse(numericIdMatch.group(0)!);
+
+    if (data.containsKey('FchHoraLeido')) {
+      print('📨 Mensaje ya leído: $messageId');
+      return;
+    }
+
+    print('📨 Marcando mensaje como leído: $messageId');
+    await _firebaseService.markMessageAsRead(message.id);
+    print('📨 Enviando datos al servicio descargaLecturaMensajes:');
+    print('EscenarioId: ${int.parse(escenario)}');
+    print('MovilId: ${int.parse(movil)}');
+    print('MessageId: $messageId');
+    print('Usuario: $username');
+    print('NroSesion: ');
+    print('TermMobileEquipo: $deviceId');
+    print('LectDesc: LECTURA');
+    print('FechaHoraCmbEst: ${DateTime.now().toIso8601String()}');
+    print('INAux1: ');
+    print('INAux2: ');
+    print('Latitud: ${position.latitude}');
+    print('Longitud: ${position.longitude}');
+
+    await RioGasService.descargaLecturaMensajes(
+      int.parse(escenario), // escenarioId
+      int.parse(movil), // movilId
+      messageId, // messageId
+      username, // usuario
+      '', // nroSesion
+      deviceId, // termMobileEquipo
+      'LECTURA', // lectDesc
+      DateTime.now().toIso8601String(), // fechaHoraCmbEst
+      '', // inAux1
+      '', // inAux2
+      position.latitude.toString(), // latitud
+      position.longitude.toString(), // longitud
+    );
+
+    if (mounted) {
+      setState(() {
+        _readMessageIds.add(message.id);
+      });
+    }
+  }
+
+  void _deleteMessage(DocumentSnapshot message) async {
+    await _firebaseService
+        .updateMessageField(message.id, {'VisibleEnApp': 'N'});
+    if (mounted) {
+      setState(() {
+        _readMessageIds.remove(message.id);
+      });
+    }
+  }
+
+  void _deleteAllMessages(List<DocumentSnapshot> messages) async {
     for (var message in messages) {
-      await _firebaseService.markMessageAsRead(message.id);
-      await RioGasService.descargaLecturaMensajes(
-        1, // escenarioId
-        1, // movilId
-        int.parse(message.id), // messageId
-        'usuario', // usuario
-        'nroSesion', // nroSesion
-        'termMobileEquipo', // termMobileEquipo
-        'lectDesc', // lectDesc
-        DateTime.now().toIso8601String(), // fechaHoraCmbEst
-        'inAux1', // inAux1
-        'inAux2', // inAux2
-        'latitud', // latitud
-        'longitud', // longitud
-      );
+      await _firebaseService
+          .updateMessageField(message.id, {'VisibleEnApp': 'N'});
+    }
+    if (mounted) {
+      setState(() {
+        _readMessageIds.clear();
+      });
     }
   }
 
@@ -106,7 +202,9 @@ class _MessagePageState extends State<MessagePage> {
               IconButton(
                 icon: Icon(Icons.delete, color: Colors.red),
                 onPressed: () {
-                  // Acción para borrar todos los mensajes
+                  _firebaseService.getMensajesStream().first.then((messages) {
+                    _deleteAllMessages(messages);
+                  });
                 },
               ),
             ],
@@ -148,11 +246,18 @@ class _MessagePageState extends State<MessagePage> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            isRead
-                                ? Icons.mark_email_read
-                                : Icons.mark_email_unread,
-                            color: isRead ? Colors.grey : Colors.blue,
+                          IconButton(
+                            icon: Icon(
+                              isRead
+                                  ? Icons.mark_email_read
+                                  : Icons.mark_email_unread,
+                              color: isRead ? Colors.grey : Colors.blue,
+                            ),
+                            onPressed: () {
+                              if (!isRead) {
+                                _markMessageAsRead(messages[index]);
+                              }
+                            },
                           ),
                           SizedBox(width: 10),
                           Expanded(
@@ -183,7 +288,7 @@ class _MessagePageState extends State<MessagePage> {
                           IconButton(
                             icon: Icon(Icons.delete, color: Colors.red),
                             onPressed: () {
-                              // Acción para borrar el mensaje individual
+                              _deleteMessage(messages[index]);
                             },
                           ),
                         ],

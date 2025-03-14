@@ -302,20 +302,12 @@ class FirebaseService {
     int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
     String collectionName = 'Mensajes-$escenarioId';
-    String fechaActualStr = DateTime.now()
-        .toUtc()
-        .subtract(Duration(hours: 3))
-        .toIso8601String()
-        .split('T')[0]
-        .replaceAll('-', '');
-    int fechaActual = int.tryParse(fechaActualStr) ?? 0;
 
     QuerySnapshot snapshot = await _firestore
         .collection(collectionName)
         .where('Movil', isEqualTo: movil)
         .where('VisibleEnApp', isEqualTo: 'S')
-        .where('FchMsj', isEqualTo: fechaActual)
-        .where('FchHoraLeido', isNull: true)
+        .where('FchHoraLeido', isNull: true) // Ensure the field does not exist
         .get();
 
     return snapshot.docs;
@@ -330,6 +322,27 @@ class FirebaseService {
       'FchHoraLeido': FieldValue.serverTimestamp(),
     }).catchError((error) async {
       print('Error marking message as read: $error');
+      await _logError('Firestore Error', error.toString());
+      bool isConnected = await checkFirestoreConnectivity();
+      if (!isConnected) {
+        // Notificar al usuario sobre la pérdida de conectividad
+        print('⚠ Pérdida de conectividad con Firestore.');
+      }
+    });
+  }
+
+  Future<void> updateMessageField(
+      String messageId, Map<String, dynamic> fields) async {
+    var box = await Hive.openBox('sessionBox');
+    String escenarioId = box.get('escenario', defaultValue: '0');
+    String collectionName = 'Mensajes-$escenarioId';
+
+    await _firestore
+        .collection(collectionName)
+        .doc(messageId)
+        .update(fields)
+        .catchError((error) async {
+      print('Error updating message field: $error');
       await _logError('Firestore Error', error.toString());
       bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
