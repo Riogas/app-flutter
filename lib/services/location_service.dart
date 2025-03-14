@@ -252,6 +252,21 @@ class LocationService {
     }
   }
 
+  Future<Position?> getCurrentLocation() async {
+    if (_locationPermissionDenied) return null;
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        forceAndroidLocationManager: true,
+      );
+      return position;
+    } catch (e) {
+      print('❌ Error al obtener ubicación: $e');
+      return null;
+    }
+  }
+
   Future<void> _updateCoordinatesInFirestore(Position position) async {
     var box = await Hive.openBox('sessionBox');
     String? escenario = box.get('escenario');

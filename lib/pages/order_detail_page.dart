@@ -1,7 +1,10 @@
+import 'package:MoveIT/services/location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firebase_service.dart'; // Import FirebaseService
+import 'package:hive/hive.dart';
+import '../services/riogas_service.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
@@ -35,9 +38,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _firebaseService
         .getSubEstadoFinalizacionPedidosStream()
         .listen((subEstados) {
-      setState(() {
-        _subEstados = subEstados;
-      });
+      if (mounted) {
+        setState(() {
+          _subEstados = subEstados;
+        });
+      }
     });
   }
 
@@ -94,52 +99,124 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   await showDialog(
                     context: context,
                     builder: (BuildContext context) {
-                      return AlertDialog(
-                        title: Text('Seleccione acción'),
-                        content: DropdownButton<String>(
-                          hint: Text('Ninguna'),
-                          value: _selectedSubEstado,
-                          onChanged: (newValue) {
-                            setState(() {
-                              _selectedSubEstado = newValue;
-                            });
-                            Navigator.of(context).pop();
-                          },
-                          items: _subEstados.map((subEstado) {
-                            return DropdownMenuItem<String>(
-                              value: subEstado['SubEstadoCod']
-                                  .toString(), // Convert to string
-                              child: Text(subEstado['SubEstadoDesc']),
-                            );
-                          }).toList(),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                            child: Text('Cancelar'),
-                          ),
-                          TextButton(
-                            onPressed: _selectedSubEstado == null
-                                ? null
-                                : () {
-                                    // Add your onPressed code here!
-                                    Navigator.of(context).pop();
-                                  },
-                            child: Text('Aceptar'),
-                          ),
-                        ],
+                      return StatefulBuilder(
+                        builder: (context, setState) {
+                          return AlertDialog(
+                            title: Text('Seleccione acción'),
+                            content: DropdownButton<String>(
+                              hint: Text('Ninguna'),
+                              value: _selectedSubEstado,
+                              onChanged: (newValue) {
+                                setState(() {
+                                  _selectedSubEstado = newValue;
+                                });
+                              },
+                              items: _subEstados.map((subEstado) {
+                                return DropdownMenuItem<String>(
+                                  value: subEstado['SubEstadoCod']
+                                      .toString(), // Convert to string
+                                  child: Text(subEstado['SubEstadoDesc']),
+                                );
+                              }).toList(),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                },
+                                child: Text('Cancelar'),
+                              ),
+                              TextButton(
+                                onPressed: _selectedSubEstado == null
+                                    ? null
+                                    : () async {
+                                        if (_selectedSubEstado == null) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                  'Debe seleccionar al menos una acción.'),
+                                            ),
+                                          );
+                                          return;
+                                        }
+
+                                        var pedidoBox =
+                                            await Hive.openBox('pedidoBox');
+                                        var pedido = pedidoBox.get('pedido');
+                                        var escenario = pedido['escenario'];
+                                        var usuario = pedido['username'];
+                                        var pedidoId = pedido['id'];
+                                        var tipo = pedido['tipo'];
+                                        var pedidoTpo =
+                                            tipo == 'Pedidos' ? 1 : 2;
+                                        var currentLocation =
+                                            await LocationService()
+                                                .getCurrentLocation();
+
+                                        if (currentLocation == null) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                  'No se pudo obtener la ubicación actual.'),
+                                            ),
+                                          );
+                                          return;
+                                        }
+
+                                        var response =
+                                            await RioGasService.finalizarPedido(
+                                          escenario,
+                                          pedidoId,
+                                          pedidoTpo.toString(),
+                                          usuario,
+                                          '',
+                                          '',
+                                          2,
+                                          int.parse(_selectedSubEstado!),
+                                          '',
+                                          '',
+                                          DateTime.now().toIso8601String(),
+                                          '',
+                                          '',
+                                          currentLocation.latitude.toString(),
+                                          currentLocation.longitude.toString(),
+                                        );
+
+                                        if (response != null) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                  'Pedido finalizado con éxito.'),
+                                            ),
+                                          );
+                                        } else {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                  'Error al finalizar el pedido.'),
+                                            ),
+                                          );
+                                        }
+                                        Navigator.of(context).pop();
+                                      },
+                                child: Text('Confirmar'),
+                              ),
+                            ],
+                          );
+                        },
                       );
                     },
                   );
                 },
                 icon: Icon(Icons.check, color: Colors.white),
-                label: Text('Finalizar Pedido',
-                    style: TextStyle(color: Colors.white)),
+                label: Text('Finalizar Pedido'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.lightGreen,
                   minimumSize: Size(double.infinity, 50), // Full width button
+                  backgroundColor: Colors.lightGreen,
                 ),
               ),
             ),

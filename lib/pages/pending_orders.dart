@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:hive/hive.dart';
 import 'order_detail_page.dart'; // Importa la nueva página de detalles
 import 'dart:async';
+import '../services/riogas_service.dart'; // Import the RioGasService
+import 'package:geolocator/geolocator.dart'; // Import Geolocator for getting current location
 
 class PendingOrdersPage extends StatefulWidget {
   @override
@@ -19,6 +21,10 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   late Stream<List<DocumentSnapshot>> _ordersStream;
   late Box constantBox;
   late Box pedidosBox;
+  late String username = '';
+  late String deviceId = '';
+  late int movilId = 0;
+  late int escenarioId = 0;
 
   @override
   void initState() {
@@ -26,8 +32,12 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     _initializeFirebase();
     _ordersStream = _firebaseService.getPedidosStream().asBroadcastStream();
     _initializeHive().then((_) {
-      setState(
-          () {}); // Actualiza el estado una vez que Hive se haya inicializado
+      setState(() {
+        username = constantBox.get('username', defaultValue: '');
+        deviceId = constantBox.get('DeviceID', defaultValue: '');
+        movilId = constantBox.get('MovilID', defaultValue: 0);
+        escenarioId = constantBox.get('EscenarioID', defaultValue: 0);
+      });
     });
   }
 
@@ -81,6 +91,51 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     }
     print("❌ No se encontró un rango válido para delay $delayMinutes");
     return null;
+  }
+
+  Future<void> _markAsReadAndNavigate(
+      Map<String, dynamic> pedido, int pedidoId) async {
+    await pedidosBox.put(pedidoId, 'Leido');
+    await _callDescargaLecturaPedidos(pedido, pedidoId);
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OrderDetailPage(
+          detalleHtml: pedido['DetalleHTML'],
+          estadoNro: pedido['EstadoNro'],
+        ),
+      ),
+    );
+    setState(() {}); // Actualiza el estado al volver de la pantalla de detalles
+  }
+
+  Future<void> _callDescargaLecturaPedidos(
+      Map<String, dynamic> pedido, int pedidoId) async {
+    String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? '1' : '2';
+    String lectDesc = 'LECTURA';
+    String fechaHoraCmbEst = DateTime.now().toIso8601String();
+    String inAux1 = '';
+    String inAux2 = '';
+
+    Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
+    String latitud = position.latitude.toString();
+    String longitud = position.longitude.toString();
+
+    await RioGasService.descargaLecturaPedidos(
+      escenarioId,
+      pedidoId,
+      pedidoTpo,
+      username,
+      'NroSesion', // Replace with actual session number if available
+      deviceId,
+      lectDesc,
+      fechaHoraCmbEst,
+      inAux1,
+      inAux2,
+      latitud,
+      longitud,
+    );
   }
 
   @override
@@ -166,18 +221,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                   onTap: () async {
                     if (pedido.containsKey('DetalleHTML') &&
                         pedido['DetalleHTML'].isNotEmpty) {
-                      await pedidosBox.put(pedidoId, 'Leido');
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => OrderDetailPage(
-                            detalleHtml: pedido['DetalleHTML'],
-                            estadoNro: pedido['EstadoNro'], // Add this line
-                          ),
-                        ),
-                      );
-                      setState(
-                          () {}); // Actualiza el estado al volver de la pantalla de detalles
+                      await _markAsReadAndNavigate(pedido, pedidoId);
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('No hay detalles disponibles')),
