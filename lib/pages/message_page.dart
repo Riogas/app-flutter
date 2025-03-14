@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../services/riogas_service.dart'; // Import the RioGasService
+import 'package:intl/intl.dart'; // Import the intl package for date formatting
 
 class MessagePage extends StatefulWidget {
   @override
@@ -72,6 +74,20 @@ class _MessagePageState extends State<MessagePage> {
     var messages = await _firebaseService.getUnreadMessages();
     for (var message in messages) {
       await _firebaseService.markMessageAsRead(message.id);
+      await RioGasService.descargaLecturaMensajes(
+        1, // escenarioId
+        1, // movilId
+        int.parse(message.id), // messageId
+        'usuario', // usuario
+        'nroSesion', // nroSesion
+        'termMobileEquipo', // termMobileEquipo
+        'lectDesc', // lectDesc
+        DateTime.now().toIso8601String(), // fechaHoraCmbEst
+        'inAux1', // inAux1
+        'inAux2', // inAux2
+        'latitud', // latitud
+        'longitud', // longitud
+      );
     }
   }
 
@@ -107,35 +123,61 @@ class _MessagePageState extends State<MessagePage> {
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(child: Text('No hay mensajes disponibles.'));
           } else {
+            var messages = snapshot.data!;
+            messages.sort((a, b) {
+              var aDate = (a['FchHoraCreado'] as Timestamp).toDate();
+              var bDate = (b['FchHoraCreado'] as Timestamp).toDate();
+              return bDate.compareTo(aDate);
+            });
             return ListView.builder(
-              itemCount: snapshot.data!.length,
+              itemCount: messages.length,
               itemBuilder: (context, index) {
-                var mensaje =
-                    snapshot.data![index].data() as Map<String, dynamic>;
+                var mensaje = messages[index].data() as Map<String, dynamic>;
                 bool isRead = mensaje.containsKey('FchHoraLeido');
-                return Padding(
+                String formattedDate = mensaje['FchHoraCreado'] != null
+                    ? DateFormat('dd/MM/yyyy HH:mm').format(
+                        (mensaje['FchHoraCreado'] as Timestamp).toDate())
+                    : '';
+                return Container(
+                  color: isRead ? Colors.white : Colors.blue.withOpacity(0.1),
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16.0, vertical: 8.0),
-                  child: Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15.0),
-                    ),
-                    elevation: 5,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Icon(
+                            isRead
+                                ? Icons.mark_email_read
+                                : Icons.mark_email_unread,
+                            color: isRead ? Colors.grey : Colors.blue,
+                          ),
+                          SizedBox(width: 10),
                           Expanded(
-                            child: Text(
-                              mensaje['Mensaje'] ?? 'Sin contenido',
-                              style: TextStyle(
-                                fontWeight: isRead
-                                    ? FontWeight.normal
-                                    : FontWeight.bold,
-                                color: isRead ? Colors.black : Colors.red,
-                                fontSize: 16.0,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  mensaje['Mensaje'] ?? 'Sin contenido',
+                                  style: TextStyle(
+                                    fontWeight: isRead
+                                        ? FontWeight.normal
+                                        : FontWeight.bold,
+                                    color: isRead ? Colors.black : Colors.red,
+                                    fontSize: 16.0,
+                                  ),
+                                ),
+                                SizedBox(height: 5),
+                                Text(
+                                  formattedDate,
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12.0,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           IconButton(
@@ -146,7 +188,8 @@ class _MessagePageState extends State<MessagePage> {
                           ),
                         ],
                       ),
-                    ),
+                      Divider(), // Add a horizontal line separator
+                    ],
                   ),
                 );
               },
