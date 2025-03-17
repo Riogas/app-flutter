@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firebase_service.dart'; // Import FirebaseService
 import 'package:hive/hive.dart';
 import '../services/riogas_service.dart';
+import 'package:url_launcher/url_launcher.dart'; // Importa para manejar URLs
 
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
@@ -27,6 +28,27 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(NavigationDelegate(
+        onNavigationRequest: (NavigationRequest request) async {
+          final url = request.url;
+
+          if (url.startsWith("https://waze.com/ul")) {
+            final uri = Uri.parse(url);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+            return NavigationDecision.prevent;
+          } else if (url.startsWith("https://www.google.com/maps")) {
+            final uri = Uri.parse(url);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+            return NavigationDecision.prevent;
+          }
+
+          return NavigationDecision.navigate; // Permite otras URLs
+        },
+      ))
       ..loadHtmlString(_getHtmlWithViewport(widget.detalleHtml))
       ..runJavaScript('''
         document.body.style.margin = "0";

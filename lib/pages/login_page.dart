@@ -9,6 +9,8 @@ import 'package:hive/hive.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 
 class LoginPage extends StatefulWidget {
   @override
@@ -277,10 +279,37 @@ class _LoginPageState extends State<LoginPage> {
     return shouldRegister;
   }
 
+  Future<Map<String, String>> obtenerMarcaYModelo() async {
+    final deviceInfo = DeviceInfoPlugin();
+    String marca = 'Desconocida';
+    String modelo = 'Desconocido';
+
+    if (Platform.isAndroid) {
+      AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+      marca = androidInfo.brand ?? 'Desconocida';
+      modelo = androidInfo.model ?? 'Desconocido';
+    } else if (Platform.isIOS) {
+      IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+      marca = 'Apple'; // siempre es Apple en iOS
+      modelo = iosInfo.utsname.machine ?? 'Desconocido';
+    }
+
+    print('Marca: $marca');
+    print('Modelo: $modelo');
+
+    return {'marca': marca, 'modelo': modelo};
+  }
+
   Future<bool> _registerDevice(String document) async {
     try {
+      // Call obtenerMarcaYModelo to get the device brand and model
+      Map<String, String> deviceInfo = await obtenerMarcaYModelo();
+      String marca = deviceInfo['marca']!;
+      String modelo = deviceInfo['modelo']!;
+      String info = '';
+
       final response = await RioGasService.registrarDispositivo(
-          _deviceId, document, _appNroVersion);
+          _deviceId, document, _appNroVersion, marca, modelo, info);
 
       if (response != null && response['OK'] == 0) {
         var box = await Hive.openBox('sessionBox');

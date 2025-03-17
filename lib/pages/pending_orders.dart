@@ -106,7 +106,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         ),
       ),
     );
-    setState(() {}); // Actualiza el estado al volver de la pantalla de detalles
+    if (mounted) {
+      setState(() {}); // Actualiza el estado solo si el widget sigue montado
+    }
   }
 
   Future<void> _callDescargaLecturaPedidos(
