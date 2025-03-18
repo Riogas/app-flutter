@@ -1,8 +1,22 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
 import 'package:hive/hive.dart';
+import '../utils/config.dart'; // Import config.dart for credentials
 
 class ConstantsService {
   static Future<void> loadAndSaveConstants() async {
+    // 🔐 Authenticate with Firebase using credentials from config.dart
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: Config.firestoreEmail,
+        password: Config.firestorePassword,
+      );
+      print("✅ Firebase authentication successful.");
+    } catch (e) {
+      print("❌ Firebase authentication failed: $e");
+      return; // Exit if authentication fails
+    }
+
     var box = await Hive.openBox('sessionBox');
     String escenario = box.get('escenario', defaultValue: '1000');
 

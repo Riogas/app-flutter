@@ -44,9 +44,12 @@ class FirebaseService {
   Future<bool> checkFirestoreConnectivity() async {
     try {
       await _firestore.collection('test').limit(1).get();
+      await _updateConnectionErrorState(
+          false); // Reset error state on successful connection
       return true;
     } catch (e) {
       print('No Firestore connectivity: $e');
+      await _updateConnectionErrorState(true); // Set error state on failure
       return false;
     }
   }
@@ -54,6 +57,30 @@ class FirebaseService {
   Future<void> _logFirestorePermissionError(String message) async {
     print('Firestore permission error: $message');
     await _logError('Firestore Permission Error', message);
+  }
+
+  Future<void> _updateConnectionErrorState(bool hasError) async {
+    var conexionBox = await Hive.openBox('conexionBox');
+    if (hasError) {
+      DateTime now = DateTime.now();
+      if (!conexionBox.containsKey('firstErrorTimeFirestore')) {
+        conexionBox.put('firstErrorTimeFirestore', now);
+      }
+      conexionBox.put('hasErrorFirestore', true);
+
+      // Check if 5 minutes have passed since the first error
+      DateTime firstErrorTime = conexionBox.get('firstErrorTimeFirestore');
+      if (now.difference(firstErrorTime).inMinutes >= 5) {
+        // Notify the user about the persistent error
+        print(
+            '⚠ Error persistente: No hay conexión con Firestore durante más de 5 minutos.');
+        // Aquí puedes implementar la lógica para mostrar un mensaje al usuario
+      }
+    } else {
+      // Reset the error state
+      conexionBox.delete('firstErrorTimeFirestore');
+      conexionBox.put('hasErrorFirestore', false);
+    }
   }
 
   Stream<Map<String, dynamic>?> getSesionesStream() async* {

@@ -31,7 +31,16 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    _loadLastUsername(); // Load the last username from Hive
     _initialize();
+  }
+
+  Future<void> _loadLastUsername() async {
+    var usuarioBox = await Hive.openBox('usuarioBox');
+    String? lastUsername = usuarioBox.get('lastUsername');
+    if (lastUsername != null) {
+      _usernameController.text = lastUsername; // Pre-fill the username field
+    }
   }
 
   Future<void> _initialize() async {
@@ -54,6 +63,10 @@ class _LoginPageState extends State<LoginPage> {
 
     if (response != null && response['OK'] == 0) {
       print("✅ Login exitoso. Verificando dispositivo...");
+
+      // Save the last logged-in username in Hive
+      var usuarioBox = await Hive.openBox('usuarioBox');
+      await usuarioBox.put('lastUsername', _usernameController.text);
 
       // 🔹 Validar dispositivo antes de mostrar selección de móviles
       bool isDeviceValid = await _validateDevice();

@@ -14,6 +14,10 @@ class RioGasService {
   };
   static const String token = 'IcA.FwL.1710.!';
 
+  static DateTime? _lastErrorTime; // Track the last error time
+  static const int errorThresholdMinutes =
+      5; // Threshold in minutes - CONSTANTE
+
   static Future<Map<String, dynamic>?> _post(
       String endpoint, Map<String, dynamic> body) async {
     try {
@@ -38,6 +42,7 @@ class RioGasService {
       print('[$endpoint] Respuesta: ${response.body}');
 
       if (response.statusCode == 200) {
+        _lastErrorTime = null; // Reset error tracking on success
         return jsonDecode(response.body);
       } else {
         await _logError('HTTP Error',
@@ -61,6 +66,24 @@ class RioGasService {
       additionalInfo: additionalInfo,
     );
     await errorBox.add(errorEvent);
+
+    // Track persistent errors
+    await _handlePersistentErrors();
+  }
+
+  static Future<void> _handlePersistentErrors() async {
+    DateTime now = DateTime.now();
+    if (_lastErrorTime == null) {
+      _lastErrorTime = now; // Set the first error time
+    } else {
+      Duration difference = now.difference(_lastErrorTime!);
+      if (difference.inMinutes >= errorThresholdMinutes) {
+        var conexionBox = await Hive.openBox('conexionBox');
+        await conexionBox.put('conexionRioGas', false);
+        await conexionBox.put('conexionRioGasTimestamp', now.toIso8601String());
+        print('❌ Persisting error: conexionRioGas set to false.');
+      }
+    }
   }
 
   static Future<Map<String, dynamic>?> validarUsuario(

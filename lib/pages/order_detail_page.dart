@@ -44,6 +44,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               await launchUrl(uri, mode: LaunchMode.externalApplication);
             }
             return NavigationDecision.prevent;
+          } else if (url.startsWith("tel:")) {
+            // Handle tel: links
+            final uri = Uri.parse(url);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+            return NavigationDecision.prevent;
           }
 
           return NavigationDecision.navigate; // Permite otras URLs
