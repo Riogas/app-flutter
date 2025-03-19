@@ -95,9 +95,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
   Future<void> _markAsReadAndNavigate(
       Map<String, dynamic> pedido, int pedidoId) async {
-    await pedidosBox.put(pedidoId, 'Leido');
-    await _callDescargaLecturaPedidos(pedido, pedidoId);
-    await Navigator.push(
+    // Navegar inmediatamente
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => OrderDetailPage(
@@ -106,6 +105,13 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         ),
       ),
     );
+
+    // Realizar operaciones en segundo plano
+    Future.microtask(() async {
+      await pedidosBox.put(pedidoId, 'Leido');
+      await _callDescargaLecturaPedidos(pedido, pedidoId);
+    });
+
     if (mounted) {
       setState(() {}); // Actualiza el estado solo si el widget sigue montado
     }

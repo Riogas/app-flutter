@@ -17,6 +17,7 @@ import 'package:MoveIT/pages/login_page.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase_messaging
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Importa flutter_local_notifications
 import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivity_plus
+import '../services/counter_service.dart'; // Import the new CounterService
 
 class HomePage extends StatefulWidget {
   @override
@@ -37,6 +38,8 @@ class _HomePageState extends State<HomePage> {
   final Completer<void> _locationServiceCompleter = Completer<void>();
   String _movil = '0';
   late StreamSubscription _connectivitySubscription;
+  final CounterService _counterService =
+      CounterService(); // Initialize CounterService
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -73,10 +76,17 @@ class _HomePageState extends State<HomePage> {
         .listen((List<ConnectivityResult> results) {
       // Handle connectivity changes
     });
+
+    // Start the counter for periodic connectivity checks
+    _counterService.startCounter(
+      intervalSeconds: 10,
+      onTick: _checkConnectivityAndPerformAction,
+    );
   }
 
   @override
   void dispose() {
+    _counterService.stopCounter(); // Stop the counter when disposing
     _ordersSubscription.cancel();
     _locationServiceCompleter.future.then((_) {
       _locationSubscription.cancel(); // 🔹 Cancelamos el stream de ubicación
@@ -285,6 +295,18 @@ class _HomePageState extends State<HomePage> {
     } else {
       print('✅ Conexión restaurada.');
       // Aquí podés continuar con el flujo normal de tu app
+    }
+  }
+
+  void _checkConnectivityAndPerformAction() async {
+    print('🔄 Checking connectivity...');
+    var connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none) {
+      print('❌ No connectivity detected. Performing fallback action...');
+      // Placeholder for future action when no connectivity is detected
+    } else {
+      print('✅ Connectivity available.');
+      // Placeholder for future action when connectivity is available
     }
   }
 
