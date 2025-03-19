@@ -43,6 +43,7 @@ class RioGasService {
 
       if (response.statusCode == 200) {
         _lastErrorTime = null; // Reset error tracking on success
+        await _updateConnectionStatus(true); // Update connection status
         return jsonDecode(response.body);
       } else {
         await _logError('HTTP Error',
@@ -53,6 +54,20 @@ class RioGasService {
       print('❌ Error en [$endpoint]: $e');
       await _logError('Exception', e.toString());
       return null;
+    }
+  }
+
+  static Future<void> _updateConnectionStatus(bool isConnected) async {
+    var conexionBox = await Hive.openBox('conexionBox');
+    DateTime now = DateTime.now();
+
+    if (isConnected) {
+      await conexionBox.put('conexionRioGas', true);
+      await conexionBox.put('conexionRioGasTimestamp', now.toIso8601String());
+      print('✅ Connection successful: conexionRioGas set to true.');
+    } else {
+      await conexionBox.put('conexionRioGas', false);
+      print('❌ Connection failed: conexionRioGas set to false.');
     }
   }
 
@@ -78,10 +93,8 @@ class RioGasService {
     } else {
       Duration difference = now.difference(_lastErrorTime!);
       if (difference.inMinutes >= errorThresholdMinutes) {
-        var conexionBox = await Hive.openBox('conexionBox');
-        await conexionBox.put('conexionRioGas', false);
-        await conexionBox.put('conexionRioGasTimestamp', now.toIso8601String());
-        print('❌ Persisting error: conexionRioGas set to false.');
+        await _updateConnectionStatus(
+            false); // Update connection status on persistent error
       }
     }
   }

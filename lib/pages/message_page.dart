@@ -270,7 +270,7 @@ class _MessagePageState extends State<MessagePage> {
                                     fontWeight: isRead
                                         ? FontWeight.normal
                                         : FontWeight.bold,
-                                    color: isRead ? Colors.black : Colors.red,
+                                    color: isRead ? Colors.black : Colors.blue,
                                     fontSize: 16.0,
                                   ),
                                 ),

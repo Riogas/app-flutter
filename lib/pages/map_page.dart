@@ -30,9 +30,11 @@ class _MapPageState extends State<MapPage> {
 
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      setState(() {
-        _locationPermissionDenied = true;
-      });
+      if (mounted) {
+        setState(() {
+          _locationPermissionDenied = true;
+        });
+      }
       return;
     }
 
@@ -40,40 +42,46 @@ class _MapPageState extends State<MapPage> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        setState(() {
-          _locationPermissionDenied = true;
-        });
+        if (mounted) {
+          setState(() {
+            _locationPermissionDenied = true;
+          });
+        }
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      setState(() {
-        _locationPermissionDenied = true;
-      });
+      if (mounted) {
+        setState(() {
+          _locationPermissionDenied = true;
+        });
+      }
       return;
     }
 
     Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high);
 
-    setState(() {
-      _currentPosition = LatLng(position.latitude, position.longitude);
+    if (mounted) {
+      setState(() {
+        _currentPosition = LatLng(position.latitude, position.longitude);
 
-      // 🟢 Agregar marcador de la ubicación actual
-      _markers.add(
-        Marker(
-          width: 80.0,
-          height: 80.0,
-          point: _currentPosition!,
-          child: Icon(
-            Icons.local_shipping, // Ícono de usuario
-            color: Colors.blue, // Color diferente a los pedidos
-            size: 30.0,
+        // 🟢 Agregar marcador de la ubicación actual
+        _markers.add(
+          Marker(
+            width: 80.0,
+            height: 80.0,
+            point: _currentPosition!,
+            child: Icon(
+              Icons.local_shipping, // Ícono de usuario
+              color: Colors.blue, // Color diferente a los pedidos
+              size: 30.0,
+            ),
           ),
-        ),
-      );
-    });
+        );
+      });
+    }
   }
 
   void _getPendingOrders() {

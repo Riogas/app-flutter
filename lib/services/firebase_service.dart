@@ -42,13 +42,16 @@ class FirebaseService {
   }
 
   Future<bool> checkFirestoreConnectivity() async {
+    print('🔍 Checking Firestore connectivity...');
     try {
+      print('📡 Attempting to fetch a test document from Firestore...');
       await _firestore.collection('test').limit(1).get();
+      print('✅ Firestore connectivity verified successfully.');
       await _updateConnectionErrorState(
           false); // Reset error state on successful connection
       return true;
     } catch (e) {
-      print('No Firestore connectivity: $e');
+      print('❌ No Firestore connectivity detected: $e');
       await _updateConnectionErrorState(true); // Set error state on failure
       return false;
     }
@@ -61,26 +64,56 @@ class FirebaseService {
 
   Future<void> _updateConnectionErrorState(bool hasError) async {
     var conexionBox = await Hive.openBox('conexionBox');
+    DateTime now = DateTime.now();
+
     if (hasError) {
-      DateTime now = DateTime.now();
       if (!conexionBox.containsKey('firstErrorTimeFirestore')) {
         conexionBox.put('firstErrorTimeFirestore', now);
       }
-      conexionBox.put('hasErrorFirestore', true);
-
-      // Check if 5 minutes have passed since the first error
+      conexionBox.put('conexionFirestore', true); // Ensure false until resolved
+      conexionBox.put('conexionFirestore', false);
       DateTime firstErrorTime = conexionBox.get('firstErrorTimeFirestore');
       if (now.difference(firstErrorTime).inMinutes >= 5) {
-        // Notify the user about the persistent error
         print(
             '⚠ Error persistente: No hay conexión con Firestore durante más de 5 minutos.');
-        // Aquí puedes implementar la lógica para mostrar un mensaje al usuario
       }
     } else {
-      // Reset the error state
       conexionBox.delete('firstErrorTimeFirestore');
-      conexionBox.put('hasErrorFirestore', false);
+      conexionBox.put('conexionFirestore', true);
+      conexionBox.put('lastConnectionTimeFirestore', now);
     }
+  }
+
+  void monitorStream<T>(Stream<T> stream, String streamName) {
+    stream.listen(
+      (event) async {
+        print('✅ Stream "$streamName" received data: $event');
+        var conexionBox = await Hive.openBox('conexionBox');
+        DateTime now = DateTime.now();
+        conexionBox.put(
+            'ConexionFirestore', true); // Actualiza conexión exitosa
+        conexionBox.put('lastSuccessfulConnection', now.toIso8601String());
+      },
+      onError: (error) async {
+        print('❌ Stream "$streamName" encountered an error: $error');
+        var conexionBox = await Hive.openBox('conexionBox');
+        conexionBox.put(
+            'ConexionFirestore', false); // Actualiza conexión fallida
+        if (error is FirebaseException && error.code == 'permission-denied') {
+          await _logFirestorePermissionError(
+              error.message ?? 'Permission denied');
+        } else {
+          await _logError('Stream Error', error.toString());
+        }
+      },
+      onDone: () async {
+        print('⚠ Stream "$streamName" has been closed.');
+        var conexionBox = await Hive.openBox('conexionBox');
+        conexionBox.put(
+            'ConexionFirestore', false); // Actualiza conexión cerrada
+      },
+      cancelOnError: true,
+    );
   }
 
   Stream<Map<String, dynamic>?> getSesionesStream() async* {
@@ -128,7 +161,7 @@ class FirebaseService {
     }
 
     // 📡 Ahora, escuchar cambios en Firestore en tiempo real
-    yield* activoDocRef
+    Stream<Map<String, dynamic>?> sesionesStream = activoDocRef
         .snapshots(includeMetadataChanges: true)
         .handleError((error) async {
       if (error is FirebaseException && error.code == 'permission-denied') {
@@ -153,6 +186,9 @@ class FirebaseService {
         return null;
       }
     });
+
+    monitorStream(sesionesStream, 'SesionesStream'); // Monitorea el stream
+    yield* sesionesStream;
   }
 
   Stream<List<DocumentSnapshot>> getPedidosStream() async* {
@@ -175,7 +211,7 @@ class FirebaseService {
         .replaceAll('-', '');
     int fechaActual = int.tryParse(fechaActualStr) ?? 0;
 
-    yield* _firestore
+    Stream<List<DocumentSnapshot>> pedidosStream = _firestore
         .collection(collectionName)
         .where('Movil', isEqualTo: movil)
         .where('FchPara', isEqualTo: fechaActual)
@@ -204,6 +240,9 @@ class FirebaseService {
       });
       return snapshot.docs;
     });
+
+    monitorStream(pedidosStream, 'PedidosStream'); // Monitorea el stream
+    yield* pedidosStream;
   }
 
   Stream<List<DocumentSnapshot>> getPedidosCumplidosStream() async* {
@@ -220,7 +259,7 @@ class FirebaseService {
         .replaceAll('-', '');
     int fechaActual = int.tryParse(fechaActualStr) ?? 0;
 
-    yield* _firestore
+    Stream<List<DocumentSnapshot>> pedidosCumplidosStream = _firestore
         .collection(collectionName)
         .where('Movil', isEqualTo: movil)
         .where('FchPara', isEqualTo: fechaActual)
@@ -249,6 +288,10 @@ class FirebaseService {
       });
       return snapshot.docs;
     });
+
+    monitorStream(pedidosCumplidosStream,
+        'PedidosCumplidosStream'); // Monitorea el stream
+    yield* pedidosCumplidosStream;
   }
 
   Stream<List<DocumentSnapshot>> getConstantesStream() async* {
@@ -256,7 +299,7 @@ class FirebaseService {
     String escenarioId = box.get('escenario', defaultValue: '0');
     String collectionName = 'Constantes-$escenarioId';
 
-    yield* _firestore
+    Stream<List<DocumentSnapshot>> constantesStream = _firestore
         .collection(collectionName)
         .snapshots()
         .handleError((error) async {
@@ -279,6 +322,9 @@ class FirebaseService {
       });
       return snapshot.docs;
     });
+
+    monitorStream(constantesStream, 'ConstantesStream'); // Monitorea el stream
+    yield* constantesStream;
   }
 
   Stream<List<DocumentSnapshot>> getMensajesStream() async* {
@@ -295,7 +341,7 @@ class FirebaseService {
         .replaceAll('-', '');
     int fechaActual = int.tryParse(fechaActualStr) ?? 0;
 
-    yield* _firestore
+    Stream<List<DocumentSnapshot>> mensajesStream = _firestore
         .collection(collectionName)
         .where('Movil', isEqualTo: movil)
         .where('VisibleEnApp', isEqualTo: 'S')
@@ -321,6 +367,9 @@ class FirebaseService {
       });
       return snapshot.docs;
     });
+
+    monitorStream(mensajesStream, 'MensajesStream'); // Monitorea el stream
+    yield* mensajesStream;
   }
 
   Future<List<DocumentSnapshot>> getUnreadMessages() async {
@@ -386,7 +435,7 @@ class FirebaseService {
     String collectionName = 'Moviles-$escenarioId';
     String documentName = 'Moviles-$movil';
 
-    yield* _firestore
+    Stream<DocumentSnapshot?> movilStream = _firestore
         .collection(collectionName)
         .doc(documentName)
         .snapshots()
@@ -407,6 +456,9 @@ class FirebaseService {
       print('Fetched movil: ${snapshot.data()}');
       return snapshot;
     });
+
+    monitorStream(movilStream, 'MovilStream'); // Monitorea el stream
+    yield* movilStream;
   }
 
   Future<void> updateMovilEstado(String movilId, int estado) async {
@@ -433,7 +485,7 @@ class FirebaseService {
     String escenarioId = box.get('escenario', defaultValue: '0');
     String collectionName = 'SubEstadoMoviles-$escenarioId';
 
-    yield* _firestore
+    Stream<List<Map<String, dynamic>>> subEstadoMovilesStream = _firestore
         .collection(collectionName)
         .snapshots()
         .handleError((error) async {
@@ -458,6 +510,10 @@ class FirebaseService {
         return data;
       }).toList();
     });
+
+    monitorStream(subEstadoMovilesStream,
+        'SubEstadoMovilesStream'); // Monitorea el stream
+    yield* subEstadoMovilesStream;
   }
 
   Stream<List<Map<String, dynamic>>>
@@ -466,11 +522,12 @@ class FirebaseService {
     String escenarioId = box.get('escenario', defaultValue: '0');
     String collectionName = 'SubEstadoFinalizacionPedidos-$escenarioId';
 
-    yield* _firestore
-        .collection(collectionName)
-        .orderBy('Orden')
-        .snapshots()
-        .handleError((error) async {
+    Stream<List<Map<String, dynamic>>> subEstadoFinalizacionPedidosStream =
+        _firestore
+            .collection(collectionName)
+            .orderBy('Orden')
+            .snapshots()
+            .handleError((error) async {
       if (error is FirebaseException && error.code == 'permission-denied') {
         await _logFirestorePermissionError(
             error.message ?? 'Permission denied');
@@ -492,6 +549,10 @@ class FirebaseService {
         return data;
       }).toList();
     });
+
+    monitorStream(subEstadoFinalizacionPedidosStream,
+        'SubEstadoFinalizacionPedidosStream'); // Monitorea el stream
+    yield* subEstadoFinalizacionPedidosStream;
   }
 
   // Agrega más métodos para otras consultas según sea necesario

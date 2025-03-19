@@ -298,6 +298,42 @@ class _HomePageState extends State<HomePage> {
         actions: [
           Padding(
             padding: const EdgeInsets.all(8.0),
+            child: GestureDetector(
+              onTap: () => _showConnectivityDialog(context),
+              child: FutureBuilder(
+                future: Hive.openBox('conexionBox'),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return Icon(Icons.network_cell, color: Colors.grey);
+                  }
+
+                  var box = Hive.box('conexionBox');
+                  print("📦 Contenido de conexionBox:");
+                  box.toMap().forEach((key, value) => print('$key: $value'));
+                  bool conexionFirestore =
+                      box.get('conexionFirestore', defaultValue: true);
+                  bool conexionRioGas =
+                      box.get('conexionRioGas', defaultValue: true);
+                  var connectivityResult = Connectivity().checkConnectivity();
+
+                  Color antennaColor;
+                  if (connectivityResult == ConnectivityResult.none) {
+                    antennaColor = Colors.grey;
+                  } else if (conexionFirestore && !conexionRioGas) {
+                    antennaColor = Colors.yellow;
+                  } else if (!conexionFirestore && !conexionRioGas) {
+                    antennaColor = Colors.red;
+                  } else {
+                    antennaColor = Colors.green;
+                  }
+
+                  return Icon(Icons.network_cell, color: antennaColor);
+                },
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
             child: StreamBuilder<DocumentSnapshot?>(
               // Existing stream for Movil
               stream: _firebaseService.getMovilStream(),
@@ -351,8 +387,6 @@ class _HomePageState extends State<HomePage> {
                           _showEstadoDropdown(context, movilDoc.id, estadoNro),
                       child: Row(
                         children: [
-                          Icon(Icons.network_cell, color: estadoColor),
-                          SizedBox(width: 5),
                           Container(
                             padding: EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
@@ -521,5 +555,88 @@ class _HomePageState extends State<HomePage> {
         );
       },
     );
+  }
+
+  void _showConnectivityDialog(BuildContext context) async {
+    var box = await Hive.openBox('conexionBox');
+    print("📦 Contenido de conexionBox:");
+    box.toMap().forEach((key, value) => print('$key: $value'));
+    bool conexionFirestore = box.get('conexionFirestore', defaultValue: true);
+    bool conexionRioGas = box.get('conexionRioGas', defaultValue: false);
+    String lastConnectivityDateFirestore =
+        _formatTime(box.get('lastSuccessfulConnection', defaultValue: 'N/A'));
+    String lastConnectivityDateRiogas =
+        _formatTime(box.get('conexionRioGasTimestamp', defaultValue: 'N/A'));
+    var connectivityResult = await Connectivity().checkConnectivity();
+
+    Color firestoreColor = conexionFirestore ? Colors.green : Colors.red;
+    Color rioGasColor = conexionRioGas ? Colors.green : Colors.red;
+    Color networkColor = (connectivityResult == ConnectivityResult.none)
+        ? Colors.grey
+        : Colors.green;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Estado de Conectividad'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildConnectivityRow(
+                  'Nube', firestoreColor, lastConnectivityDateFirestore),
+              _buildConnectivityRow(
+                  'RioGas', rioGasColor, lastConnectivityDateRiogas),
+              Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: networkColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Text('Red'),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cerrar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildConnectivityRow(String label, Color color, String date) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        SizedBox(width: 8),
+        Text('$label - ult. Hora: $date'),
+      ],
+    );
+  }
+
+  String _formatTime(String dateTimeString) {
+    try {
+      DateTime dateTime = DateTime.parse(dateTimeString);
+      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'N/A'; // Return 'N/A' if parsing fails
+    }
   }
 }
