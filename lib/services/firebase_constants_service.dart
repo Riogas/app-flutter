@@ -18,7 +18,7 @@ class ConstantsService {
     }
 
     var box = await Hive.openBox('sessionBox');
-    String escenario = box.get('escenario', defaultValue: '1000');
+    String escenario = box.get('escenario', defaultValue: '1000').toString();
 
     print("🔍 Escenario obtenido de sessionBox: $escenario");
 

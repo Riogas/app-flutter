@@ -118,7 +118,7 @@ class FirebaseService {
 
   Stream<Map<String, dynamic>?> getSesionesStream() async* {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String movil = box.get('movil', defaultValue: '0');
     String collectionName = 'Sesiones-$escenarioId';
 
@@ -193,7 +193,7 @@ class FirebaseService {
 
   Stream<List<DocumentSnapshot>> getPedidosStream() async* {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
     // Imprimir todo el contenido de sessionBox
@@ -247,7 +247,7 @@ class FirebaseService {
 
   Stream<List<DocumentSnapshot>> getPedidosCumplidosStream() async* {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
     String collectionName = 'Pedidos-$escenarioId';
@@ -296,7 +296,7 @@ class FirebaseService {
 
   Stream<List<DocumentSnapshot>> getConstantesStream() async* {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'Constantes-$escenarioId';
 
     Stream<List<DocumentSnapshot>> constantesStream = _firestore
@@ -329,7 +329,7 @@ class FirebaseService {
 
   Stream<List<DocumentSnapshot>> getMensajesStream() async* {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
     String collectionName = 'Mensajes-$escenarioId';
@@ -374,7 +374,7 @@ class FirebaseService {
 
   Future<List<DocumentSnapshot>> getUnreadMessages() async {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
     String collectionName = 'Mensajes-$escenarioId';
@@ -391,7 +391,7 @@ class FirebaseService {
 
   Future<void> markMessageAsRead(String messageId) async {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'Mensajes-$escenarioId';
 
     await _firestore.collection(collectionName).doc(messageId).update({
@@ -410,7 +410,7 @@ class FirebaseService {
   Future<void> updateMessageField(
       String messageId, Map<String, dynamic> fields) async {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'Mensajes-$escenarioId';
 
     await _firestore
@@ -430,7 +430,7 @@ class FirebaseService {
 
   Stream<DocumentSnapshot?> getMovilStream() async* {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String movil = box.get('movil', defaultValue: '0');
     String collectionName = 'Moviles-$escenarioId';
     String documentName = 'Moviles-$movil';
@@ -463,7 +463,7 @@ class FirebaseService {
 
   Future<void> updateMovilEstado(String movilId, int estado) async {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'Moviles-$escenarioId';
 
     await _firestore
@@ -482,7 +482,7 @@ class FirebaseService {
 
   Stream<List<Map<String, dynamic>>> getSubEstadoMovilesStream() async* {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'SubEstadoMoviles-$escenarioId';
 
     Stream<List<Map<String, dynamic>>> subEstadoMovilesStream = _firestore
@@ -519,7 +519,7 @@ class FirebaseService {
   Stream<List<Map<String, dynamic>>>
       getSubEstadoFinalizacionPedidosStream() async* {
     var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0');
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'SubEstadoFinalizacionPedidos-$escenarioId';
 
     Stream<List<Map<String, dynamic>>> subEstadoFinalizacionPedidosStream =

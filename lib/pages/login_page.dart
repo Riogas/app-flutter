@@ -453,7 +453,8 @@ class _LoginPageState extends State<LoginPage> {
     // 🔹 Guardar en Hive los datos del usuario, pero SOLO EL MÓVIL SELECCIONADO
     var box = await Hive.openBox('sessionBox');
     await box.put('username', _usernameController.text);
-    await box.put('escenario', response['EscenarioId'] == 1000 ? 1000 : 2000);
+    await box.put(
+        'escenario', response['EscenarioId'] == "1000" ? "1000" : "2000");
     await box.put('NombreUsuario', response['NombreUsuario'].trim());
     await box.put('deviceId', _deviceId);
 
@@ -505,7 +506,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<bool> _checkActiveSession(
       Map<String, dynamic> response, String? selectedMovil) async {
     var box = await Hive.openBox('sessionBox');
-    String? escenario = box.get('escenario');
+    String? escenario = box.get('escenario').toString();
     String? idUsuario = box.get('username');
     String? idTerminal = box.get('deviceId');
     String? nombreUsuario = box.get('NombreUsuario');

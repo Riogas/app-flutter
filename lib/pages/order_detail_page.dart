@@ -91,14 +91,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       <!DOCTYPE html>
       <html>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=0.5, initial-scale=0.5, maximum-scale=0.5, user-scalable=no">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <style>
           body {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            width: 100vw;
-            overflow-x: hidden;
+            width: 100%;
+            overflow-x: auto; /* Allow horizontal scrolling */
           }
         </style>
       </head>
