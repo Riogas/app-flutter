@@ -246,10 +246,53 @@ class LocationService {
 
       print(
           '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
+
       await _updateCoordinatesInFirestore(position);
+      await _updateLocationAndDistanceInHive(newLocation); // 🔹 Actualiza Hive
     } catch (e) {
       print('❌ Error al obtener ubicación: $e');
     }
+  }
+
+  /// 🔹 Actualiza la última ubicación y la distancia total en Hive
+  Future<void> _updateLocationAndDistanceInHive(LatLng newLocation) async {
+    var box = await Hive.openBox('locationBox');
+    LatLng? lastLocation = box.get('lastLocation') != null
+        ? LatLng(
+            box.get('lastLocation')['latitude'],
+            box.get('lastLocation')['longitude'],
+          )
+        : null;
+    double totalDistance = box.get('totalDistance') ?? 0.0;
+
+    const double distanceThreshold = 5.0; // Umbral mínimo en metros
+
+    if (lastLocation != null) {
+      double distance = Geolocator.distanceBetween(
+        lastLocation.latitude,
+        lastLocation.longitude,
+        newLocation.latitude,
+        newLocation.longitude,
+      );
+
+      if (distance >= distanceThreshold) {
+        totalDistance += distance;
+      } else {
+        print(
+            '📏 Distancia ignorada: $distance mts (menor al umbral de $distanceThreshold mts)');
+      }
+    }
+
+    await box.put('lastLocation', {
+      'latitude': newLocation.latitude,
+      'longitude': newLocation.longitude,
+    });
+    await box.put('totalDistance', totalDistance);
+
+    print(
+        '📦 Última ubicación guardada en Hive: Lat ${newLocation.latitude}, Lng ${newLocation.longitude}');
+    print(
+        '📦 Distancia total recorrida actualizada: ${totalDistance.toStringAsFixed(2)} mts');
   }
 
   Future<Position?> getCurrentLocation() async {

@@ -342,6 +342,12 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           actions: [
             TextButton(
+              onPressed: () async {
+                await _sendErrorsToSupport(errors);
+              },
+              child: Text('Enviar Datos a Soporte'),
+            ),
+            TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
@@ -351,6 +357,35 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       },
     );
+  }
+
+  Future<void> _sendErrorsToSupport(List<ErrorEvent> errors) async {
+    String supportEmail =
+        "soporte@example.com"; // Replace with the actual support email
+    String subject = "Reporte de Errores";
+    String body = errors.map((error) {
+      return "Tipo: ${error.type}\n"
+          "Mensaje: ${error.message}\n"
+          "Fecha: ${error.timestamp}\n"
+          "Info Adicional: ${error.additionalInfo ?? "N/A"}\n\n";
+    }).join();
+
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: supportEmail,
+      query: Uri.encodeFull('subject=$subject&body=$body'),
+    );
+
+    if (await canLaunchUrl(emailUri)) {
+      await launchUrl(emailUri);
+    } else {
+      _showMessage("No se pudo abrir el cliente de correo.");
+    }
+  }
+
+  Future<double> _loadTotalDistance() async {
+    var box = await Hive.openBox('locationBox');
+    return box.get('totalDistance', defaultValue: 0.0);
   }
 
   Widget _buildViewErrorsButton() {
@@ -472,6 +507,21 @@ class _SettingsPageState extends State<SettingsPage> {
                 _generateReport),
             _buildInfoRowWithButton(Icons.verified, 'Versión de la App',
                 appVersion, Icons.update, _checkForUpdate),
+            FutureBuilder<double>(
+              future: _loadTotalDistance(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return _buildInfoRow(
+                      Icons.directions_walk, 'Dist. recorrida', 'Cargando...');
+                } else if (snapshot.hasError) {
+                  return _buildInfoRow(Icons.directions_walk, 'Dist. recorrida',
+                      'Error al cargar');
+                } else {
+                  return _buildInfoRow(Icons.directions_walk, 'Dist. recorrida',
+                      '${snapshot.data?.toStringAsFixed(2) ?? 0.0} mts.');
+                }
+              },
+            ),
           ],
         ),
       ),

@@ -22,6 +22,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   final FirebaseService _firebaseService = FirebaseService();
   List<Map<String, dynamic>> _subEstados = [];
   String? _selectedSubEstado;
+  String? _observaciones = '';
+  final _observacionesController = TextEditingController();
 
   @override
   void initState() {
@@ -132,21 +134,51 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         builder: (context, setState) {
                           return AlertDialog(
                             title: Text('Seleccione acción'),
-                            content: DropdownButton<String>(
-                              hint: Text('Ninguna'),
-                              value: _selectedSubEstado,
-                              onChanged: (newValue) {
-                                setState(() {
-                                  _selectedSubEstado = newValue;
-                                });
-                              },
-                              items: _subEstados.map((subEstado) {
-                                return DropdownMenuItem<String>(
-                                  value: subEstado['SubEstadoCod']
-                                      .toString(), // Convert to string
-                                  child: Text(subEstado['SubEstadoDesc']),
-                                );
-                              }).toList(),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                DropdownButton<String>(
+                                  hint: Text('Ninguna'),
+                                  value: _selectedSubEstado,
+                                  onChanged: (newValue) {
+                                    setState(() {
+                                      _selectedSubEstado = newValue;
+                                    });
+                                  },
+                                  items: _subEstados.map((subEstado) {
+                                    return DropdownMenuItem<String>(
+                                      value: subEstado['SubEstadoCod']
+                                          .toString(), // Convert to string
+                                      child: Text(subEstado['SubEstadoDesc']),
+                                    );
+                                  }).toList(),
+                                ),
+                                SizedBox(height: 16),
+                                TextField(
+                                  controller: _observacionesController,
+                                  maxLength: 300,
+                                  decoration: InputDecoration(
+                                    labelText: 'Observaciones',
+                                    hintText:
+                                        'Ingrese observaciones (solo letras y números)',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (value) {
+                                    final sanitizedValue = value.replaceAll(
+                                        RegExp(r'[^a-zA-Z0-9 ]'), '');
+                                    if (sanitizedValue != value) {
+                                      _observacionesController.text =
+                                          sanitizedValue;
+                                      _observacionesController.selection =
+                                          TextSelection.fromPosition(
+                                        TextPosition(
+                                            offset: sanitizedValue.length),
+                                      );
+                                    }
+                                    _observaciones = sanitizedValue;
+                                  },
+                                ),
+                              ],
                             ),
                             actions: [
                               TextButton(
@@ -200,7 +232,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                           pedidoId,
                                           pedidoTpo.toString(),
                                           usuario,
-                                          '',
+                                          _observaciones ??
+                                              '', // Pass observations here
                                           '',
                                           2,
                                           int.parse(_selectedSubEstado!),
