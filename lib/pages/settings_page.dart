@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
+import '../utils/error_event.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -315,6 +316,58 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  Future<void> _viewErrors() async {
+    var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
+    List<ErrorEvent> errors = errorBox.values.toList().cast<ErrorEvent>();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Errores Registrados'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: errors.length,
+              itemBuilder: (context, index) {
+                final error = errors[index];
+                return ListTile(
+                  title: Text('${error.type}: ${error.message}'),
+                  subtitle: Text(
+                      'Fecha: ${error.timestamp}\nInfo Adicional: ${error.additionalInfo ?? "N/A"}'),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cerrar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildViewErrorsButton() {
+    return Center(
+      child: ElevatedButton.icon(
+        onPressed: _viewErrors,
+        icon: Icon(Icons.error, color: Colors.red),
+        label: Text('Ver Errores'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.red,
+          side: BorderSide(color: Colors.red),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -322,19 +375,24 @@ class _SettingsPageState extends State<SettingsPage> {
         title: Text('Configuración'),
         backgroundColor: Colors.blueAccent,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildProfileSection(),
-            SizedBox(height: 20),
-            _buildInfoSection(),
-            SizedBox(height: 20),
-            _buildChangePasswordButton(),
-            SizedBox(height: 10),
-            _buildLogoutButton(),
-          ],
+      body: SingleChildScrollView(
+        // Wrap the body in a scrollable view
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildProfileSection(),
+              SizedBox(height: 20),
+              _buildInfoSection(),
+              SizedBox(height: 20),
+              _buildChangePasswordButton(),
+              SizedBox(height: 10),
+              _buildLogoutButton(),
+              SizedBox(height: 10),
+              _buildViewErrorsButton(),
+            ],
+          ),
         ),
       ),
     );
