@@ -4,7 +4,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
+import 'package:hive/hive.dart'; // Import Hive for Box
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:MoveIT/pages/pending_orders.dart';
 
 class MapPage extends StatefulWidget {
   @override
@@ -16,12 +18,20 @@ class _MapPageState extends State<MapPage> {
   bool _locationPermissionDenied = false;
   final FirebaseService _firebaseService = FirebaseService();
   List<Marker> _markers = [];
+  late Box constantBox;
+  late Box pedidosBox;
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
     _getPendingOrders();
+    _initializeHive();
+  }
+
+  Future<void> _initializeHive() async {
+    constantBox = await Hive.openBox('constantBox');
+    pedidosBox = await Hive.openBox('pedidosBox');
   }
 
   Future<void> _getCurrentLocation() async {
@@ -90,14 +100,24 @@ class _MapPageState extends State<MapPage> {
         _markers = orders.map((order) {
           var data = order.data() as Map<String, dynamic>;
           var location = data['ubicacion'] as GeoPoint;
+
+          // Calculate delay in minutes
+          DateTime now = DateTime.now();
+          DateTime fchHoraPara =
+              (data['FchHoraMaxEntComp'] as Timestamp).toDate();
+          int delayMinutes = fchHoraPara.difference(now).inMinutes;
+
+          // Get delay info (color and label)
+          var delayInfo = getDelayInfo(delayMinutes);
+          Color pinColor = delayInfo?["Color"] ?? Colors.red; // Default to red
+
           return Marker(
             width: 80.0,
             height: 80.0,
             point: LatLng(location.latitude, location.longitude),
             child: IconButton(
-              // ✅ Usar `child` en lugar de `builder`
               icon: Icon(Icons.location_on),
-              color: Colors.red,
+              color: pinColor, // Use the color from delayInfo
               iconSize: 40.0,
               onPressed: () {
                 _showOrderDetails(
@@ -112,6 +132,49 @@ class _MapPageState extends State<MapPage> {
       });
     });
   }
+
+  Map<String, dynamic>? getDelayInfo(int delayMinutes) {
+    for (int id in [40, 41, 42, 43]) {
+      var data = constantBox.get(id.toString());
+      print("🔍 Leyendo constante con ID $id: $data");
+      if (data != null && data['Estado'] == 'A') {
+        print("✅ Estado es 'A' para ID $id");
+        print(
+            "🔢 Comparando delayMinutes: $delayMinutes con ValorMin: ${data['ValorMin']} y ValorMax: ${data['ValorMax']}");
+        if ((delayMinutes >= data['ValorMin'] &&
+                delayMinutes <= data['ValorMax']) ||
+            (delayMinutes <= data['ValorMin'] &&
+                delayMinutes >= data['ValorMax'])) {
+          print(
+              "⏳ Delay $delayMinutes está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+          return {
+            "Color": getColorFromName(data['Color']),
+            "Etiqueta": data['Etiqueta'],
+          };
+        } else {
+          print(
+              "❌ Delay $delayMinutes no está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+        }
+      } else {
+        print("❌ Estado no es 'A' para ID $id o data es null");
+      }
+    }
+    print("❌ No se encontró un rango válido para delay $delayMinutes");
+    return null;
+  }
+
+  Color getColorFromName(String colorName) {
+    return colorMap[colorName] ??
+        Colors.white; // Devuelve blanco si el color no se encuentra
+  }
+
+  Map<String, Color> colorMap = {
+    "Red": Colors.red,
+    "Pink": Colors.pink,
+    "Green": Colors.green,
+    "Yellow": Colors.orange,
+    // Agrega más colores según sea necesario
+  };
 
   void _showOrderDetails(String? id, String? address, String? detalleHtml) {
     showDialog(
@@ -138,6 +201,8 @@ class _MapPageState extends State<MapPage> {
                       builder: (context) => OrderDetailPage(
                         detalleHtml: detalleHtml ?? '',
                         estadoNro: 1, // Ajusta según sea necesario
+                        totalPedido:
+                            0.0, // Replace 0.0 with the appropriate value
                       ),
                     ),
                   );

@@ -50,8 +50,9 @@ class CompletedOrdersPage extends StatelessWidget {
                         MaterialPageRoute(
                           builder: (context) => OrderDetailPage(
                             detalleHtml: pedido['DetalleHTML'],
-                            estadoNro: pedido[
-                                'EstadoNro'], // Add the required argument
+                            estadoNro: pedido['EstadoNro'],
+                            totalPedido:
+                                pedido['Precio'], // Added the required argument
                           ),
                         ),
                       );

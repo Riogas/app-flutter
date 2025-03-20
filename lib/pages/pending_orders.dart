@@ -102,6 +102,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         builder: (context) => OrderDetailPage(
           detalleHtml: pedido['DetalleHTML'],
           estadoNro: pedido['EstadoNro'],
+          totalPedido: pedido['Precio'], // Pass totalPedido here
         ),
       ),
     );

@@ -388,6 +388,16 @@ class _SettingsPageState extends State<SettingsPage> {
     return box.get('totalDistance', defaultValue: 0.0);
   }
 
+  Future<bool> _shouldShowDistance() async {
+    var box = await Hive.openBox('constantBox');
+    var data = box.get('80');
+
+    if (data != null) {
+      return data['Estado'] == 'A' && data['Valor'] == 'S';
+    }
+    return false;
+  }
+
   Widget _buildViewErrorsButton() {
     return Center(
       child: ElevatedButton.icon(
@@ -507,18 +517,32 @@ class _SettingsPageState extends State<SettingsPage> {
                 _generateReport),
             _buildInfoRowWithButton(Icons.verified, 'Versión de la App',
                 appVersion, Icons.update, _checkForUpdate),
-            FutureBuilder<double>(
-              future: _loadTotalDistance(),
+            FutureBuilder<bool>(
+              future: _shouldShowDistance(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return _buildInfoRow(
-                      Icons.directions_walk, 'Dist. recorrida', 'Cargando...');
-                } else if (snapshot.hasError) {
-                  return _buildInfoRow(Icons.directions_walk, 'Dist. recorrida',
-                      'Error al cargar');
+                  return SizedBox.shrink();
+                } else if (snapshot.hasData && snapshot.data == true) {
+                  return FutureBuilder<double>(
+                    future: _loadTotalDistance(),
+                    builder: (context, distanceSnapshot) {
+                      if (distanceSnapshot.connectionState ==
+                          ConnectionState.waiting) {
+                        return _buildInfoRow(Icons.directions_walk,
+                            'Dist. recorrida', 'Cargando...');
+                      } else if (distanceSnapshot.hasError) {
+                        return _buildInfoRow(Icons.directions_walk,
+                            'Dist. recorrida', 'Error al cargar');
+                      } else {
+                        return _buildInfoRow(
+                            Icons.directions_walk,
+                            'Dist. recorrida',
+                            '${distanceSnapshot.data?.toStringAsFixed(2) ?? 0.0} mts.');
+                      }
+                    },
+                  );
                 } else {
-                  return _buildInfoRow(Icons.directions_walk, 'Dist. recorrida',
-                      '${snapshot.data?.toStringAsFixed(2) ?? 0.0} mts.');
+                  return SizedBox.shrink();
                 }
               },
             ),

@@ -20,6 +20,9 @@ class LocationService {
   int _updateInterval = 30; // Intervalo por defecto en segundos
   final StreamController<LatLng> _locationStreamController =
       StreamController<LatLng>.broadcast();
+  StreamSubscription<Position>? _positionStreamSubscription;
+  LatLng? _lastPosition;
+  double _totalDistance = 0.0;
 
   /// 🔹 Permite escuchar actualizaciones de ubicación en tiempo real
   Stream<LatLng> get locationStream => _locationStreamController.stream;
@@ -220,11 +223,41 @@ class LocationService {
     print(
         '📍 Iniciando actualización de coordenadas cada $_updateInterval segundos.');
 
+    // 🔹 Configura el stream para calcular distancia recorrida en tiempo real
+    const locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+    );
+
+    _positionStreamSubscription?.cancel(); // Cancela cualquier stream previo
+    _positionStreamSubscription =
+        Geolocator.getPositionStream(locationSettings: locationSettings)
+            .listen((Position position) async {
+      LatLng newLocation = LatLng(position.latitude, position.longitude);
+
+      if (_lastPosition != null) {
+        double distance = Geolocator.distanceBetween(
+          _lastPosition!.latitude,
+          _lastPosition!.longitude,
+          newLocation.latitude,
+          newLocation.longitude,
+        );
+
+        _totalDistance += distance;
+        print(
+            '📏 Distancia recorrida: $distance mts | Total: $_totalDistance mts');
+        await _updateLocationAndDistanceInHive(newLocation, _totalDistance);
+      }
+
+      _lastPosition = newLocation;
+      _locationStreamController.add(newLocation); // 🔹 Notifica a los listeners
+    });
+
+    // 🔹 Mantiene el timer para guardar coordenadas en Firestore
     _timer?.cancel(); // Evita múltiples timers
     _timer = Timer.periodic(
       Duration(seconds: _updateInterval),
       (timer) async {
-        print('⏳ Obteniendo nuevas coordenadas...');
+        print('⏳ Obteniendo nuevas coordenadas para Firestore...');
         await _getAndShowLocation();
       },
     );
@@ -248,40 +281,17 @@ class LocationService {
           '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
 
       await _updateCoordinatesInFirestore(position);
-      await _updateLocationAndDistanceInHive(newLocation); // 🔹 Actualiza Hive
+      await _updateLocationAndDistanceInHive(
+          newLocation, _totalDistance); // 🔹 Actualiza Hive
     } catch (e) {
       print('❌ Error al obtener ubicación: $e');
     }
   }
 
   /// 🔹 Actualiza la última ubicación y la distancia total en Hive
-  Future<void> _updateLocationAndDistanceInHive(LatLng newLocation) async {
+  Future<void> _updateLocationAndDistanceInHive(
+      LatLng newLocation, double totalDistance) async {
     var box = await Hive.openBox('locationBox');
-    LatLng? lastLocation = box.get('lastLocation') != null
-        ? LatLng(
-            box.get('lastLocation')['latitude'],
-            box.get('lastLocation')['longitude'],
-          )
-        : null;
-    double totalDistance = box.get('totalDistance') ?? 0.0;
-
-    const double distanceThreshold = 5.0; // Umbral mínimo en metros
-
-    if (lastLocation != null) {
-      double distance = Geolocator.distanceBetween(
-        lastLocation.latitude,
-        lastLocation.longitude,
-        newLocation.latitude,
-        newLocation.longitude,
-      );
-
-      if (distance >= distanceThreshold) {
-        totalDistance += distance;
-      } else {
-        print(
-            '📏 Distancia ignorada: $distance mts (menor al umbral de $distanceThreshold mts)');
-      }
-    }
 
     await box.put('lastLocation', {
       'latitude': newLocation.latitude,
@@ -350,6 +360,7 @@ class LocationService {
   /// 🔹 Detiene la actualización de ubicación
   void stopLocationUpdates() {
     _timer?.cancel();
+    _positionStreamSubscription?.cancel(); // Cancela el stream de posición
     FlutterBackground.disableBackgroundExecution();
     _isBackgroundEnabled = false;
     print("⏹️ Se detuvo la actualización de coordenadas.");
