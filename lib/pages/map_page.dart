@@ -15,11 +15,14 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   LatLng? _currentPosition;
+  LatLng? _focusedPosition; // Track the map's focused position
   bool _locationPermissionDenied = false;
   final FirebaseService _firebaseService = FirebaseService();
   List<Marker> _markers = [];
   late Box constantBox;
   late Box pedidosBox;
+  final MapController _mapController =
+      MapController(); // 🟢 Agregar controlador del mapa
 
   @override
   void initState() {
@@ -94,6 +97,25 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+  void _centerMapOnUser() {
+    if (_currentPosition != null) {
+      _mapController.move(_currentPosition!,
+          15.0); // 🟢 Mover el mapa a la posición actual con zoom 15
+    }
+  }
+
+  void _centerMapOnPriorityOrder(List<QueryDocumentSnapshot> orders) {
+    if (orders.isNotEmpty) {
+      var firstOrder = orders.first;
+      var data = firstOrder.data() as Map<String, dynamic>;
+      var location = data['ubicacion'] as GeoPoint;
+
+      setState(() {
+        _focusedPosition = LatLng(location.latitude, location.longitude);
+      });
+    }
+  }
+
   void _getPendingOrders() {
     _firebaseService.getPedidosStream().listen((orders) {
       setState(() {
@@ -120,15 +142,26 @@ class _MapPageState extends State<MapPage> {
               color: pinColor, // Use the color from delayInfo
               iconSize: 40.0,
               onPressed: () {
-                _showOrderDetails(
-                  data['id'].toString(),
-                  data['ClienteDireccion'],
-                  data['DetalleHTML'],
+                // Navegar directamente a la página de detalles
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => OrderDetailPage(
+                      detalleHtml: data['DetalleHTML'] ?? '',
+                      estadoNro: 1, // Ajusta según sea necesario
+                      totalPedido: data['TotalPedido'] ??
+                          0.0, // Ajusta según sea necesario
+                    ),
+                  ),
                 );
               },
             ),
           );
         }).toList();
+
+        // Center map on the client with the longest delay or the first order
+        _centerMapOnPriorityOrder(
+            orders.cast<QueryDocumentSnapshot<Object?>>());
       });
     });
   }
@@ -227,6 +260,12 @@ class _MapPageState extends State<MapPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Mapa'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.my_location),
+            onPressed: _centerMapOnUser, // Center map on user's location
+          ),
+        ],
       ),
       body: _currentPosition == null
           ? Center(
@@ -235,8 +274,11 @@ class _MapPageState extends State<MapPage> {
                   : CircularProgressIndicator(),
             )
           : FlutterMap(
+              mapController: _mapController, // 🟢 Asignar controlador al mapa
               options: MapOptions(
-                initialCenter: _currentPosition ?? LatLng(0, 0),
+                initialCenter:
+                    _focusedPosition ?? _currentPosition ?? LatLng(0, 0),
+                initialZoom: 15.0,
                 minZoom: 5.0,
                 maxZoom: 18.0,
               ),

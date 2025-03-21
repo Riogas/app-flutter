@@ -264,32 +264,122 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<bool> _showRegisterDeviceDialog() async {
     bool shouldRegister = false;
+    TextEditingController phoneController = TextEditingController();
+    TextEditingController otpController1 = TextEditingController();
+    TextEditingController otpController2 = TextEditingController();
+    TextEditingController otpController3 = TextEditingController();
+    TextEditingController otpController4 = TextEditingController();
+    bool isWaitingForOtp = false;
+    int countdown = 30;
+
     await showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Dispositivo No Registrado'),
-          content: Text(
-              'Su dispositivo no se encuentra registrado en el sistema. ¿Desea registrarlo?'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                shouldRegister = true;
-                Navigator.of(context).pop();
-              },
-              child: Text('Registrar'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              title: Text('Registrar Dispositivo'),
+              content: isWaitingForOtp
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Ingrese el código OTP enviado a su teléfono'),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildOtpField(otpController1),
+                            _buildOtpField(otpController2),
+                            _buildOtpField(otpController3),
+                            _buildOtpField(otpController4),
+                          ],
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                            'Espere $countdown segundos para reenviar el código'),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Ingrese su número de teléfono para continuar'),
+                        TextField(
+                          controller: phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            labelText: 'Número de Teléfono',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+              actions: <Widget>[
+                if (!isWaitingForOtp)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: Text('Cancelar'),
+                  ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!isWaitingForOtp) {
+                      // TODO: Invocar servicio para enviar OTP
+                      setState(() {
+                        isWaitingForOtp = true;
+                        countdown = 30;
+                      });
+                      // Iniciar contador de 30 segundos
+                      for (int i = 0; i < 30; i++) {
+                        await Future.delayed(Duration(seconds: 1));
+                        setState(() {
+                          countdown--;
+                        });
+                      }
+                    } else {
+                      // Validar OTP ingresado
+                      String otp = otpController1.text +
+                          otpController2.text +
+                          otpController3.text +
+                          otpController4.text;
+                      if (otp.length == 4) {
+                        shouldRegister = true;
+                        Navigator.of(context).pop();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Ingrese un código OTP válido'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: Text(isWaitingForOtp ? 'Confirmar OTP' : 'Enviar OTP'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
     return shouldRegister;
+  }
+
+  Widget _buildOtpField(TextEditingController controller) {
+    return SizedBox(
+      width: 40,
+      child: TextField(
+        controller: controller,
+        maxLength: 1,
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          counterText: '',
+          border: OutlineInputBorder(),
+        ),
+      ),
+    );
   }
 
   Future<Map<String, String>> obtenerMarcaYModelo() async {

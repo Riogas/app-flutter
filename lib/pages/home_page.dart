@@ -13,6 +13,7 @@ import '../services/firebase_service.dart';
 import '../services/location_service.dart'; // 🔹 Importamos LocationService
 import '../services/riogas_service.dart'; // 🔹 Importamos LocationService
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart'; // Import Geolocator for Position
 import 'package:MoveIT/pages/login_page.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase_messaging
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Importa flutter_local_notifications
@@ -142,27 +143,131 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _listenToMessages() {
-    _firebaseService.getMensajesStream().listen((messages) {
+  void _listenToMessages() async {
+    var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
+    _firebaseService.getMensajesStream().listen((messages) async {
+      int newMessagesCount = 0;
+
+      for (var message in messages) {
+        if (!mensajesBox.containsKey(message.id)) {
+          await mensajesBox.put(message.id, 'Descargado'); // Mark as downloaded
+          newMessagesCount++;
+
+          // Parse message ID as an integer
+          final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
+          int messageId = int.parse(numericIdMatch!.group(0)!);
+
+          // Call descargaLecturaMensajes for each new message
+          var box = await Hive.openBox('sessionBox');
+          String escenario = box.get('escenario', defaultValue: '1000');
+          String movil = box.get('movil');
+          String username = box.get('username');
+          String deviceId = box.get('deviceId');
+          Position position = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.high);
+
+          print('📨 Enviando datos al servicio descargaLecturaMensajes:');
+          print('EscenarioId: ${int.parse(escenario)}');
+          print('MovilId: ${int.parse(movil)}');
+          print('MessageId: $messageId');
+          print('Usuario: $username');
+          print('NroSesion: ');
+          print('TermMobileEquipo: $deviceId');
+          print('LectDesc: LECTURA');
+          print('FechaHoraCmbEst: ${DateTime.now().toIso8601String()}');
+          print('INAux1: ');
+          print('INAux2: ');
+          print('Latitud: ${position.latitude}');
+          print('Longitud: ${position.longitude}');
+
+          await RioGasService.descargaLecturaMensajes(
+            int.parse(escenario), // escenarioId
+            int.parse(movil), // movilId
+            messageId, // messageId
+            username, // usuario
+            '', // nroSesion
+            deviceId, // termMobileEquipo
+            'DESCARGA', // lectDesc
+            DateTime.now().toIso8601String(), // fechaHoraCmbEst
+            '', // inAux1
+            '', // inAux2
+            position.latitude.toString(), // latitud
+            position.longitude.toString(), // longitud
+          );
+        }
+      }
+
+      if (newMessagesCount > 0) {
+        _showNotification(
+            'Nuevo Mensaje', 'Tienes $newMessagesCount mensajes nuevos.');
+      }
+
       setState(() {
-        _unreadMessages = messages.where((message) {
-          var data = message.data() as Map<String, dynamic>;
-          return data['FchHoraLeido'] == null;
-        }).length;
+        _unreadMessages = mensajesBox.length; // Update unread messages count
       });
     });
   }
 
   void _listenToPendingOrders() {
-    _ordersSubscription = _firebaseService.getPedidosStream().listen((orders) {
+    _ordersSubscription =
+        _firebaseService.getPedidosStream().listen((orders) async {
       setState(() {
         _newOrders = orders.length;
       });
-      // 🔹 Mostrar notificación para nuevas órdenes
-      if (orders.isNotEmpty) {
-        _showNotification('Nuevo Pedido', 'Tienes un nuevo pedido pendiente.');
+
+      for (var order in orders) {
+        var pedido = order.data() as Map<String, dynamic>; // Extract data
+        int pedidoId = pedido['id'] ?? -1; // Extract ID from the data map
+
+        var pedidosBox = await Hive.openBox('pedidosBox'); // Open pedidosBox
+
+        if (!pedidosBox.containsKey(pedidoId.toString())) {
+          await pedidosBox.put(
+              pedidoId.toString(), 'Descargado'); // Mark as "Descargado"
+          _showNotification(
+              'Nueva Visita', 'Tienes un nueva visita pendiente.');
+
+          // Call the download and read routine here
+          await _callDescargaLecturaPedidos(pedido, pedidoId);
+        }
       }
     });
+  }
+
+  Future<void> _callDescargaLecturaPedidos(
+      Map<String, dynamic> pedido, int pedidoId) async {
+    String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? '1' : '2';
+    String lectDesc = 'DESCARGA';
+    String fechaHoraCmbEst = DateTime.now().toIso8601String();
+
+    String inAux2 = '';
+
+    Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
+    String latitud = position.latitude.toString();
+    String longitud = position.longitude.toString();
+
+    var box = await Hive.openBox('sessionBox');
+    int escenarioId = int.tryParse(box.get('escenario').toString()) ?? 0;
+    String movil = box.get('movil');
+    String username = box.get('username');
+    String deviceId = box.get('deviceId');
+    String inAux1 = deviceId;
+
+    await RioGasService.descargaLecturaPedidos(
+      escenarioId,
+      pedidoId,
+      pedidoTpo,
+      username,
+      'NroSesion', // Replace with actual session number if available
+      deviceId,
+      lectDesc,
+      fechaHoraCmbEst,
+      inAux1,
+      inAux2,
+      latitud,
+      longitud,
+    );
   }
 
   void _listenToFirestoreChanges() {
@@ -173,7 +278,7 @@ class _HomePageState extends State<HomePage> {
       for (var doc in snapshot.docChanges) {
         if (doc.type == DocumentChangeType.added) {
           _showNotification(
-              'Nuevo Pedido', 'Tienes un nuevo pedido pendiente.');
+              'Nueva Visita', 'Tienes un nueva visita pendiente.');
         }
       }
     });

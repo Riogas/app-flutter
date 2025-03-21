@@ -123,7 +123,11 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? '1' : '2';
     String lectDesc = 'LECTURA';
     String fechaHoraCmbEst = DateTime.now().toIso8601String();
-    String inAux1 = '';
+
+    var box = await Hive.openBox('sessionBox');
+    String deviceId = box.get('deviceId');
+
+    String inAux1 = deviceId;
     String inAux2 = '';
 
     Position position = await Geolocator.getCurrentPosition(

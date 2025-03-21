@@ -8,6 +8,8 @@ import 'package:intl/intl.dart'; // Import the intl package for date formatting
 import '../services/location_service.dart'; // Import the LocationService
 import 'package:geolocator/geolocator.dart'; // Import the Geolocator package
 import 'package:hive/hive.dart'; // Import the Hive package
+import 'package:firebase_messaging/firebase_messaging.dart'; // Import Firebase Messaging
+import 'package:firebase_core/firebase_core.dart'; // Import Firebase Core
 
 class MessagePage extends StatefulWidget {
   @override
@@ -18,6 +20,8 @@ class _MessagePageState extends State<MessagePage> {
   final FirebaseService _firebaseService = FirebaseService();
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
+  final FirebaseMessaging _firebaseMessaging =
+      FirebaseMessaging.instance; // Add FirebaseMessaging instance
   List<String> _readMessageIds = [];
   StreamSubscription<List<DocumentSnapshot>>? _messageSubscription;
 
@@ -26,6 +30,7 @@ class _MessagePageState extends State<MessagePage> {
     super.initState();
     _initializeNotifications();
     _listenToMessages();
+    _setupFCM(); // Initialize FCM for background notifications
   }
 
   @override
@@ -42,15 +47,59 @@ class _MessagePageState extends State<MessagePage> {
     flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 
-  void _listenToMessages() {
+  void _listenToMessages() async {
+    var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
     _messageSubscription =
         _firebaseService.getMensajesStream().listen((messages) {
       if (mounted) {
         setState(() {
-          _checkForNewMessages(messages);
+          _readMessageIds =
+              mensajesBox.keys.cast<String>().toList(); // Use Hive data
         });
       }
     });
+  }
+
+  void _setupFCM() {
+    // Subscribe to a topic for messages
+    _firebaseMessaging.subscribeToTopic('messages');
+
+    // Handle foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null) {
+        _showForegroundNotification(message.notification!);
+      }
+    });
+
+    // Handle background messages (optional, already handled in main.dart)
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
+
+  Future<void> _showForegroundNotification(
+      RemoteNotification notification) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'messages_channel_id',
+      'Messages Notifications',
+      channelDescription: 'Notifications for new messages',
+      importance: Importance.max,
+      priority: Priority.high,
+      showWhen: true,
+    );
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.show(
+      notification.hashCode,
+      notification.title,
+      notification.body,
+      platformChannelSpecifics,
+    );
+  }
+
+  static Future<void> _firebaseMessagingBackgroundHandler(
+      RemoteMessage message) async {
+    await Firebase.initializeApp();
+    print('Handling a background message: ${message.messageId}');
   }
 
   void _checkForNewMessages(List<DocumentSnapshot> messages) {
