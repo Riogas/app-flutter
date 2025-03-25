@@ -42,17 +42,23 @@ class FirebaseService {
   }
 
   Future<bool> checkFirestoreConnectivity() async {
-    print('🔍 Checking Firestore connectivity...');
+    print('🔍 Checking Firestore connectivity via stream status...');
     try {
-      print('📡 Attempting to fetch a test document from Firestore...');
-      await _firestore.collection('test').limit(1).get();
-      print('✅ Firestore connectivity verified successfully.');
-      await _updateConnectionErrorState(
-          false); // Reset error state on successful connection
+      // Use an existing Firestore stream to check connectivity
+      var testStream = _firestore.collection('test').snapshots();
+      var subscription = testStream.listen((event) {
+        // If the stream receives data, Firestore is connected
+        print('✅ Firestore stream is active.');
+      });
+
+      // Wait briefly to ensure the stream is active
+      await Future.delayed(Duration(seconds: 2));
+      await subscription.cancel(); // Cancel the temporary subscription
+      await _updateConnectionErrorState(false); // Reset error state
       return true;
     } catch (e) {
-      print('❌ No Firestore connectivity detected: $e');
-      await _updateConnectionErrorState(true); // Set error state on failure
+      print('❌ Firestore stream connectivity issue: $e');
+      await _updateConnectionErrorState(true); // Set error state
       return false;
     }
   }

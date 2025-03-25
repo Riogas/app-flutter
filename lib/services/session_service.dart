@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:path_provider/path_provider.dart';
 
 class SessionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -122,6 +123,25 @@ class SessionService {
         // 🔹 Eliminar el documento "activo" actual
         await ultimaDocRef.delete();
         print('Documento "activo" borrado correctamente.');
+
+        final dir = await getApplicationDocumentsDirectory();
+        final hiveDir =
+            Directory('${dir.path}/'); // o Hive.defaultPath si lo configuraste
+
+        if (await hiveDir.exists()) {
+          final files = hiveDir.listSync();
+
+          for (var file in files) {
+            if (file is File && file.path.endsWith('.hive')) {
+              try {
+                await file.delete();
+                print('Archivo eliminado: ${file.path}');
+              } catch (e) {
+                print('Error eliminando ${file.path}: $e');
+              }
+            }
+          }
+        }
       }
 
       if (tipoDeCierreDeSesion == "" ||

@@ -224,11 +224,11 @@ class _SettingsPageState extends State<SettingsPage> {
     var response = await RioGasService.validarVersion(appVersion, deviceId!);
 
     if (response != null) {
-      if (response['Ultversion'] == appVersion) {
+      if (response['Ultversion'] == '') {
         _showMessage(response['message']);
       } else {
         _showUpdateDialog(
-          'Existe una nueva versión de la aplicación. ¿Desea realizar la actualización?',
+          response['message'],
           response['link'],
         );
       }

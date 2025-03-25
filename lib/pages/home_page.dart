@@ -19,13 +19,15 @@ import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Importa flutter_local_notifications
 import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivity_plus
 import '../services/counter_service.dart'; // Import the new CounterService
+import '../utils/connection_check.dart';
 
 class HomePage extends StatefulWidget {
   @override
   _HomePageState createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
   final FirebaseService _firebaseService = FirebaseService();
   late StreamSubscription<LatLng>
       _locationSubscription; // 🔹 Guardamos la suscripción
@@ -41,6 +43,11 @@ class _HomePageState extends State<HomePage> {
   late StreamSubscription _connectivitySubscription;
   final CounterService _counterService =
       CounterService(); // Initialize CounterService
+  late AnimationController _blinkController;
+  late Timer _connectivityCheckTimer; // Add a Timer for periodic checks
+  final ConnectionCheck _connectionCheck = ConnectionCheck();
+  final ValueNotifier<Map<String, dynamic>> _connectionStatusNotifier =
+      ValueNotifier({'network': true, 'firestore': true, 'riogas': true});
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -53,6 +60,10 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _blinkController = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    )..repeat(reverse: true); // Blinking effect
     _initializeHomePage();
 
     // 🔹 Resetear la bandera para futuros chequeos de sesión
@@ -83,10 +94,22 @@ class _HomePageState extends State<HomePage> {
       intervalSeconds: 10,
       onTick: _checkConnectivityAndPerformAction,
     );
+
+    // 🔹 Inicializar la verificación de conectividad periódica
+    _connectivityCheckTimer = Timer.periodic(
+      Duration(seconds: 30),
+      (timer) => _checkInternetConnectivity(),
+    );
+
+    _connectionCheck.startMonitoring();
+    _connectionCheck.connectionStatusStream.listen((status) {
+      _connectionStatusNotifier.value = status; // Update only the notifier
+    });
   }
 
   @override
   void dispose() {
+    _blinkController.dispose(); // Dispose the animation controller
     _counterService.stopCounter(); // Stop the counter when disposing
     _ordersSubscription.cancel();
     _locationServiceCompleter.future.then((_) {
@@ -96,6 +119,9 @@ class _HomePageState extends State<HomePage> {
     });
     _connectivitySubscription
         .cancel(); // 🔹 Cancelar la suscripción de conectividad
+    _connectivityCheckTimer.cancel(); // Cancel the timer when disposing
+    _connectionCheck.stopMonitoring();
+    _connectionStatusNotifier.dispose(); // Dispose the notifier
     super.dispose();
   }
 
@@ -427,34 +453,27 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.all(8.0),
             child: GestureDetector(
               onTap: () => _showConnectivityDialog(context),
-              child: FutureBuilder(
-                future: Hive.openBox('conexionBox'),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return Icon(Icons.network_cell, color: Colors.grey);
-                  }
-
-                  var box = Hive.box('conexionBox');
-                  print("📦 Contenido de conexionBox:");
-                  box.toMap().forEach((key, value) => print('$key: $value'));
-                  bool conexionFirestore =
-                      box.get('conexionFirestore', defaultValue: true);
-                  bool conexionRioGas =
-                      box.get('conexionRioGas', defaultValue: true);
-                  var connectivityResult = Connectivity().checkConnectivity();
-
-                  Color antennaColor;
-                  if (connectivityResult == ConnectivityResult.none) {
-                    antennaColor = Colors.grey;
-                  } else if (conexionFirestore && !conexionRioGas) {
-                    antennaColor = Colors.yellow;
-                  } else if (!conexionFirestore && !conexionRioGas) {
-                    antennaColor = Colors.red;
-                  } else {
-                    antennaColor = Colors.green;
-                  }
-
-                  return Icon(Icons.network_cell, color: antennaColor);
+              child: ValueListenableBuilder<Map<String, dynamic>>(
+                valueListenable: _connectionStatusNotifier,
+                builder: (context, connectionStatus, child) {
+                  Color antennaColor = _getAntennaColor(connectionStatus);
+                  bool shouldBlink = antennaColor != Colors.green;
+                  return Stack(
+                    children: [
+                      AnimatedBuilder(
+                        animation: _blinkController,
+                        builder: (context, child) {
+                          return Opacity(
+                            opacity: shouldBlink
+                                ? (_blinkController.value > 0.5 ? 1.0 : 0.0)
+                                : 1.0,
+                            child:
+                                Icon(Icons.network_cell, color: antennaColor),
+                          );
+                        },
+                      ),
+                    ],
+                  );
                 },
               ),
             ),
@@ -765,5 +784,16 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       return 'N/A'; // Return 'N/A' if parsing fails
     }
+  }
+
+  Color _getAntennaColor(Map<String, dynamic> connectionStatus) {
+    if (!connectionStatus['network']) return Colors.grey;
+    if (!connectionStatus['firestore'] && !connectionStatus['riogas']) {
+      return Colors.red;
+    }
+    if (!connectionStatus['firestore'] || !connectionStatus['riogas']) {
+      return Colors.yellow;
+    }
+    return Colors.green;
   }
 }
