@@ -58,10 +58,16 @@ class AuthService {
     return response != null ? response['Existe'] ?? false : false;
   }
 
-  static Future<bool> registerDevice(String deviceId, String document,
-      String version, String marca, String modelo, String info) async {
+  static Future<bool> registerDevice(
+      String deviceId,
+      String document,
+      String version,
+      String number,
+      String marca,
+      String modelo,
+      String info) async {
     var response = await RioGasService.registrarDispositivo(
-        deviceId, document, version, marca, modelo, info);
+        deviceId, document, version, number, marca, modelo, info);
     return response != null ? response['success'] ?? false : false;
   }
 }

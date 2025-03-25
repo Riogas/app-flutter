@@ -17,6 +17,8 @@ class LocationService {
   Timer? _timer;
   bool _locationPermissionDenied = false;
   bool _isBackgroundEnabled = false;
+  bool _isUpdateEnabled =
+      false; // 🔹 Tracks if updates to Firestore are allowed
   int _updateInterval = 30; // Intervalo por defecto en segundos
   final StreamController<LatLng> _locationStreamController =
       StreamController<LatLng>.broadcast();
@@ -58,23 +60,37 @@ class LocationService {
   /// 🔹 Carga el intervalo de actualización desde Hive
   Future<bool> _loadUpdateInterval() async {
     var box = await Hive.openBox('constantBox');
+    var sessionBox = await Hive.openBox('sessionBox');
+    var escenario = sessionBox.get('escenario');
+
     var data = box.get('31');
+
+    String? valorEscenarioKey = 'ValorEscenario$escenario';
+    String? valorFinal;
 
     if (data != null) {
       print("📦 Contenido del documento con ID '31': $data");
 
       if (data['Estado'] == 'A') {
-        _updateInterval =
-            _parseUpdateInterval(data['Valor']); // Convertir a int
+        _isUpdateEnabled = true; // 🔹 Enable updates
+        if (data.containsKey(valorEscenarioKey) &&
+            data[valorEscenarioKey] != null) {
+          valorFinal = data[valorEscenarioKey]; // Prioritize ValorEscenario
+        } else {
+          valorFinal = data['Valor']; // Default to Valor
+        }
+        _updateInterval = _parseUpdateInterval(valorFinal); // Convertir a int
         print(
             "✅ Estado es 'A'. Intervalo de actualización configurado a $_updateInterval segundos.");
         return true;
       } else {
+        _isUpdateEnabled = false; // 🔹 Disable updates
         print(
             "❌ Estado no es 'A'. No se iniciarán las actualizaciones de ubicación.");
         return false;
       }
     } else {
+      _isUpdateEnabled = false; // 🔹 Disable updates
       print(
           "❌ No se encontró el documento con ID '31'. No se iniciarán las actualizaciones de ubicación.");
       return false;
@@ -321,6 +337,11 @@ class LocationService {
   }
 
   Future<void> _updateCoordinatesInFirestore(Position position) async {
+    if (!_isUpdateEnabled) {
+      print('⚠️ Actualización de coordenadas en Firestore deshabilitada.');
+      return; // 🔹 Skip updates if not enabled
+    }
+
     var box = await Hive.openBox('sessionBox');
     String? escenario = box.get('escenario');
     String? movil = box.get('movil');

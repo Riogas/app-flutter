@@ -53,6 +53,8 @@ class CompletedOrdersPage extends StatelessWidget {
                             estadoNro: pedido['EstadoNro'],
                             totalPedido:
                                 pedido['Precio'], // Added the required argument
+                            codPedido: pedido['id'],
+                            pedidoTipo: pedido['Tipo'],
                           ),
                         ),
                       );

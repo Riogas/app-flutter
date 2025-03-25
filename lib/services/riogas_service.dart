@@ -113,14 +113,18 @@ class RioGasService {
       String deviceId,
       String documento,
       String version,
+      String number,
       String marca,
       String modelo,
       String info) {
     return _post('RegistrarDispositivo', {
-      'DeviceId': deviceId, 'Documento': documento, 'version': version,
-      'Marca': marca, // Update this line
-      'Modelo': modelo, // Update this line
-      'Info': info // Update this line
+      'DeviceId': deviceId,
+      'Documento': documento,
+      'version': version,
+      'numero': number,
+      'Marca': marca,
+      'Modelo': modelo,
+      'Info': info
     });
   }
 

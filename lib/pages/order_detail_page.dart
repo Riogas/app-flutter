@@ -11,12 +11,15 @@ class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
   final int estadoNro;
   final double totalPedido; // Add this parameter
+  final int codPedido;
+  final String pedidoTipo;
 
-  OrderDetailPage({
-    required this.detalleHtml,
-    required this.estadoNro,
-    required this.totalPedido, // Initialize it
-  });
+  OrderDetailPage(
+      {required this.detalleHtml,
+      required this.estadoNro,
+      required this.totalPedido, // Initialize it
+      required this.codPedido,
+      required this.pedidoTipo});
 
   @override
   _OrderDetailPageState createState() => _OrderDetailPageState();
@@ -299,9 +302,23 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
   void _checkConstantAndProceed(BuildContext context) async {
     var box = await Hive.openBox('constantBox');
+    var sessionBox = await Hive.openBox('sessionBox');
+    var escenario = sessionBox.get('escenario');
     var data = box.get('70');
 
-    if (data != null && data['Estado'] == 'A' && data['Valor'] == 'S') {
+    String? valorEscenarioKey = 'ValorEscenario$escenario';
+    String? valorFinal;
+
+    if (data != null) {
+      if (data.containsKey(valorEscenarioKey) &&
+          data[valorEscenarioKey] != null) {
+        valorFinal = data[valorEscenarioKey]; // Prioritize ValorEscenario
+      } else {
+        valorFinal = data['Valor']; // Default to Valor
+      }
+    }
+
+    if (data != null && data['Estado'] == 'A' && valorFinal == 'S') {
       _showPaymentModal(context); // Show payment modal if conditions are met
     } else {
       // Execute the service directly if conditions are not met
@@ -315,12 +332,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       }
 
       var pedidoBox = await Hive.openBox('pedidoBox');
+      var sessionBox = await Hive.openBox('sessionBox');
       var pedido = pedidoBox.get('pedido');
-      var escenario = pedido['escenario'];
-      var usuario = pedido['username'];
-      var pedidoId = pedido['id'];
-      var tipo = pedido['tipo'];
-      var pedidoTpo = tipo == 'Pedidos' ? 1 : 2;
+      var escenario = sessionBox.get('escenario');
+      var usuario = sessionBox.get('username');
+      var pedidoId = widget.codPedido;
+      var pedidoTpo = widget.pedidoTipo;
       var currentLocation = await LocationService().getCurrentLocation();
 
       if (currentLocation == null) {
@@ -335,7 +352,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       var response = await RioGasService.finalizarPedido(
         escenario,
         pedidoId,
-        pedidoTpo.toString(),
+        pedidoTpo,
         usuario,
         _observaciones ?? '',
         '',

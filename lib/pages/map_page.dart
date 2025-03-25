@@ -151,6 +151,8 @@ class _MapPageState extends State<MapPage> {
                       estadoNro: 1, // Ajusta según sea necesario
                       totalPedido: data['TotalPedido'] ??
                           0.0, // Ajusta según sea necesario
+                      codPedido: data['id'],
+                      pedidoTipo: data['Tipo'],
                     ),
                   ),
                 );
@@ -208,52 +210,6 @@ class _MapPageState extends State<MapPage> {
     "Yellow": Colors.orange,
     // Agrega más colores según sea necesario
   };
-
-  void _showOrderDetails(String? id, String? address, String? detalleHtml) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Número: $id'),
-        content: Text(address ?? 'Desconocida'),
-        actions: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                },
-                child: Text('Cerrar'),
-              ),
-              TextButton(
-                onPressed: () {
-                  // Navegar a la página de detalles
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => OrderDetailPage(
-                        detalleHtml: detalleHtml ?? '',
-                        estadoNro: 1, // Ajusta según sea necesario
-                        totalPedido:
-                            0.0, // Replace 0.0 with the appropriate value
-                      ),
-                    ),
-                  );
-                },
-                child: Text('Ver Detalle'),
-              ),
-              TextButton(
-                onPressed: () {
-                  // Espacio para redirección a URL de llamada
-                },
-                child: Text('Llamar'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {

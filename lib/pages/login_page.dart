@@ -29,6 +29,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isDeviceRegistered = true;
   List<String> _availableMoviles = [];
   bool _wasActiveSessionForAnotherUser = false;
+  String _phoneNumber = ''; // Global variable to store the phone number
 
   @override
   void initState() {
@@ -324,6 +325,10 @@ class _LoginPageState extends State<LoginPage> {
                         TextField(
                           controller: phoneController,
                           keyboardType: TextInputType.phone,
+                          onChanged: (value) {
+                            _phoneNumber =
+                                value; // Save the phone number to the global variable
+                          },
                           decoration: InputDecoration(
                             labelText: 'Número de Teléfono',
                             border: OutlineInputBorder(),
@@ -527,8 +532,8 @@ class _LoginPageState extends State<LoginPage> {
       String modelo = deviceInfo['modelo']!;
       String info = '';
 
-      final response = await RioGasService.registrarDispositivo(
-          _deviceId, document, _appNroVersion, marca, modelo, info);
+      final response = await RioGasService.registrarDispositivo(_deviceId,
+          document, _appNroVersion, _phoneNumber, marca, modelo, info);
 
       if (response != null && response['OK'] == 0) {
         var box = await Hive.openBox('sessionBox');
