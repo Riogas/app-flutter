@@ -478,6 +478,10 @@ petitparser
 3.2
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/petitparser-6.0.2/
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/petitparser-6.0.2/lib/
+pin_input_text_field
+2.13
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/pin_input_text_field-4.5.2/
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/pin_input_text_field-4.5.2/lib/
 platform
 3.2
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/platform-3.1.6/
@@ -526,6 +530,10 @@ shelf_web_socket
 3.5
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/shelf_web_socket-3.0.0/
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/shelf_web_socket-3.0.0/lib/
+sms_autofill
+3.0
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/sms_autofill-2.4.1/
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/sms_autofill-2.4.1/lib/
 source_gen
 3.0
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/source_gen-1.5.0/

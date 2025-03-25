@@ -508,16 +508,14 @@ class _HomePageState extends State<HomePage>
                       (element) =>
                           int.tryParse(element['SubEstadoCod'].toString()) ==
                           estadoNro,
-                      orElse: () => {
-                        'SubEstadoDesc': 'Desconocido',
-                        'CodColor': '000000'
-                      },
+                      orElse: () =>
+                          {'DescCombo': 'Desconocido', 'CodColor': '000000'},
                     );
 
                     print(
                         'Matched SubEstado: $subEstado'); // Log matched subEstado
 
-                    String estadoText = subEstado['SubEstadoDesc'];
+                    String estadoText = subEstado['TipoEstado'];
                     String codColor = subEstado['CodColor'];
                     List<String> rgb = codColor.split(',');
                     String hexColor = rgb.length == 3
@@ -665,6 +663,8 @@ class _HomePageState extends State<HomePage>
 
   void _showEstadoDropdown(
       BuildContext context, String movilId, int currentEstado) {
+    int? selectedEstado; // Variable to store the selected state
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -677,27 +677,47 @@ class _HomePageState extends State<HomePage>
                 return Center(child: CircularProgressIndicator());
               }
 
-              var subEstados = snapshot.data!;
+              var subEstados = snapshot.data!
+                  .where((subEstado) =>
+                      subEstado['VisibleEnCombo'] == true &&
+                      int.tryParse(subEstado['SubEstadoCod'].toString()) !=
+                          currentEstado) // Exclude the current state
+                  .toList();
+
               return DropdownButton<int>(
-                value: currentEstado,
+                value: selectedEstado,
+                hint: Text('Selecciona un estado'),
                 items: subEstados.map((subEstado) {
                   int subEstadoCod =
                       int.tryParse(subEstado['SubEstadoCod'].toString()) ?? -1;
                   return DropdownMenuItem(
                     value: subEstadoCod,
-                    child: Text(subEstado['SubEstadoDesc']),
+                    child: Text(subEstado['DescCombo']),
                   );
                 }).toList(),
-                onChanged: (int? newValue) async {
-                  if (newValue != null) {
-                    await RioGasService.actualizarMovilesEstado(
-                        int.parse(movilId), newValue);
-                    Navigator.of(context).pop();
-                  }
+                onChanged: (int? newValue) {
+                  selectedEstado = newValue; // Update the selected state
                 },
               );
             },
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(), // Close dialog
+              child: Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (selectedEstado != null) {
+                  await RioGasService.actualizarMovilesEstado(
+                      int.parse(movilId), selectedEstado!);
+                  Navigator.of(context)
+                      .pop(); // Close dialog after confirmation
+                }
+              },
+              child: Text('Confirmar'),
+            ),
+          ],
         );
       },
     );

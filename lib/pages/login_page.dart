@@ -11,6 +11,8 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
+import 'dart:math'; // Add this import for random number generation
+import 'package:sms_autofill/sms_autofill.dart'; // Import SmsAutoFill package
 
 class LoginPage extends StatefulWidget {
   @override
@@ -272,6 +274,12 @@ class _LoginPageState extends State<LoginPage> {
     bool isWaitingForOtp = false;
     int countdown = 30;
 
+    final appSignature = await SmsAutoFill().getAppSignature;
+    print("📲 App Signature: $appSignature");
+
+    // Escucha del SMS con el código
+    SmsAutoFill().listenForCode();
+
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -324,12 +332,57 @@ class _LoginPageState extends State<LoginPage> {
                 ElevatedButton(
                   onPressed: () async {
                     if (!isWaitingForOtp) {
-                      // TODO: Invocar servicio para enviar OTP
+                      // Generate a random 4-digit OTP
+                      int generatedOtp = Random().nextInt(9000) + 1000;
+
+                      // Save the OTP in Hive
+                      var otpBox = await Hive.openBox('OTPBOX');
+                      await otpBox.put('generatedOtp', generatedOtp);
+
+                      String phoneNumber = phoneController.text;
+
+                      // ✉️ Formato del mensaje que vas a enviar:
+                      String smsText =
+                          "Tu código OTP es $generatedOtp\n\nWasneakers\n$appSignature";
+
+                      // 📡 Invoca el servicio que envía el SMS
+                      var response = await RioGasService.enviarOTP(
+                        int.parse(phoneNumber),
+                        generatedOtp,
+                        smsText, // <--- envía el mensaje formateado
+                      );
+
+                      if (response != null && response['OK'] == 0) {
+                        print('✅ OTP enviado exitosamente.');
+                      } else {
+                        print('❌ Error al enviar OTP.');
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error al enviar OTP.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+
+                      // Empieza a escuchar automáticamente el código con sms_autofill
                       setState(() {
                         isWaitingForOtp = true;
                         countdown = 30;
                       });
-                      // Iniciar contador de 30 segundos
+
+                      // Escuchar el código automáticamente
+                      SmsAutoFill().code.listen((receivedCode) {
+                        if (receivedCode.length == 4) {
+                          otpController1.text = receivedCode[0];
+                          otpController2.text = receivedCode[1];
+                          otpController3.text = receivedCode[2];
+                          otpController4.text = receivedCode[3];
+                          print('✅ OTP auto-completado: $receivedCode');
+                        }
+                      });
+
+                      // Inicia la cuenta regresiva
                       for (int i = 0; i < 30; i++) {
                         await Future.delayed(Duration(seconds: 1));
                         setState(() {
@@ -337,18 +390,21 @@ class _LoginPageState extends State<LoginPage> {
                         });
                       }
                     } else {
-                      // Validar OTP ingresado
+                      // Validar el código ingresado
                       String otp = otpController1.text +
                           otpController2.text +
                           otpController3.text +
                           otpController4.text;
-                      if (otp.length == 4) {
+                      var otpBox = await Hive.openBox('OTPBOX');
+                      String storedOtp = otpBox.get('generatedOtp').toString();
+
+                      if (otp.length == 4 && otp == storedOtp) {
                         shouldRegister = true;
                         Navigator.of(context).pop();
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Ingrese un código OTP válido'),
+                            content: Text('Código OTP incorrecto.'),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -363,6 +419,9 @@ class _LoginPageState extends State<LoginPage> {
         );
       },
     );
+
+    SmsAutoFill().unregisterListener(); // detener escucha cuando se cierra
+
     return shouldRegister;
   }
 

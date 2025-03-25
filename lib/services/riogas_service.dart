@@ -300,4 +300,14 @@ class RioGasService {
       'INAux2': '',
     });
   }
+
+  static Future<Map<String, dynamic>?> enviarOTP(
+      int nroTelefono, int codigoOTP, String hash) {
+    return _post('EnviarOTP', {
+      'token': token,
+      'nroTelefono': nroTelefono,
+      'codigoOTP': codigoOTP,
+      'hash': hash,
+    });
+  }
 }
