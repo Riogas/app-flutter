@@ -311,7 +311,10 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         SizedBox(height: 10),
                         Text(
-                            'Espere $countdown segundos para reenviar el código'),
+                          countdown > 0
+                              ? 'Espere $countdown segundos para reenviar el código'
+                              : '¿No recibió el código?',
+                        ),
                       ],
                     )
                   : Column(
@@ -336,34 +339,72 @@ class _LoginPageState extends State<LoginPage> {
                     },
                     child: Text('Cancelar'),
                   ),
+                if (isWaitingForOtp)
+                  TextButton(
+                    onPressed: countdown == 0
+                        ? () async {
+                            // Reenviar OTP
+                            int generatedOtp = Random().nextInt(9000) + 1000;
+                            var otpBox = await Hive.openBox('OTPBOX');
+                            await otpBox.put('generatedOtp', generatedOtp);
+
+                            String phoneNumber = phoneController.text;
+                            String smsText =
+                                "Tu%20codigo%20de%20ingreso%20a%20MoveIT%20es%20$generatedOtp%20%20$appSignature";
+
+                            var response = await RioGasService.enviarOTP(
+                              int.parse(phoneNumber),
+                              generatedOtp,
+                              smsText,
+                            );
+
+                            if (response != null && response['OK'] == 0) {
+                              print('🔄 OTP reenviado.');
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error al reenviar OTP.'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            setState(() {
+                              countdown = 30;
+                            });
+
+                            for (int i = 0; i < 30; i++) {
+                              await Future.delayed(Duration(seconds: 1));
+                              if (!context.mounted) return;
+                              setState(() {
+                                countdown--;
+                              });
+                            }
+                          }
+                        : null,
+                    child: Text('Reenviar Código'),
+                  ),
                 ElevatedButton(
                   onPressed: () async {
                     if (!isWaitingForOtp) {
-                      // Generate a random 4-digit OTP
                       int generatedOtp = Random().nextInt(9000) + 1000;
-
-                      // Save the OTP in Hive
                       var otpBox = await Hive.openBox('OTPBOX');
                       await otpBox.put('generatedOtp', generatedOtp);
 
                       String phoneNumber = phoneController.text;
-
-                      // ✉️ Formato del mensaje que vas a enviar:
                       String smsText =
                           "Tu%20codigo%20de%20ingreso%20a%20MoveIT%20es%20$generatedOtp%20%20$appSignature";
 
-                      // 📡 Invoca el servicio que envía el SMS
                       var response = await RioGasService.enviarOTP(
                         int.parse(phoneNumber),
                         generatedOtp,
-                        smsText, // <--- envía el mensaje formateado
+                        smsText,
                       );
 
                       if (response != null && response['OK'] == 0) {
-                        print(response['url']);
                         print('✅ OTP enviado exitosamente.');
                       } else {
-                        print('❌ Error al enviar OTP.');
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Error al enviar OTP.'),
@@ -373,32 +414,40 @@ class _LoginPageState extends State<LoginPage> {
                         return;
                       }
 
-                      // Empieza a escuchar automáticamente el código con sms_autofill
                       setState(() {
                         isWaitingForOtp = true;
                         countdown = 30;
                       });
 
-                      // Escuchar el código automáticamente
-                      SmsAutoFill().code.listen((receivedCode) {
+                      // Escuchar código
+                      SmsAutoFill().code.listen((receivedCode) async {
                         if (receivedCode.length == 4) {
                           otpController1.text = receivedCode[0];
                           otpController2.text = receivedCode[1];
                           otpController3.text = receivedCode[2];
                           otpController4.text = receivedCode[3];
-                          print('✅ OTP auto-completado: $receivedCode');
+
+                          var otpBox = await Hive.openBox('OTPBOX');
+                          String storedOtp =
+                              otpBox.get('generatedOtp').toString();
+
+                          if (receivedCode == storedOtp) {
+                            print(
+                                '✅ OTP auto-completado y validado: $receivedCode');
+                            shouldRegister = true;
+                            if (context.mounted) Navigator.of(context).pop();
+                          }
                         }
                       });
 
-                      // Inicia la cuenta regresiva
                       for (int i = 0; i < 30; i++) {
                         await Future.delayed(Duration(seconds: 1));
+                        if (!context.mounted) return;
                         setState(() {
                           countdown--;
                         });
                       }
                     } else {
-                      // Validar el código ingresado
                       String otp = otpController1.text +
                           otpController2.text +
                           otpController3.text +
