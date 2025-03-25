@@ -128,7 +128,7 @@ class SessionService {
         final hiveDir =
             Directory('${dir.path}/'); // o Hive.defaultPath si lo configuraste
 
-        if (await hiveDir.exists()) {
+        if (await hiveDir.exists() && tipoDeCierreDeSesion == "logoutUser") {
           final files = hiveDir.listSync();
 
           for (var file in files) {

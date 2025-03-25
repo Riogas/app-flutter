@@ -18,6 +18,7 @@ import 'dart:io'; // Importa dart:io para usar Platform
 import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivity_plus
 import 'package:http/http.dart'
     as http; // Importa http para realizar solicitudes HTTP
+import 'package:cloud_firestore/cloud_firestore.dart'; // Importa cloud_firestore para usar Firestore
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -48,6 +49,16 @@ void main() async {
 
   // 🔹 Verificar configuraciones de batería y actividad en segundo plano
   await _checkBatteryAndBackgroundSettings();
+
+  // 🔹 Verificar sesión activa
+  bool hasActiveSession = await _checkActiveSession(
+    {}, // Replace with actual response data if available
+    null, // Replace with actual selectedMovil if available
+  );
+
+  if (!hasActiveSession) {
+    isLoggedIn = false; // Redirect to login if no active session
+  }
 
   WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
   runApp(MyApp(isLoggedIn: isLoggedIn));
@@ -342,6 +353,68 @@ void _showUpdateDialog(String message, String link) {
       },
     );
   });
+}
+
+Future<bool> _checkActiveSession(
+    Map<String, dynamic> response, String? selectedMovil) async {
+  print('📦 Abriendo caja Hive: sessionBox...');
+  var box = await Hive.openBox('sessionBox');
+
+  String? escenario = box.get('escenario')?.toString();
+  String? idUsuario = box.get('username');
+  String? idTerminal = box.get('deviceId');
+  String? nombreUsuario = box.get('NombreUsuario');
+
+  print('🔍 Datos recuperados de Hive:');
+  print('   ➤ Escenario: $escenario');
+  print('   ➤ Usuario: $idUsuario');
+  print('   ➤ Terminal: $idTerminal');
+  print('   ➤ NombreUsuario: $nombreUsuario');
+
+  // Verificar si hay datos en sessionBox
+  if (escenario == null ||
+      idUsuario == null ||
+      idTerminal == null ||
+      nombreUsuario == null) {
+    print(
+        '⚠️ Falta información en sessionBox. No se puede validar sesión activa.');
+    return false;
+  }
+
+  String hoy =
+      DateTime.now().toIso8601String().split('T')[0].replaceAll('-', '');
+  String path = 'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
+
+  print('📄 Consultando documento Firestore: $path');
+
+  DocumentReference ultimaDocRef = FirebaseFirestore.instance
+      .collection('Sesiones-$escenario')
+      .doc(hoy)
+      .collection('Movil-$selectedMovil')
+      .doc('activo');
+
+  DocumentSnapshot activeDocSnapshot;
+
+  try {
+    activeDocSnapshot = await ultimaDocRef.get();
+    print('✅ Documento Firestore obtenido correctamente.');
+  } catch (e) {
+    if (e is FirebaseException && e.code == 'permission-denied') {
+      print('❌ Error de permisos al acceder a Firestore: ${e.message}');
+      return false;
+    } else {
+      print('❌ Error inesperado al acceder a Firestore: $e');
+      rethrow;
+    }
+  }
+
+  if (activeDocSnapshot.exists) {
+    var data = activeDocSnapshot.data() as Map<String, dynamic>;
+    if (data['idUsuario'] != idUsuario || data['idTerminal'] != idTerminal) {
+      return false;
+    }
+  }
+  return true;
 }
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();

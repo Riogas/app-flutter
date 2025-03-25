@@ -467,14 +467,19 @@ class FirebaseService {
     yield* movilStream;
   }
 
-  Future<void> updateMovilEstado(String movilId, int estado) async {
+  Future<void> updateMovilEstado(int estado) async {
     var box = await Hive.openBox('sessionBox');
+    var movilid = await box.get('movil');
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'Moviles-$escenarioId';
+    String documentName = 'Moviles-$movilid';
+
+    print('Updating movil estado to $estado');
+    print('Movil ID: $movilid');
 
     await _firestore
         .collection(collectionName)
-        .doc(movilId)
+        .doc(documentName)
         .update({'EstadoNro': estado}).catchError((error) async {
       print('Error updating movil estado: $error');
       await _logError('Firestore Error', error.toString());

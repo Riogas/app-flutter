@@ -38,10 +38,17 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _loadLastUsername() async {
+    print('📦 Abriendo caja Hive: usuarioBox...');
     var usuarioBox = await Hive.openBox('usuarioBox');
+
+    print('🔍 Buscando clave "lastUsername"...');
     String? lastUsername = usuarioBox.get('lastUsername');
+
     if (lastUsername != null) {
-      _usernameController.text = lastUsername; // Pre-fill the username field
+      print('✅ Se encontró lastUsername: $lastUsername');
+      _usernameController.text = lastUsername;
+    } else {
+      print('⚠️ No se encontró ningún lastUsername guardado.');
     }
   }
 
@@ -655,29 +662,47 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<bool> _checkActiveSession(
       Map<String, dynamic> response, String? selectedMovil) async {
+    print('📦 Abriendo caja Hive: sessionBox...');
     var box = await Hive.openBox('sessionBox');
-    String? escenario = box.get('escenario').toString();
+
+    String? escenario = box.get('escenario')?.toString();
     String? idUsuario = box.get('username');
     String? idTerminal = box.get('deviceId');
     String? nombreUsuario = box.get('NombreUsuario');
+
+    print('🔍 Datos recuperados de Hive:');
+    print('   ➤ Escenario: $escenario');
+    print('   ➤ Usuario: $idUsuario');
+    print('   ➤ Terminal: $idTerminal');
+    print('   ➤ NombreUsuario: $nombreUsuario');
 
     // Verificar si hay datos en sessionBox
     if (escenario == null ||
         idUsuario == null ||
         idTerminal == null ||
         nombreUsuario == null) {
+      print(
+          '⚠️ Falta información en sessionBox. No se puede validar sesión activa.');
       return false;
     }
 
+    String hoy =
+        DateTime.now().toIso8601String().split('T')[0].replaceAll('-', '');
+    String path = 'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
+
+    print('📄 Consultando documento Firestore: $path');
+
     DocumentReference ultimaDocRef = FirebaseFirestore.instance
         .collection('Sesiones-$escenario')
-        .doc(DateTime.now().toIso8601String().split('T')[0].replaceAll('-', ''))
+        .doc(hoy)
         .collection('Movil-$selectedMovil')
         .doc('activo');
 
     DocumentSnapshot activeDocSnapshot;
+
     try {
       activeDocSnapshot = await ultimaDocRef.get();
+      print('✅ Documento Firestore obtenido correctamente.');
     } catch (e) {
       if (e is FirebaseException && e.code == 'permission-denied') {
         print('❌ Error de permisos al acceder a Firestore: ${e.message}');
@@ -689,6 +714,7 @@ class _LoginPageState extends State<LoginPage> {
         );
         return false;
       } else {
+        print('❌ Error inesperado al acceder a Firestore: $e');
         rethrow;
       }
     }

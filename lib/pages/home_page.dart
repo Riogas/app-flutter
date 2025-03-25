@@ -527,8 +527,8 @@ class _HomePageState extends State<HomePage>
                     Color estadoColor = Color(int.parse('0xff$hexColor'));
 
                     return GestureDetector(
-                      onTap: () =>
-                          _showEstadoDropdown(context, movilDoc.id, estadoNro),
+                      onTap: () => _showEstadoDropdown(
+                          context, movilDoc.id, estadoNro, subEstados),
                       child: Row(
                         children: [
                           Container(
@@ -661,63 +661,74 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  void _showEstadoDropdown(
-      BuildContext context, String movilId, int currentEstado) {
-    int? selectedEstado; // Variable to store the selected state
+  void _showEstadoDropdown(BuildContext context, String movilId,
+      int currentEstado, List<Map<String, dynamic>> subEstados) {
+    String?
+        selectedEstadoDesc; // Variable to store the selected state's DescCombo
+
+    // Get the current state's DescCombo
+    String currentEstadoDesc = subEstados.firstWhere(
+      (element) =>
+          int.tryParse(element['SubEstadoCod'].toString()) == currentEstado,
+      orElse: () => {'DescCombo': 'Desconocido'},
+    )['DescCombo'];
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Cambiar Estado del Móvil'),
-          content: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _firebaseService.getSubEstadoMovilesStream(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return Center(child: CircularProgressIndicator());
-              }
-
-              var subEstados = snapshot.data!
-                  .where((subEstado) =>
-                      subEstado['VisibleEnCombo'] == true &&
-                      int.tryParse(subEstado['SubEstadoCod'].toString()) !=
-                          currentEstado) // Exclude the current state
-                  .toList();
-
-              return DropdownButton<int>(
-                value: selectedEstado,
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Cambiar Estado del Móvil'),
+              content: DropdownButton<String>(
+                value: selectedEstadoDesc,
                 hint: Text('Selecciona un estado'),
-                items: subEstados.map((subEstado) {
-                  int subEstadoCod =
-                      int.tryParse(subEstado['SubEstadoCod'].toString()) ?? -1;
-                  return DropdownMenuItem(
-                    value: subEstadoCod,
-                    child: Text(subEstado['DescCombo']),
+                items: subEstados
+                    .where((subEstado) =>
+                        subEstado['VisibleEnCombo'] == true &&
+                        subEstado['DescCombo'] != currentEstadoDesc)
+                    .map((subEstado) {
+                  return DropdownMenuItem<String>(
+                    value: subEstado['DescCombo'] as String,
+                    child: Text(subEstado['DescCombo'] as String),
                   );
                 }).toList(),
-                onChanged: (int? newValue) {
-                  selectedEstado = newValue; // Update the selected state
+                onChanged: (String? newValue) {
+                  setState(() {
+                    selectedEstadoDesc = newValue; // Update the selected state
+                  });
                 },
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(), // Close dialog
-              child: Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () async {
-                if (selectedEstado != null) {
-                  await RioGasService.actualizarMovilesEstado(
-                      int.parse(movilId), selectedEstado!);
-                  Navigator.of(context)
-                      .pop(); // Close dialog after confirmation
-                }
-              },
-              child: Text('Confirmar'),
-            ),
-          ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(), // Close dialog
+                  child: Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (selectedEstadoDesc != null) {
+                      var selectedSubEstado = subEstados.firstWhere(
+                        (subEstado) =>
+                            subEstado['DescCombo'] == selectedEstadoDesc,
+                        orElse: () => {'SubEstadoCod': currentEstado},
+                      );
+
+                      int newEstadoNro = int.tryParse(
+                              selectedSubEstado['SubEstadoCod'].toString()) ??
+                          currentEstado;
+
+                      // Use the FirebaseService method to update EstadoNro
+                      await _firebaseService.updateMovilEstado(newEstadoNro);
+
+                      Navigator.of(context)
+                          .pop(); // Close dialog after confirmation
+                    }
+                  },
+                  child: Text('Confirmar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
