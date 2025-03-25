@@ -343,7 +343,7 @@ class _LoginPageState extends State<LoginPage> {
 
                       // ✉️ Formato del mensaje que vas a enviar:
                       String smsText =
-                          "Tu código OTP es $generatedOtp\n\nWasneakers\n$appSignature";
+                          "Tu%20codigo%20de%20ingreso%20a%20MoveIT%20es%20$generatedOtp%20%20$appSignature";
 
                       // 📡 Invoca el servicio que envía el SMS
                       var response = await RioGasService.enviarOTP(
@@ -353,6 +353,7 @@ class _LoginPageState extends State<LoginPage> {
                       );
 
                       if (response != null && response['OK'] == 0) {
+                        print(response['url']);
                         print('✅ OTP enviado exitosamente.');
                       } else {
                         print('❌ Error al enviar OTP.');
