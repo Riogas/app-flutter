@@ -301,96 +301,121 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   }
 
   void _checkConstantAndProceed(BuildContext context) async {
-    var box = await Hive.openBox('constantBox');
-    var sessionBox = await Hive.openBox('sessionBox');
-    var escenario = sessionBox.get('escenario');
-    var data = box.get('70');
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Center(child: CircularProgressIndicator());
+      },
+    );
 
-    String? valorEscenarioKey = 'ValorEscenario$escenario';
-    String? valorFinal;
-
-    if (data != null) {
-      if (data.containsKey(valorEscenarioKey) &&
-          data[valorEscenarioKey] != null) {
-        valorFinal = data[valorEscenarioKey]; // Prioritize ValorEscenario
-      } else {
-        valorFinal = data['Valor']; // Default to Valor
-      }
-    }
-
-    if (data != null && data['Estado'] == 'A' && valorFinal == 'S') {
-      _showPaymentModal(context); // Show payment modal if conditions are met
-    } else {
-      // Execute the service directly if conditions are not met
-      if (_selectedSubEstado == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Debe seleccionar al menos una acción.'),
-          ),
-        );
-        return;
-      }
-
-      var pedidoBox = await Hive.openBox('pedidoBox');
+    try {
+      var box = await Hive.openBox('constantBox');
       var sessionBox = await Hive.openBox('sessionBox');
-      var pedido = pedidoBox.get('pedido');
       var escenario = sessionBox.get('escenario');
-      var usuario = sessionBox.get('username');
-      var pedidoId = widget.codPedido;
-      var pedidoTpo = widget.pedidoTipo;
-      var currentLocation = await LocationService().getCurrentLocation();
+      var data = box.get('70');
 
-      if (currentLocation == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No se pudo obtener la ubicación actual.'),
-          ),
-        );
-        return;
+      String? valorEscenarioKey = 'ValorEscenario$escenario';
+      String? valorFinal;
+
+      if (data != null) {
+        if (data.containsKey(valorEscenarioKey) &&
+            data[valorEscenarioKey] != null) {
+          valorFinal = data[valorEscenarioKey]; // Prioritize ValorEscenario
+        } else {
+          valorFinal = data['Valor']; // Default to Valor
+        }
       }
 
-      var response = await RioGasService.finalizarPedido(
-        escenario,
-        pedidoId,
-        pedidoTpo,
-        usuario,
-        _observaciones ?? '',
-        '',
-        2,
-        int.parse(_selectedSubEstado!),
-        '',
-        '',
-        DateTime.now().toIso8601String(),
-        '',
-        '',
-        currentLocation.latitude.toString(),
-        currentLocation.longitude.toString(),
-      );
-
-      if (response != null) {
-        var pedidosBox = await Hive.openBox('pedidoBox');
-        if (pedidosBox.containsKey(pedidoId)) {
-          await pedidosBox.put(
-              pedidoId, 'Procesando'); // Update to 'Procesando' on success
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Pedido finalizado con éxito.'),
-          ),
-        );
+      if (data != null && data['Estado'] == 'A' && valorFinal == 'S') {
+        Navigator.of(context).pop(); // Close loading dialog
+        _showPaymentModal(context); // Show payment modal if conditions are met
       } else {
-        var pedidosBox = await Hive.openBox('pedidoBox');
-        if (pedidosBox.containsKey(pedidoId)) {
-          await pedidosBox.put(
-              pedidoId, 'Enviando'); // Update to 'Enviando' on failure
+        // Execute the service directly if conditions are not met
+        if (_selectedSubEstado == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Debe seleccionar al menos una acción.'),
+            ),
+          );
+          return;
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al finalizar el pedido.'),
-          ),
+
+        var pedidosBox = await Hive.openBox('pedidosBox');
+        var sessionBox = await Hive.openBox('sessionBox');
+        var pedido = pedidosBox.get('pedido');
+        var escenario = sessionBox.get('escenario').toString();
+        var usuario = sessionBox.get('username');
+        var pedidoId = widget.codPedido;
+        var pedidoTpo = widget.pedidoTipo;
+        var currentLocation = await LocationService().getCurrentLocation();
+
+        if (currentLocation == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No se pudo obtener la ubicación actual.'),
+            ),
+          );
+          return;
+        }
+
+        // Debug print: State of pedidosBox before service execution
+        print('Estado inicial de pedidosBox: ${pedidosBox.toMap()}');
+
+        var response = await RioGasService.finalizarPedido(
+          int.parse(escenario), // Convert escenario to int
+          pedidoId,
+          pedidoTpo,
+          usuario,
+          _observaciones ?? '',
+          '',
+          2,
+          int.parse(_selectedSubEstado!),
+          '',
+          '',
+          DateTime.now().toIso8601String(),
+          '',
+          '',
+          currentLocation.latitude.toString(),
+          currentLocation.longitude.toString(),
         );
+
+        if (response != null) {
+          var pedidosBox = await Hive.openBox('pedidosBox');
+          if (pedidosBox.containsKey(pedidoId)) {
+            await pedidosBox.put(
+                pedidoId, 'Procesando'); // Update to 'Procesando' on success
+          }
+          // Debug print: State of pedidosBox after successful service execution
+          print('Estado de pedidosBox después de éxito: ${pedidosBox.toMap()}');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Pedido finalizado con éxito.'),
+            ),
+          );
+        } else {
+          var pedidosBox = await Hive.openBox('pedidosBox');
+          if (pedidosBox.containsKey(pedidoId)) {
+            await pedidosBox.put(
+                pedidoId, 'Enviando'); // Update to 'Enviando' on failure
+          }
+          // Debug print: State of pedidosBox after failed service execution
+          print('Estado de pedidosBox después de fallo: ${pedidosBox.toMap()}');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al finalizar el pedido.'),
+            ),
+          );
+        }
       }
-      Navigator.of(context).pop();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ocurrió un error inesperado.'),
+        ),
+      );
+    } finally {
+      Navigator.of(context).pop(); // Close loading dialog
     }
   }
 
