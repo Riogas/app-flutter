@@ -33,6 +33,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   @override
   void initState() {
     super.initState();
+
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
@@ -52,7 +53,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             }
             return NavigationDecision.prevent;
           } else if (url.startsWith("tel:")) {
-            // Handle tel: links
             final uri = Uri.parse(url);
             if (await canLaunchUrl(uri)) {
               await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -60,16 +60,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             return NavigationDecision.prevent;
           }
 
-          return NavigationDecision.navigate; // Permite otras URLs
+          return NavigationDecision.navigate;
         },
       ))
-      ..loadHtmlString(_getHtmlWithViewport(widget.detalleHtml))
-      ..runJavaScript('''
-        document.body.style.margin = "0";
-        document.body.style.padding = "0";
-        document.body.style.overflowX = "hidden"; 
-        document.body.style.width = "100%";
-      ''');
+      ..loadHtmlString(_getHtmlWithViewport(widget.detalleHtml));
 
     _firebaseService
         .getSubEstadoFinalizacionPedidosStream()
@@ -93,27 +87,39 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _controller.runJavaScript(css);
   }
 
-  String _getHtmlWithViewport(String html) {
+  String _getHtmlWithViewport(String content) {
     return '''
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>
-          body {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            width: 100%;
-            overflow-x: auto; /* Allow horizontal scrolling */
-          }
-        </style>
-      </head>
-      <body>
-        $html
-      </body>
-      </html>
-    ''';
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        html, body {
+          margin: 0;
+          padding: 0;
+          width: 100vw;
+          overflow-x: hidden;
+          box-sizing: border-box;
+        }
+        * {
+          box-sizing: border-box !important;
+        }
+        div, section, article, main, p {
+          margin: 10 !important;
+          padding: 0 !important;
+          width: 100% !important;
+        }
+        img, iframe {
+          max-width: 100%;
+          height: auto;
+          display: block;
+        }
+      </style>
+    </head>
+    <body>
+      $content
+    </body>
+  </html>
+  ''';
   }
 
   void _showPaymentModal(BuildContext context) {
