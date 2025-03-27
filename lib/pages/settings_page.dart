@@ -8,6 +8,7 @@ import '../services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../utils/error_event.dart';
+import '../utils/constantes.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -70,10 +71,12 @@ class _SettingsPageState extends State<SettingsPage> {
     int subCompletedOrders =
         snapshot.docs.where((doc) => doc['SubEstadoNro'] == 3).length;
 
-    setState(() {
-      completedOrdersCount = completedOrders;
-      subCompletedOrdersCount = subCompletedOrders;
-    });
+    if (mounted) {
+      setState(() {
+        completedOrdersCount = completedOrders;
+        subCompletedOrdersCount = subCompletedOrders;
+      });
+    }
   }
 
   Future<void> _logout() async {
@@ -81,12 +84,13 @@ class _SettingsPageState extends State<SettingsPage> {
     if (confirmLogout == true) {
       var sessionBox = await Hive.openBox('sessionBox');
       var constantBox = await Hive.openBox('constantBox');
-
+      var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
       sessionBox.put('firstLoginDone', true);
 
       // Eliminar los datos de sesión de Hive
       await sessionBox.deleteFromDisk();
       await constantBox.deleteFromDisk();
+      await mensajesBox.deleteFromDisk();
 
       // Llamar a SessionService para eliminar el documento activo y crear una copia
       SessionService sessionService = SessionService();
@@ -320,6 +324,9 @@ class _SettingsPageState extends State<SettingsPage> {
     var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
     List<ErrorEvent> errors = errorBox.values.toList().cast<ErrorEvent>();
 
+    String? supportEmail =
+        await getConstantValue('90'); // Fetch email from constant
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -341,12 +348,13 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () async {
-                await _sendErrorsToSupport(errors);
-              },
-              child: Text('Enviar Datos a Soporte'),
-            ),
+            if (supportEmail != null) // Show button only if email is not null
+              TextButton(
+                onPressed: () async {
+                  await _sendErrorsToSupport(errors, supportEmail);
+                },
+                child: Text('Enviar Datos a Soporte'),
+              ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
@@ -359,9 +367,8 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _sendErrorsToSupport(List<ErrorEvent> errors) async {
-    String supportEmail =
-        "soporte@example.com"; // Replace with the actual support email
+  Future<void> _sendErrorsToSupport(
+      List<ErrorEvent> errors, String supportEmail) async {
     String subject = "Reporte de Errores";
     String body = errors.map((error) {
       return "Tipo: ${error.type}\n"

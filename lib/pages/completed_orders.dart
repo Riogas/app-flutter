@@ -51,8 +51,8 @@ class CompletedOrdersPage extends StatelessWidget {
                           builder: (context) => OrderDetailPage(
                             detalleHtml: pedido['DetalleHTML'],
                             estadoNro: pedido['EstadoNro'],
-                            totalPedido:
-                                pedido['Precio'], // Added the required argument
+                            totalPedido: pedido['Precio'] ??
+                                0, // Added the required argument
                             codPedido: pedido['id'],
                             pedidoTipo: pedido['Tipo'],
                           ),

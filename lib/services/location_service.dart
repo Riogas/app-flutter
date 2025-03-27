@@ -7,7 +7,9 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/riogas_service.dart';
 import 'package:flutter/material.dart';
+import '../utils/constantes.dart'; // Import constantes.dart
 
 class LocationService {
   static final LocationService _instance = LocationService._internal();
@@ -29,20 +31,15 @@ class LocationService {
   /// 🔹 Permite escuchar actualizaciones de ubicación en tiempo real
   Stream<LatLng> get locationStream => _locationStreamController.stream;
 
-  /// 🔹 Inicializa el servicio de ubicación en primer y segundo plano
+  /// 🔹 Inicializa el servicio de ubicación y sincronización
   Future<void> initializeLocationUpdates(BuildContext context) async {
     await _requestIgnoreBatteryOptimizations();
-    bool intervalLoaded = await _loadUpdateInterval();
-    if (!intervalLoaded) {
-      print(
-          "❌ No se pudo cargar el intervalo de actualización. No se iniciarán las actualizaciones de ubicación.");
-      return;
-    }
     await _getLocationPermission();
     await ensureCorrectLocationPermission(
         context); // 🔹 Verifica y solicita permiso en background
     await _enableBackgroundExecution();
     _startLocationUpdates();
+    await _startLocationAndSyncTimers(); // 🔹 Configura los timers para Firestore y RioGas
   }
 
   /// 🔹 Solicita ignorar la optimización de batería
@@ -97,11 +94,11 @@ class LocationService {
     }
   }
 
-  int _parseUpdateInterval(dynamic value, {int defaultValue = 30}) {
+  int _parseUpdateInterval(dynamic value) {
     if (value is String) {
-      return int.tryParse(value) ?? defaultValue;
+      return int.tryParse(value) ?? 0;
     }
-    return defaultValue;
+    return 0;
   }
 
   /// 🔹 Manejo de permisos para primer y segundo plano
@@ -279,7 +276,7 @@ class LocationService {
     );
   }
 
-  /// 🔹 Obtiene la ubicación actual y la envía al Stream
+  /// 🔹 Obtiene la ubicación actual y la envía al Stream y Firestore
   Future<void> _getAndShowLocation() async {
     if (_locationPermissionDenied) return;
 
@@ -296,7 +293,7 @@ class LocationService {
       print(
           '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
 
-      await _updateCoordinatesInFirestore(position);
+      await _updateCoordinatesInFirestore(position); // 🔹 Actualiza Firestore
       await _updateLocationAndDistanceInHive(
           newLocation, _totalDistance); // 🔹 Actualiza Hive
     } catch (e) {
@@ -376,6 +373,85 @@ class LocationService {
 
     await movilDocRef.set(coordinatesData, SetOptions(merge: true));
     print('📍 Coordenadas guardadas en Firestore: $coordinatesData');
+  }
+
+  /// 🔹 Inicia los timers para sincronización con Firestore y RioGas
+  Future<void> _startLocationAndSyncTimers() async {
+    // Obtener valores de las constantes
+    String? firestoreIntervalValue = await getConstantValue('31');
+    String? rioGasIntervalValue = await getConstantValue('30');
+    int rioGasInterval = 0;
+    int firestoreInterval = 0;
+
+    print('intervalo firestore  $firestoreIntervalValue');
+    print('intervalo riogas $rioGasIntervalValue');
+
+    // Parsear los intervalos en segundos
+    if (firestoreIntervalValue != null) {
+      firestoreInterval = _parseUpdateInterval(firestoreIntervalValue);
+
+      print(
+          '⏳ Configurando timer para Firestore cada $firestoreInterval segundos.');
+    }
+
+    if (rioGasIntervalValue != null) {
+      rioGasInterval = _parseUpdateInterval(rioGasIntervalValue);
+
+      print('⏳ Configurando timer para RioGas cada $rioGasInterval segundos.');
+    }
+
+    if (firestoreInterval == null || firestoreInterval == 0) {
+      print('❌ No se pudo obtener los intervalos de las constantes.');
+    } else {
+      // Timer para Firestore
+      Timer.periodic(Duration(seconds: firestoreInterval),
+          (firestoreTimer) async {
+        Position? position = await getCurrentLocation();
+        if (position == null) {
+          print('❌ No se pudo obtener la ubicación actual para Firestore.');
+          return;
+        }
+
+        print(
+            '📍 Actualizando Firestore con coordenadas: Lat ${position.latitude}, Lng ${position.longitude}');
+        await _updateCoordinatesInFirestore(position);
+      });
+    }
+
+    if (rioGasInterval == null || rioGasInterval == 0) {
+      print('❌ No se pudo obtener los intervalos de las constantes.');
+    } else {
+      // Timer para RioGas
+      Timer.periodic(Duration(seconds: rioGasInterval), (rioGasTimer) async {
+        Position? position = await getCurrentLocation();
+        if (position == null) {
+          print('❌ No se pudo obtener la ubicación actual para RioGas.');
+          return;
+        }
+
+        var sessionBox = await Hive.openBox('sessionBox');
+        String? movil = sessionBox.get('movil');
+        String? deviceId = sessionBox.get('deviceId');
+
+        if (movil == null || deviceId == null) {
+          print(
+              '❌ No se pudo obtener el móvil o el DeviceId de Hive para RioGas.');
+          return;
+        }
+
+        String fechaHora = DateTime.now().toIso8601String();
+
+        print(
+            '📍 Enviando coordenadas a RioGas: Lat ${position.latitude}, Lng ${position.longitude}');
+        await RioGasService.registrarCoordenadas(
+          int.parse(movil),
+          position.latitude.toString(),
+          position.longitude.toString(),
+          deviceId,
+          fechaHora,
+        );
+      });
+    }
   }
 
   /// 🔹 Detiene la actualización de ubicación

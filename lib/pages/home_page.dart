@@ -174,6 +174,9 @@ class _HomePageState extends State<HomePage>
     _firebaseService.getMensajesStream().listen((messages) async {
       int newMessagesCount = 0;
 
+      print("📦 Contenido de mensajesBox:");
+      print(mensajesBox.toMap());
+
       for (var message in messages) {
         if (!mensajesBox.containsKey(message.id)) {
           await mensajesBox.put(message.id, 'Descargado'); // Mark as downloaded
@@ -220,6 +223,11 @@ class _HomePageState extends State<HomePage>
             position.latitude.toString(), // latitud
             position.longitude.toString(), // longitud
           );
+        } else {
+          if (mensajesBox.get(message.id) == 'Leido') {
+            // Ya está descargado
+            newMessagesCount--;
+          }
         }
       }
 
@@ -361,6 +369,8 @@ class _HomePageState extends State<HomePage>
         TextButton(
           onPressed: () async {
             await Hive.openBox('sessionBox').then((box) => box.clear());
+            await Hive.openBox('mensajesBox')
+                .then((box) => box.clear()); // Clear mensajesBox
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => LoginPage()),
               (Route<dynamic> route) => false,
@@ -439,6 +449,12 @@ class _HomePageState extends State<HomePage>
       print('✅ Connectivity available.');
       // Placeholder for future action when connectivity is available
     }
+  }
+
+  Future<void> _markMessageAsRead(String messageId) async {
+    var mensajesBox = await Hive.openBox('mensajesBox');
+    await mensajesBox.put(messageId, 'Leido'); // Mark as read
+    print('📨 Mensaje $messageId marcado como "Leido" en Hive.');
   }
 
   @override

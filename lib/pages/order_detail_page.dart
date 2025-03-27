@@ -393,6 +393,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               content: Text('Pedido finalizado con éxito.'),
             ),
           );
+          Navigator.of(context).pop(); // Close the popup
         } else {
           var pedidosBox = await Hive.openBox('pedidosBox');
           if (pedidosBox.containsKey(pedidoId)) {

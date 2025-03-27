@@ -25,6 +25,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   late String deviceId = '';
   late int movilId = 0;
   late int escenarioId = 0;
+  Timer? _hiveStateChecker; // Make it nullable
 
   @override
   void initState() {
@@ -39,6 +40,20 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         escenarioId = constantBox.get('EscenarioID', defaultValue: 0);
       });
     });
+
+    // Initialize the Timer
+    _hiveStateChecker = Timer.periodic(Duration(seconds: 5), (_) {
+      if (mounted) {
+        setState(() {}); // Update the UI periodically
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Cancel the Timer if it is not null
+    _hiveStateChecker?.cancel();
+    super.dispose();
   }
 
   Future<void> _initializeFirebase() async {
@@ -102,7 +117,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         builder: (context) => OrderDetailPage(
           detalleHtml: pedido['DetalleHTML'],
           estadoNro: pedido['EstadoNro'],
-          totalPedido: pedido['Precio'], // Pass totalPedido here´
+          totalPedido: pedido['Precio'] ?? 0,
           codPedido: pedidoId,
           pedidoTipo: pedido['Tipo'],
         ),
@@ -212,20 +227,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                     : direccion;
 
                 // Determinar el estado del pedido y la etiqueta correspondiente
-                String etiquetaTexto = '';
-                Color etiquetaColor = Colors.transparent;
-
-                var pedidoEstado = pedidosBox.get(pedidoId);
-                if (pedidoEstado == null) {
-                  etiquetaTexto = 'No Leído';
-                  etiquetaColor = Colors.black;
-                } else if (pedidoEstado == 'Procesando') {
-                  etiquetaTexto = 'Procesando';
-                  etiquetaColor = Colors.lightBlue;
-                } else if (pedidoEstado == 'Enviando') {
-                  etiquetaTexto = 'Enviando';
-                  etiquetaColor = Colors.orange;
-                }
+                String etiquetaTexto = _getPedidoEstado(pedidoId);
+                Color etiquetaColor = _getPedidoEstadoColor(pedidoId);
 
                 // Depuración: imprimir el valor de urltelefono
                 if (pedido.containsKey('urltelefono')) {
@@ -247,7 +250,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8.0, vertical: 4.0),
                     child: Card(
-                      color: pedidoEstado == null
+                      color: _getPedidoEstado(pedidoId) == 'No Leído'
                           ? (tipo == 'Services'
                               ? Colors.deepPurpleAccent
                               : Colors.lightBlue)
@@ -444,5 +447,29 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   String _formatTimestamp(Timestamp timestamp) {
     DateTime dateTime = timestamp.toDate();
     return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute}';
+  }
+
+  String _getPedidoEstado(int pedidoId) {
+    var pedidoEstado = pedidosBox.get(pedidoId);
+    if (pedidoEstado == null) {
+      return 'No Leído';
+    } else if (pedidoEstado == 'Procesando') {
+      return 'Procesando';
+    } else if (pedidoEstado == 'Enviando') {
+      return 'Enviando';
+    }
+    return '';
+  }
+
+  Color _getPedidoEstadoColor(int pedidoId) {
+    var pedidoEstado = pedidosBox.get(pedidoId);
+    if (pedidoEstado == null) {
+      return Colors.black;
+    } else if (pedidoEstado == 'Procesando') {
+      return Colors.lightBlue;
+    } else if (pedidoEstado == 'Enviando') {
+      return Colors.orange;
+    }
+    return Colors.transparent;
   }
 }

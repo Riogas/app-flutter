@@ -314,4 +314,16 @@ class RioGasService {
       'hash': hash,
     });
   }
+
+  static Future<Map<String, dynamic>?> registrarCoordenadas(int movil,
+      String latitud, String longitud, String deviceId, String fechaHora) {
+    return _post('RegistrarCoordenadas', {
+      'token': token,
+      'movil': movil,
+      'Latitud': latitud,
+      'longitud': longitud,
+      'DeviceId': deviceId,
+      'FechaHora': fechaHora,
+    });
+  }
 }
