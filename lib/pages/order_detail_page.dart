@@ -407,6 +407,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               content: Text('Error al finalizar el pedido.'),
             ),
           );
+          Navigator.of(context).pop(); // Close the popup
         }
       }
     } catch (e) {

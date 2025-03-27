@@ -4,6 +4,8 @@ import 'package:hive/hive.dart';
 import '../utils/error_event.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/location_service.dart'; // Add this line to import LocationService
+import 'dart:async'; // Import for Timer
+import '../utils/constantes.dart';
 
 class RioGasService {
   static const String baseUrl = 'https://www.riogas.uy/ica_geos_/appservices/';
@@ -17,6 +19,81 @@ class RioGasService {
   static DateTime? _lastErrorTime; // Track the last error time
   static const int errorThresholdMinutes =
       5; // Threshold in minutes - CONSTANTE
+  static late int retryIntervalSeconds;
+
+  static Future<void> initializeRetryInterval() async {
+    String? value = await getConstantValue('110');
+    retryIntervalSeconds = int.tryParse(value ?? '0') ?? 0;
+  }
+
+  static Timer? _retryTimer;
+
+  static Future<void> startRetryTimer() async {
+    print('🔄 Iniciando el temporizador de reintentos.');
+    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+    print("requestbox: ${failedRequestsBox.values}");
+    if (failedRequestsBox.isNotEmpty) {
+      _retryTimer?.cancel(); // Cancel any existing timer
+      _retryTimer = Timer.periodic(
+        Duration(seconds: retryIntervalSeconds),
+        (timer) async {
+          await _processPendingRequests();
+        },
+      );
+      print('🔄 Retry timer started.');
+    } else {
+      print('⚠️ No pending requests. Retry timer not started.');
+    }
+  }
+
+  // Ensure the timer starts at least once during initialization
+  static Future<void> initializeService() async {
+    await initializeRetryInterval();
+    Timer.periodic(Duration(seconds: 10), (timer) async {
+      await startRetryTimer();
+    });
+  }
+
+  static Future<void> _saveFailedRequest(
+      String endpoint, Map<String, dynamic> payload) async {
+    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+    await failedRequestsBox.add({'endpoint': endpoint, 'payload': payload});
+    print('❌ Request saved for retry: $endpoint');
+  }
+
+  static Future<void> _processPendingRequests() async {
+    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+    List<Map<String, dynamic>> pendingRequests =
+        failedRequestsBox.values.cast<Map<String, dynamic>>().toList();
+
+    for (var request in pendingRequests) {
+      try {
+        String endpoint = request['endpoint'];
+        Map<String, dynamic> payload = request['payload'];
+        print('🔄 Retrying request: $endpoint');
+        var response = await _post(endpoint, payload);
+        if (response != null) {
+          // Update pedidosBox if the request is "finalizarPedido"
+          if (endpoint == 'FinalizarPedido' &&
+              payload.containsKey('PedidoId')) {
+            var pedidosBox = await Hive.openBox('pedidosBox');
+            int pedidoId = payload['PedidoId'];
+            if (pedidosBox.containsKey(pedidoId)) {
+              await pedidosBox.put(
+                  pedidoId, 'Procesando'); // Update to 'Procesando'
+              print(
+                  '📦 Pedido $pedidoId updated to "Procesando" in pedidosBox.');
+            }
+          }
+          await failedRequestsBox
+              .deleteAt(0); // Remove successfully processed request
+          print('✅ Request retried successfully: $endpoint');
+        }
+      } catch (e) {
+        print('❌ Failed to retry request: $e');
+      }
+    }
+  }
 
   static Future<Map<String, dynamic>?> _post(
       String endpoint, Map<String, dynamic> body) async {
@@ -46,6 +123,7 @@ class RioGasService {
         await _updateConnectionStatus(true); // Update connection status
         return jsonDecode(response.body);
       } else {
+        await _saveFailedRequest(endpoint, body); // Save failed request
         await _logError(
           'HTTP Error',
           'Código de respuesta: ${response.statusCode}',
@@ -57,6 +135,7 @@ class RioGasService {
       return null;
     } catch (e) {
       print('❌ Error en [$endpoint]: $e');
+      await _saveFailedRequest(endpoint, body); // Save failed request
       await _logError(
         'Exception',
         e.toString(),

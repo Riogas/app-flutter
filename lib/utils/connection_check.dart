@@ -128,6 +128,7 @@ class ConnectionCheck {
       print('⏱️ Counter: $_counter');
       if (_counter >= _maxCounter) {
         _rioGasTimer?.cancel(); // Stop the timer after counter reaches max
+        _counter = 0; // Reset the counter
       }
     });
   }

@@ -131,6 +131,8 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _initializeHomePage() async {
     await _loadSessionData();
+    await RioGasService
+        .initializeService(); // 🔹 Inicializa el servicio de RioGas
     _listenToMessages();
     _listenToPendingOrders();
     _printConstantDocumentNames();
