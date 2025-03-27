@@ -48,6 +48,7 @@ class _HomePageState extends State<HomePage>
   final ConnectionCheck _connectionCheck = ConnectionCheck();
   final ValueNotifier<Map<String, dynamic>> _connectionStatusNotifier =
       ValueNotifier({'network': true, 'firestore': true, 'riogas': true});
+  bool showPopup = false; // Add a flag for showing the popup
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -97,13 +98,16 @@ class _HomePageState extends State<HomePage>
 
     // 🔹 Inicializar la verificación de conectividad periódica
     _connectivityCheckTimer = Timer.periodic(
-      Duration(seconds: 30),
+      Duration(seconds: 5),
       (timer) => _checkInternetConnectivity(),
     );
 
     _connectionCheck.startMonitoring();
     _connectionCheck.connectionStatusStream.listen((status) {
       _connectionStatusNotifier.value = status; // Update only the notifier
+      if (status['showPopup'] == true) {
+        _showRioGasConnectivityModal();
+      }
     });
   }
 
@@ -203,7 +207,7 @@ class _HomePageState extends State<HomePage>
           print('NroSesion: ');
           print('TermMobileEquipo: $deviceId');
           print('LectDesc: LECTURA');
-          print('FechaHoraCmbEst: ${DateTime.now().toIso8601String()}');
+          print('FechaHoraCmbEst: ${DateTime.now().toUtc().toIso8601String()}');
           print('INAux1: ');
           print('INAux2: ');
           print('Latitud: ${position.latitude}');
@@ -217,7 +221,7 @@ class _HomePageState extends State<HomePage>
             '', // nroSesion
             deviceId, // termMobileEquipo
             'DESCARGA', // lectDesc
-            DateTime.now().toIso8601String(), // fechaHoraCmbEst
+            DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
             '', // inAux1
             '', // inAux2
             position.latitude.toString(), // latitud
@@ -272,7 +276,7 @@ class _HomePageState extends State<HomePage>
       Map<String, dynamic> pedido, int pedidoId) async {
     String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? '1' : '2';
     String lectDesc = 'DESCARGA';
-    String fechaHoraCmbEst = DateTime.now().toIso8601String();
+    String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
     String inAux2 = '';
 
@@ -391,9 +395,11 @@ class _HomePageState extends State<HomePage>
         (connectivityResult is List &&
             connectivityResult.contains(ConnectivityResult.none))) {
       print('❌ No hay conexión a Internet.');
-      _showNoInternetDialog(); // entra a modo "bloqueo"
+      if (!showPopup) _showNoInternetDialog(); // entra a modo "bloqueo"
+      //_showNoInternetDialog(); // entra a modo "bloqueo"
     } else {
       print('✅ Conexión a Internet disponible.');
+      showPopup = false;
       // Podés continuar con la app aquí si querés.
     }
   }
@@ -414,9 +420,9 @@ class _HomePageState extends State<HomePage>
                 onPressed: () async {
                   print('🔄 Reintentando conectividad a Internet...');
                   Navigator.of(context).pop(); // Cierra el diálogo actual
-                  await _retryInternetConnectivity(); // Vuelve a chequear sin esperar
+                  showPopup = true;
                 },
-                child: Text('Reintentar'),
+                child: Text('Confirmar'),
               ),
             ],
           );
@@ -455,6 +461,27 @@ class _HomePageState extends State<HomePage>
     var mensajesBox = await Hive.openBox('mensajesBox');
     await mensajesBox.put(messageId, 'Leido'); // Mark as read
     print('📨 Mensaje $messageId marcado como "Leido" en Hive.');
+  }
+
+  void _showRioGasConnectivityModal() {
+    print('⚠️ Showing RioGas connectivity modal...');
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Conectividad con RioGas'),
+          content: Text(
+              'Actualmente no hay conectividad con RioGas. Por favor, verifica tu conexión.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Aceptar'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -531,7 +558,7 @@ class _HomePageState extends State<HomePage>
                     print(
                         'Matched SubEstado: $subEstado'); // Log matched subEstado
 
-                    String estadoText = subEstado['TipoEstado'];
+                    String estadoText = subEstado['DescCombo'];
                     String codColor = subEstado['CodColor'];
                     List<String> rgb = codColor.split(',');
                     String hexColor = rgb.length == 3
@@ -695,7 +722,7 @@ class _HomePageState extends State<HomePage>
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text('Cambiar Estado del Móvil'),
+              title: Text('Cambiar Estado'),
               content: DropdownButton<String>(
                 value: selectedEstadoDesc,
                 hint: Text('Selecciona un estado'),
@@ -733,8 +760,30 @@ class _HomePageState extends State<HomePage>
                               selectedSubEstado['SubEstadoCod'].toString()) ??
                           currentEstado;
 
-                      // Use the FirebaseService method to update EstadoNro
                       await _firebaseService.updateMovilEstado(newEstadoNro);
+                      // Call the actualizarMoviles service
+                      var result = await RioGasService.actualizarMoviles(
+                        int.parse(await Hive.box('sessionBox')
+                            .get('escenario', defaultValue: '0')),
+                        int.parse(movilId),
+                        await Hive.box('sessionBox')
+                            .get('username', defaultValue: ''),
+                        '', // NroSesion (if available, replace with actual value)
+                        await Hive.box('sessionBox')
+                            .get('deviceId', defaultValue: ''),
+                        newEstadoNro.toString(),
+                        '', // Latitude (if available, replace with actual value)
+                        '', // Longitude (if available, replace with actual value)
+                        DateTime.now().toUtc().toIso8601String(),
+                        '', // inAux1
+                        '', // inAux2
+                      );
+
+                      if (result != null) {
+                        print('✅ Estado del móvil actualizado correctamente.');
+                      } else {
+                        print('❌ Error al actualizar el estado del móvil.');
+                      }
 
                       Navigator.of(context)
                           .pop(); // Close dialog after confirmation
@@ -764,15 +813,21 @@ class _HomePageState extends State<HomePage>
 
     Color firestoreColor = conexionFirestore ? Colors.green : Colors.red;
     Color rioGasColor = conexionRioGas ? Colors.green : Colors.red;
-    Color networkColor = (connectivityResult == ConnectivityResult.none)
-        ? Colors.grey
-        : Colors.green;
+
+    Color networkColor;
+    if (connectivityResult == ConnectivityResult.none ||
+        (connectivityResult is List &&
+            connectivityResult.contains(ConnectivityResult.none))) {
+      networkColor = Colors.grey;
+    } else {
+      networkColor = Colors.green;
+    }
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Estado de Conectividad'),
+          title: Text('Conectividad'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

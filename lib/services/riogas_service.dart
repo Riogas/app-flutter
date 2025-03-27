@@ -30,7 +30,7 @@ class RioGasService {
       print('Solicitud (request):');
       print('URL: $baseUrl$endpoint');
       print('Headers: $headers');
-      print('Body: ${jsonEncode({...body, 'token': token})}');
+      print('Body $endpoint: ${jsonEncode({...body, 'token': token})}');
 
       final response = await http.post(
         Uri.parse('$baseUrl$endpoint'),
@@ -46,13 +46,24 @@ class RioGasService {
         await _updateConnectionStatus(true); // Update connection status
         return jsonDecode(response.body);
       } else {
-        await _logError('HTTP Error',
-            'Código de respuesta: ${response.statusCode}', response.body);
+        await _logError(
+          'HTTP Error',
+          'Código de respuesta: ${response.statusCode}',
+          response.body,
+          endpoint,
+          jsonEncode({...body, 'token': token}),
+        );
       }
       return null;
     } catch (e) {
       print('❌ Error en [$endpoint]: $e');
-      await _logError('Exception', e.toString());
+      await _logError(
+        'Exception',
+        e.toString(),
+        null,
+        endpoint,
+        jsonEncode({...body, 'token': token}),
+      );
       return null;
     }
   }
@@ -72,13 +83,15 @@ class RioGasService {
   }
 
   static Future<void> _logError(String type, String message,
-      [String? additionalInfo]) async {
+      [String? additionalInfo, String? endpoint, String? payload]) async {
     var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
     var errorEvent = ErrorEvent(
       type: type,
       message: message,
       timestamp: DateTime.now(),
       additionalInfo: additionalInfo,
+      endpoint: endpoint,
+      payload: payload,
     );
     await errorBox.add(errorEvent);
 

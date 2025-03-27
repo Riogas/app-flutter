@@ -139,7 +139,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
       Map<String, dynamic> pedido, int pedidoId) async {
     String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? '1' : '2';
     String lectDesc = 'LECTURA';
-    String fechaHoraCmbEst = DateTime.now().toIso8601String();
+    String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
     var box = await Hive.openBox('sessionBox');
     String deviceId = box.get('deviceId');

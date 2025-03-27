@@ -243,9 +243,8 @@ void _showNoInternetDialog() {
               onPressed: () async {
                 print('🔄 Reintentando conectividad a Internet...');
                 Navigator.of(context).pop(); // Cierra el diálogo actual
-                await _retryInternetConnectivity(); // Vuelve a chequear sin esperar
               },
-              child: Text('Reintentar'),
+              child: Text('Confirmar'),
             ),
           ],
         );
@@ -270,9 +269,8 @@ void _showNoDataAccessDialog() {
               onPressed: () async {
                 print('🔄 Reintentando acceso a datos...');
                 Navigator.of(context).pop(); // Cierra el diálogo actual
-                await _retryInternetConnectivity(); // Vuelve a chequear sin esperar
               },
-              child: Text('Reintentar'),
+              child: Text('Confirmar'),
             ),
           ],
         );
@@ -381,8 +379,11 @@ Future<bool> _checkActiveSession(
     return false;
   }
 
-  String hoy =
-      DateTime.now().toIso8601String().split('T')[0].replaceAll('-', '');
+  String hoy = DateTime.now()
+      .toUtc()
+      .toIso8601String()
+      .split('T')[0]
+      .replaceAll('-', '');
   String path = 'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
 
   print('📄 Consultando documento Firestore: $path');
@@ -396,16 +397,37 @@ Future<bool> _checkActiveSession(
   DocumentSnapshot activeDocSnapshot;
 
   try {
-    activeDocSnapshot = await ultimaDocRef.get();
-    print('✅ Documento Firestore obtenido correctamente.');
-  } catch (e) {
-    if (e is FirebaseException && e.code == 'permission-denied') {
-      print('❌ Error de permisos al acceder a Firestore: ${e.message}');
-      return false;
-    } else {
-      print('❌ Error inesperado al acceder a Firestore: $e');
-      rethrow;
+    const int maxRetries = 3;
+    const Duration initialDelay = Duration(seconds: 2);
+    int attempt = 0;
+
+    while (true) {
+      try {
+        activeDocSnapshot = await ultimaDocRef.get();
+        print('✅ Documento Firestore obtenido correctamente.');
+        break; // Exit loop on success
+      } catch (e) {
+        if (e is FirebaseException && e.code == 'unavailable') {
+          attempt++;
+          if (attempt > maxRetries) {
+            print('❌ Máximo número de reintentos alcanzado. Error: $e');
+            return false;
+          }
+          final delay = initialDelay * attempt;
+          print('🔄 Reintentando en $delay segundos...');
+          await Future.delayed(delay);
+        } else if (e is FirebaseException && e.code == 'permission-denied') {
+          print('❌ Error de permisos al acceder a Firestore: ${e.message}');
+          return false;
+        } else {
+          print('❌ Error inesperado al acceder a Firestore: $e');
+          rethrow;
+        }
+      }
     }
+  } catch (e) {
+    print('❌ Error crítico al acceder a Firestore: $e');
+    rethrow;
   }
 
   if (activeDocSnapshot.exists) {

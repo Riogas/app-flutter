@@ -186,7 +186,7 @@ class _MessagePageState extends State<MessagePage> {
     print('NroSesion: ');
     print('TermMobileEquipo: $deviceId');
     print('LectDesc: LECTURA');
-    print('FechaHoraCmbEst: ${DateTime.now().toIso8601String()}');
+    print('FechaHoraCmbEst: ${DateTime.now().toUtc().toIso8601String()}');
     print('INAux1: ');
     print('INAux2: ');
     print('Latitud: ${position.latitude}');
@@ -200,7 +200,7 @@ class _MessagePageState extends State<MessagePage> {
       '', // nroSesion
       deviceId, // termMobileEquipo
       'LECTURA', // lectDesc
-      DateTime.now().toIso8601String(), // fechaHoraCmbEst
+      DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
       '', // inAux1
       '', // inAux2
       position.latitude.toString(), // latitud

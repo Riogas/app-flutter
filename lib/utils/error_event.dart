@@ -16,10 +16,18 @@ class ErrorEvent extends HiveObject {
   @HiveField(3)
   final String? additionalInfo;
 
+  @HiveField(4)
+  final String? endpoint;
+
+  @HiveField(5)
+  final String? payload;
+
   ErrorEvent({
     required this.type,
     required this.message,
     required this.timestamp,
     this.additionalInfo,
+    this.endpoint,
+    this.payload,
   });
 }

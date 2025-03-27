@@ -373,7 +373,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           int.parse(_selectedSubEstado!),
           '',
           '',
-          DateTime.now().toIso8601String(),
+          DateTime.now().toUtc().toIso8601String(),
           '',
           '',
           currentLocation.latitude.toString(),

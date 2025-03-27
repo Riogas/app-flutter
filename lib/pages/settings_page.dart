@@ -9,6 +9,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../utils/error_event.dart';
 import '../utils/constantes.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:flutter_email_sender/flutter_email_sender.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -369,24 +372,41 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _sendErrorsToSupport(
       List<ErrorEvent> errors, String supportEmail) async {
-    String subject = "Reporte de Errores";
-    String body = errors.map((error) {
-      return "Tipo: ${error.type}\n"
-          "Mensaje: ${error.message}\n"
-          "Fecha: ${error.timestamp}\n"
-          "Info Adicional: ${error.additionalInfo ?? "N/A"}\n\n";
-    }).join();
+    try {
+      // Crear contenido del archivo
+      String content = errors.map((error) {
+        return "Tipo: ${error.type}\n"
+            "Mensaje: ${error.message}\n"
+            "Fecha: ${error.timestamp}\n"
+            "Info Adicional: ${error.additionalInfo ?? "N/A"}\n\n";
+      }).join();
 
-    final Uri emailUri = Uri(
-      scheme: 'mailto',
-      path: supportEmail,
-      query: Uri.encodeFull('subject=$subject&body=$body'),
-    );
+      // Obtener directorio temporal
+      final directory = await getTemporaryDirectory();
+      final filePath = '${directory.path}/errores_reportados.txt';
+      debugPrint('Temporary directory: $directory');
+      debugPrint('File path: $filePath');
 
-    if (await canLaunchUrl(emailUri)) {
-      await launchUrl(emailUri);
-    } else {
-      _showMessage("No se pudo abrir el cliente de correo.");
+      // Escribir contenido en el archivo
+      final file = File(filePath);
+      await file.writeAsString(content);
+      debugPrint('File written successfully.');
+
+      // Preparar correo con archivo adjunto
+      final Email email = Email(
+        body: 'Adjunto archivo con los errores.',
+        subject: 'Reporte de Errores',
+        recipients: [supportEmail],
+        attachmentPaths: [filePath],
+        isHTML: false,
+      );
+
+      // Enviar correo
+      await FlutterEmailSender.send(email);
+      debugPrint('Email sent successfully.');
+    } catch (e) {
+      debugPrint('Error during _sendErrorsToSupport: $e');
+      _showMessage("Error al generar el archivo de errores: $e");
     }
   }
 

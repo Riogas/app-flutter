@@ -439,7 +439,7 @@ class LocationService {
           return;
         }
 
-        String fechaHora = DateTime.now().toIso8601String();
+        String fechaHora = DateTime.now().toUtc().toIso8601String();
 
         print(
             '📍 Enviando coordenadas a RioGas: Lat ${position.latitude}, Lng ${position.longitude}');

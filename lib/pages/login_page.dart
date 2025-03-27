@@ -740,8 +740,11 @@ class _LoginPageState extends State<LoginPage> {
       return false;
     }
 
-    String hoy =
-        DateTime.now().toIso8601String().split('T')[0].replaceAll('-', '');
+    String hoy = DateTime.now()
+        .toUtc()
+        .toIso8601String()
+        .split('T')[0]
+        .replaceAll('-', '');
     String path = 'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
 
     print('📄 Consultando documento Firestore: $path');
