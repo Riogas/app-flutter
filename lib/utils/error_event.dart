@@ -30,4 +30,9 @@ class ErrorEvent extends HiveObject {
     this.endpoint,
     this.payload,
   });
+
+  @override
+  String toString() {
+    return 'ErrorEvent(type: $type, message: $message, timestamp: $timestamp, additionalInfo: $additionalInfo, endpoint: $endpoint, payload: $payload)';
+  }
 }

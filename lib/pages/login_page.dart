@@ -673,6 +673,25 @@ class _LoginPageState extends State<LoginPage> {
 
     // 🔹 Guardar que es un login manual para evitar el logout forzado inmediato
     await box.put('firstLoginDone', true);
+
+    var pedidosBox = await Hive.openBox('pedidosBox');
+
+    // 🔹 Limpiar pedidosBox de claves cuyo valor sea 'Procesando'
+    final keysToDelete = <dynamic>[];
+
+    // Buscar las claves cuyos valores sean 'Procesando'
+    for (var key in pedidosBox.keys) {
+      final value = pedidosBox.get(key);
+      if (value == 'Procesando') {
+        keysToDelete.add(key);
+      }
+    }
+
+    // Eliminar esas claves
+    for (var key in keysToDelete) {
+      await pedidosBox.delete(key);
+    }
+
     await box.flush(); // ✅ Asegura que el valor se escriba inmediatamente
 
     // Obtener datos de la versión actual y guardar ReleaseNotes en Hive

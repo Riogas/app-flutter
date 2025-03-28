@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io'; // Import for SocketException
 import 'package:hive/hive.dart';
 import '../utils/error_event.dart';
 import 'package:geolocator/geolocator.dart';
@@ -31,68 +32,136 @@ class RioGasService {
   static Future<void> startRetryTimer() async {
     print('🔄 Iniciando el temporizador de reintentos.');
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-    print("requestbox: ${failedRequestsBox.values}");
+    print("📦 requestbox values: ${failedRequestsBox.values}");
     if (failedRequestsBox.isNotEmpty) {
-      _retryTimer?.cancel(); // Cancel any existing timer
+      print('📦 Pending requests found: ${failedRequestsBox.length}');
+      //_retryTimer?.cancel(); // Cancel any existing timer
+      print('⏱️ Existing retry timer canceled.');
+      print('⏱️ Setting retry interval to: $retryIntervalSeconds seconds.');
       _retryTimer = Timer.periodic(
         Duration(seconds: retryIntervalSeconds),
         (timer) async {
-          await _processPendingRequests();
+          print('🔄 Timer triggered. Executing retry timer callback.');
+          try {
+            await _processPendingRequests();
+            //_retryTimer = null; // Reset the timer to null after processing
+            print('⏱️ Retry timer reset to null after processing.');
+          } catch (e) {
+            print('❌ Error in retry timer callback: $e');
+          }
         },
       );
-      print('🔄 Retry timer started.');
+      print(
+          '🔄 Retry timer started with interval: $retryIntervalSeconds seconds.');
     } else {
-      print('⚠️ No pending requests. Retry timer not started.');
+      print('⚠️ No pending requests in failedRequestsBox.');
+      print('⚠️ Retry timer will not be started.');
     }
   }
 
   // Ensure the timer starts at least once during initialization
   static Future<void> initializeService() async {
     await initializeRetryInterval();
-    Timer.periodic(Duration(seconds: 10), (timer) async {
-      await startRetryTimer();
+    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
+    // Listen for changes in the failedRequestsBox
+    failedRequestsBox.watch().listen((event) async {
+      if (failedRequestsBox.isNotEmpty) {
+        print(
+            '📦 Detected new data in failedRequestsBox. Starting retry timer.');
+        await startRetryTimer();
+      } else {
+        print('📦 failedRequestsBox is empty. No retry timer will be started.');
+      }
     });
+
+    // Start the retry timer if there is already data in the box
+    if (failedRequestsBox.isNotEmpty) {
+      print('📦 failedRequestsBox has existing data. Starting retry timer.');
+      await startRetryTimer();
+    }
   }
 
   static Future<void> _saveFailedRequest(
-      String endpoint, Map<String, dynamic> payload) async {
+      String? endpoint, Map<String, dynamic>? payload) async {
+    if (endpoint == null || payload == null) {
+      print(
+          '⚠️ No se puede guardar la solicitud fallida: endpoint o payload es null.');
+      return;
+    }
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
     await failedRequestsBox.add({'endpoint': endpoint, 'payload': payload});
     print('❌ Request saved for retry: $endpoint');
   }
 
   static Future<void> _processPendingRequests() async {
+    print('🔍 Opening failedRequestsBox to process pending requests.');
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-    List<Map<String, dynamic>> pendingRequests =
-        failedRequestsBox.values.cast<Map<String, dynamic>>().toList();
 
-    for (var request in pendingRequests) {
+    List<MapEntry<dynamic, Map<String, dynamic>>> pendingRequests =
+        failedRequestsBox
+            .toMap()
+            .entries
+            .map((entry) {
+              try {
+                final map = Map<String, dynamic>.from(entry.value as Map);
+                return MapEntry(entry.key, map);
+              } catch (error) {
+                print(
+                    '❌ Error converting request with key ${entry.key}: $error');
+                return null;
+              }
+            })
+            .whereType<MapEntry<dynamic, Map<String, dynamic>>>()
+            .toList();
+
+    print('📋 Total pending requests: ${pendingRequests.length}');
+    print('📋 Pending requests: $pendingRequests'); // Debugging print
+
+    for (var entry in pendingRequests) {
+      final key = entry.key;
+      final request = entry.value;
+
       try {
         String endpoint = request['endpoint'];
-        Map<String, dynamic> payload = request['payload'];
-        print('🔄 Retrying request: $endpoint');
+        Map<String, dynamic> payload =
+            Map<String, dynamic>.from(request['payload'] as Map);
+
+        print('🔄 Retrying request for endpoint: $endpoint');
+        print('📦 Payload: $payload');
+
         var response = await _post(endpoint, payload);
         if (response != null) {
-          // Update pedidosBox if the request is "finalizarPedido"
+          print('✅ Request to $endpoint succeeded.');
+
           if (endpoint == 'FinalizarPedido' &&
               payload.containsKey('PedidoId')) {
             var pedidosBox = await Hive.openBox('pedidosBox');
             int pedidoId = payload['PedidoId'];
+            print('📦 Checking pedidosBox for PedidoId: $pedidoId');
             if (pedidosBox.containsKey(pedidoId)) {
-              await pedidosBox.put(
-                  pedidoId, 'Procesando'); // Update to 'Procesando'
+              await pedidosBox.put(pedidoId, 'Procesando');
               print(
                   '📦 Pedido $pedidoId updated to "Procesando" in pedidosBox.');
+            } else {
+              print('⚠️ PedidoId $pedidoId not found in pedidosBox.');
             }
+          } else {
+            print(
+                '📨 Executed request for endpoint "$endpoint" without extra logic.');
           }
-          await failedRequestsBox
-              .deleteAt(0); // Remove successfully processed request
-          print('✅ Request retried successfully: $endpoint');
+
+          await failedRequestsBox.delete(key); // ✅ Borrás el correcto
+          print('🗑️ Removed successfully processed request with key $key.');
+        } else {
+          print('⚠️ Request to $endpoint failed. Response is null.');
         }
       } catch (e) {
-        print('❌ Failed to retry request: $e');
+        print('❌ Exception while retrying request with key $key: $e');
       }
     }
+
+    print('✅ Finished processing all pending requests.');
   }
 
   static Future<Map<String, dynamic>?> _post(
@@ -135,11 +204,14 @@ class RioGasService {
       return null;
     } catch (e) {
       print('❌ Error en [$endpoint]: $e');
+      if (e is SocketException) {
+        print('⚠️ Error de red detectado: ${e.message}');
+      }
       await _saveFailedRequest(endpoint, body); // Save failed request
       await _logError(
         'Exception',
         e.toString(),
-        null,
+        e is SocketException ? 'Network issue' : null,
         endpoint,
         jsonEncode({...body, 'token': token}),
       );
@@ -169,10 +241,12 @@ class RioGasService {
       message: message,
       timestamp: DateTime.now(),
       additionalInfo: additionalInfo,
-      endpoint: endpoint,
-      payload: payload,
+      endpoint: endpoint ?? 'Unknown endpoint',
+      payload: payload ?? 'No payload',
     );
     await errorBox.add(errorEvent);
+    print(
+        '📋 Error logged: ${errorEvent.toString()}'); // Log full details of errorEvent
 
     // Track persistent errors
     await _handlePersistentErrors();

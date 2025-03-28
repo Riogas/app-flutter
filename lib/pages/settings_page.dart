@@ -327,6 +327,12 @@ class _SettingsPageState extends State<SettingsPage> {
     var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
     List<ErrorEvent> errors = errorBox.values.toList().cast<ErrorEvent>();
 
+    print('Contenido completo de errorBox (clave -> valor):');
+    print(errorBox.toMap());
+
+    // Sort errors by timestamp in descending order
+    errors.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
     String? supportEmail =
         await getConstantValue('90'); // Fetch email from constant
 
@@ -345,7 +351,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 return ListTile(
                   title: Text('${error.type}: ${error.message}'),
                   subtitle: Text(
-                      'Fecha: ${error.timestamp}\nInfo Adicional: ${error.additionalInfo ?? "N/A"}'),
+                    'Fecha: ${error.timestamp}\n'
+                    'Info Adicional: ${error.additionalInfo ?? "N/A"}\n'
+                    'Endpoint: ${error.endpoint ?? "N/A"}\n'
+                    'Payload: ${error.payload ?? "N/A"}',
+                  ),
                 );
               },
             ),

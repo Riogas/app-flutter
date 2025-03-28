@@ -191,13 +191,23 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
             } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return Text('Visitas (0)');
             } else {
-              _orderCount = snapshot.data!.length;
+              _orderCount = snapshot.data!.where((order) {
+                var orderData = order.data() as Map<String, dynamic>?;
+                int pedidoId = orderData?['id'] ?? -1;
+                var pedidoEstado = pedidosBox.get(pedidoId);
+                return pedidoEstado != 'Procesando';
+              }).length;
+
               int newOrderCount = snapshot.data!.where((order) {
                 var orderData = order.data() as Map<String, dynamic>?;
-                return orderData == null ||
-                    !orderData.containsKey('FechaHoraLeido') ||
-                    orderData['FechaHoraLeido'] == null;
+                int pedidoId = orderData?['id'] ?? -1;
+                var pedidoEstado = pedidosBox.get(pedidoId);
+                return (orderData == null ||
+                        !orderData.containsKey('FechaHoraLeido') ||
+                        orderData['FechaHoraLeido'] == null) &&
+                    pedidoEstado != 'Procesando';
               }).length;
+
               return Text('Visitas ($_orderCount)');
             }
           },
@@ -220,6 +230,12 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
               itemBuilder: (context, index) {
                 var pedido = orders[index].data() as Map<String, dynamic>;
                 int pedidoId = pedido['id'] ?? -1;
+
+                // Skip rendering the card if the order state is "Procesando"
+                if (_getPedidoEstado(pedidoId) == 'Procesando') {
+                  return SizedBox.shrink();
+                }
+
                 String tipo = pedido['Tipo'] ?? 'Pedidos';
                 String direccion = pedido['ClienteDireccion'] ?? 'Desconocida';
                 String direccionCorta = direccion.length > 20

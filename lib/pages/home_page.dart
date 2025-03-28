@@ -238,13 +238,38 @@ class _HomePageState extends State<HomePage>
     });
   }
 
+  String _getPedidoEstado(int pedidoId) {
+    var pedidosBox = Hive.box('pedidosBox'); // Open the Hive box
+    var pedidoEstado = pedidosBox.get(pedidoId);
+    if (pedidoEstado == null) {
+      return 'No Leído';
+    } else if (pedidoEstado == 'Procesando') {
+      return 'Procesando';
+    } else if (pedidoEstado == 'Enviando') {
+      return 'Enviando';
+    }
+    return '';
+  }
+
   void _listenToPendingOrders() {
     _ordersSubscription =
         _firebaseService.getPedidosStream().listen((orders) async {
-      setState(() {
-        _newOrders = orders.length;
-      });
+      var pedidosBox = await Hive.openBox('pedidosBox');
 
+      // Filtrar pedidos cuyo estado sea 'Procesando'
+      int procesandoOrdersCount = orders.where((order) {
+        var pedido = order.data() as Map<String, dynamic>;
+        int pedidoId = pedido['id'] ?? -1;
+
+        return _getPedidoEstado(pedidoId) == 'Procesando';
+      }).length;
+
+      setState(() {
+        _newOrders = procesandoOrdersCount;
+      });
+    });
+
+    _firebaseService.getPedidosStream().listen((orders) async {
       for (var order in orders) {
         var pedido = order.data() as Map<String, dynamic>; // Extract data
         int pedidoId = pedido['id'] ?? -1; // Extract ID from the data map
