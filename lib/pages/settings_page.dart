@@ -12,6 +12,8 @@ import '../utils/constantes.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:flutter_email_sender/flutter_email_sender.dart';
+import 'package:sms_autofill/sms_autofill.dart';
+import 'dart:math';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -486,6 +488,257 @@ class _SettingsPageState extends State<SettingsPage> {
     return false;
   }
 
+  Future<void> _changePhoneNumber() async {
+    TextEditingController phoneController = TextEditingController();
+    TextEditingController otpController1 = TextEditingController();
+    TextEditingController otpController2 = TextEditingController();
+    TextEditingController otpController3 = TextEditingController();
+    TextEditingController otpController4 = TextEditingController();
+    bool isWaitingForOtp = false;
+    int countdown = 30;
+
+    final appSignature = await SmsAutoFill().getAppSignature;
+    SmsAutoFill().listenForCode();
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              title: Text('Cambiar Número de Teléfono'),
+              content: isWaitingForOtp
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Ingrese el código OTP enviado a su teléfono'),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildOtpField(otpController1),
+                            _buildOtpField(otpController2),
+                            _buildOtpField(otpController3),
+                            _buildOtpField(otpController4),
+                          ],
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          countdown > 0
+                              ? 'Espere $countdown segundos para reenviar el código'
+                              : '¿No recibió el código?',
+                        ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Ingrese su nuevo número de teléfono'),
+                        TextField(
+                          controller: phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            labelText: 'Número de Teléfono',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+              actions: <Widget>[
+                if (!isWaitingForOtp)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: Text('Cancelar'),
+                  ),
+                if (isWaitingForOtp)
+                  TextButton(
+                    onPressed: countdown == 0
+                        ? () async {
+                            int generatedOtp = Random().nextInt(9000) + 1000;
+                            var otpBox = await Hive.openBox('OTPBOX');
+                            await otpBox.put('generatedOtp', generatedOtp);
+
+                            String phoneNumber = phoneController.text;
+                            String smsText =
+                                "Tu%20codigo%20de%20ingreso%20a%20MoveIT%20es%20$generatedOtp%20%20$appSignature";
+
+                            var response = await RioGasService.enviarOTP(
+                              int.parse(phoneNumber),
+                              generatedOtp,
+                              smsText,
+                            );
+
+                            if (response != null && response['OK'] == 0) {
+                              print('🔄 OTP reenviado.');
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error al reenviar OTP.'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            setState(() {
+                              countdown = 30;
+                            });
+
+                            for (int i = 0; i < 30; i++) {
+                              await Future.delayed(Duration(seconds: 1));
+                              if (!context.mounted) return;
+                              setState(() {
+                                countdown--;
+                              });
+                            }
+                          }
+                        : null,
+                    child: Text('Reenviar Código'),
+                  ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!isWaitingForOtp) {
+                      int generatedOtp = Random().nextInt(9000) + 1000;
+                      var otpBox = await Hive.openBox('OTPBOX');
+                      await otpBox.put('generatedOtp', generatedOtp);
+
+                      String phoneNumber = phoneController.text;
+                      String smsText =
+                          "Tu%20codigo%20de%20ingreso%20a%20MoveIT%20es%20$generatedOtp%20%20$appSignature";
+
+                      var response = await RioGasService.enviarOTP(
+                        int.parse(phoneNumber),
+                        generatedOtp,
+                        smsText,
+                      );
+
+                      if (response != null && response['OK'] == 0) {
+                        print('✅ OTP enviado exitosamente.');
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error al enviar OTP.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+
+                      setState(() {
+                        isWaitingForOtp = true;
+                        countdown = 30;
+                      });
+
+                      SmsAutoFill().code.listen((receivedCode) async {
+                        if (receivedCode.length == 4) {
+                          otpController1.text = receivedCode[0];
+                          otpController2.text = receivedCode[1];
+                          otpController3.text = receivedCode[2];
+                          otpController4.text = receivedCode[3];
+
+                          var otpBox = await Hive.openBox('OTPBOX');
+                          String storedOtp =
+                              otpBox.get('generatedOtp').toString();
+
+                          if (receivedCode == storedOtp) {
+                            print(
+                                '✅ OTP auto-completado y validado: $receivedCode');
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content:
+                                      Text('Número actualizado correctamente'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                              Navigator.of(context).pop();
+                            }
+                          }
+                        }
+                      });
+
+                      for (int i = 0; i < 30; i++) {
+                        await Future.delayed(Duration(seconds: 1));
+                        if (!context.mounted) return;
+                        setState(() {
+                          countdown--;
+                        });
+                      }
+                    } else {
+                      String otp = otpController1.text +
+                          otpController2.text +
+                          otpController3.text +
+                          otpController4.text;
+                      var otpBox = await Hive.openBox('OTPBOX');
+                      String storedOtp = otpBox.get('generatedOtp').toString();
+
+                      if (otp.length == 4 && otp == storedOtp) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Número actualizado correctamente'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          Navigator.of(context).pop();
+                        }
+                      } else {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Código OTP incorrecto.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                  child: Text(isWaitingForOtp ? 'Confirmar OTP' : 'Enviar OTP'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    SmsAutoFill().unregisterListener();
+  }
+
+  Widget _buildOtpField(TextEditingController controller) {
+    return SizedBox(
+      width: 40,
+      child: TextField(
+        controller: controller,
+        maxLength: 1,
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          counterText: '',
+          border: OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChangePhoneNumberButton() {
+    return Center(
+      child: ElevatedButton.icon(
+        onPressed: _changePhoneNumber,
+        icon: Icon(Icons.phone, color: Colors.blue),
+        label: Text('Cambiar número de teléfono'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.blue,
+          side: BorderSide(color: Colors.blue),
+        ),
+      ),
+    );
+  }
+
   Widget _buildViewErrorsButton() {
     return Center(
       child: ElevatedButton.icon(
@@ -520,6 +773,8 @@ class _SettingsPageState extends State<SettingsPage> {
               _buildInfoSection(),
               SizedBox(height: 20),
               _buildChangePasswordButton(),
+              SizedBox(height: 10),
+              _buildChangePhoneNumberButton(),
               SizedBox(height: 10),
               _buildLogoutButton(),
               SizedBox(height: 10),
