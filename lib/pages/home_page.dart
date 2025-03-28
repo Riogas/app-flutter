@@ -198,37 +198,27 @@ class _HomePageState extends State<HomePage>
           String movil = box.get('movil');
           String username = box.get('username');
           String deviceId = box.get('deviceId');
-          Position position = await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.high);
-
-          print('📨 Enviando datos al servicio descargaLecturaMensajes:');
-          print('EscenarioId: ${int.parse(escenario)}');
-          print('MovilId: ${int.parse(movil)}');
-          print('MessageId: $messageId');
-          print('Usuario: $username');
-          print('NroSesion: ');
-          print('TermMobileEquipo: $deviceId');
-          print('LectDesc: LECTURA');
-          print('FechaHoraCmbEst: ${DateTime.now().toUtc().toIso8601String()}');
-          print('INAux1: ');
-          print('INAux2: ');
-          print('Latitud: ${position.latitude}');
-          print('Longitud: ${position.longitude}');
-
-          await RioGasService.descargaLecturaMensajes(
-            int.parse(escenario), // escenarioId
-            int.parse(movil), // movilId
-            messageId, // messageId
-            username, // usuario
-            '', // nroSesion
-            deviceId, // termMobileEquipo
-            'DESCARGA', // lectDesc
-            DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
-            '', // inAux1
-            '', // inAux2
-            position.latitude.toString(), // latitud
-            position.longitude.toString(), // longitud
-          );
+          Position? position = await _locationService
+              .getCurrentLocation(); // Use LocationService's method
+          if (position != null) {
+            print('📨 Enviando datos al servicio descargaLecturaMensajes:');
+            print('Latitud: ${position.latitude}');
+            print('Longitud: ${position.longitude}');
+            await RioGasService.descargaLecturaMensajes(
+              int.parse(escenario), // escenarioId
+              int.parse(movil), // movilId
+              messageId, // messageId
+              username, // usuario
+              '', // nroSesion
+              deviceId, // termMobileEquipo
+              'DESCARGA', // lectDesc
+              DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
+              '', // inAux1
+              '', // inAux2
+              position.latitude.toString(), // latitud
+              position.longitude.toString(), // longitud
+            );
+          }
         } else {
           if (mensajesBox.get(message.id) == 'Leido') {
             // Ya está descargado
@@ -282,8 +272,23 @@ class _HomePageState extends State<HomePage>
 
     String inAux2 = '';
 
-    Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
+    Position? position = await _locationService
+        .getCurrentLocation(); // Use LocationService's method
+    if (position == null) {
+      print('⚠️ No se pudo obtener la ubicación. Usando valores por defecto.');
+      position = Position(
+        latitude: 0.0,
+        longitude: 0.0,
+        timestamp: DateTime.now(),
+        accuracy: 0.0,
+        altitude: 0.0,
+        altitudeAccuracy: 0.0, // Added required parameter
+        heading: 0.0,
+        headingAccuracy: 0.0, // Added required parameter
+        speed: 0.0,
+        speedAccuracy: 0.0,
+      );
+    }
     String latitud = position.latitude.toString();
     String longitud = position.longitude.toString();
 

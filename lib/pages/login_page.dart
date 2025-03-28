@@ -13,6 +13,8 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
 import 'dart:math'; // Add this import for random number generation
 import 'package:sms_autofill/sms_autofill.dart'; // Import SmsAutoFill package
+import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth package
+import '../utils/config.dart'; // Import Config class
 
 class LoginPage extends StatefulWidget {
   @override
@@ -737,6 +739,24 @@ class _LoginPageState extends State<LoginPage> {
         nombreUsuario == null) {
       print(
           '⚠️ Falta información en sessionBox. No se puede validar sesión activa.');
+      return false;
+    }
+
+    // Authenticate with Firestore using credentials from Config
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: Config.firestoreEmail,
+        password: Config.firestorePassword,
+      );
+      print('✅ Autenticación con Firestore exitosa.');
+    } catch (e) {
+      print('❌ Error al autenticar con Firestore: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al autenticar con Firestore.'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return false;
     }
 
