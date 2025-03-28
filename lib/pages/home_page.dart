@@ -49,6 +49,7 @@ class _HomePageState extends State<HomePage>
   final ValueNotifier<Map<String, dynamic>> _connectionStatusNotifier =
       ValueNotifier({'network': true, 'firestore': true, 'riogas': true});
   bool showPopup = false; // Add a flag for showing the popup
+  late Box pedidosBox;
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -66,6 +67,7 @@ class _HomePageState extends State<HomePage>
       vsync: this,
     )..repeat(reverse: true); // Blinking effect
     _initializeHomePage();
+    _initPedidosBoxListener();
 
     // 🔹 Resetear la bandera para futuros chequeos de sesión
     Future.delayed(Duration(seconds: 10), () async {
@@ -175,6 +177,59 @@ class _HomePageState extends State<HomePage>
     }
   }
 
+  void _initPedidosBoxListener() async {
+    pedidosBox = await Hive.openBox('pedidosBox');
+
+    pedidosBox.watch().listen((BoxEvent event) {
+      if (event.key != null) {
+        int pedidoId;
+
+        // Si la clave es un int, usamos directamente; si es String, intentamos parsear
+        if (event.key is int) {
+          pedidoId = event.key as int;
+        } else {
+          try {
+            pedidoId = int.parse(event.key.toString());
+          } catch (_) {
+            print('❌ Clave no válida: ${event.key}');
+            return;
+          }
+        }
+
+        String _getPedidoEstado(int pedidoId) {
+          var pedidoEstado = pedidosBox.get(pedidoId);
+          if (pedidoEstado == null) {
+            return 'No Leído';
+          } else if (pedidoEstado == 'Procesando') {
+            return 'Procesando';
+          } else if (pedidoEstado == 'Enviando') {
+            return 'Enviando';
+          }
+          return '';
+        }
+
+        String estado = _getPedidoEstado(pedidoId);
+        print('🔔 Cambio en pedido $pedidoId. Nuevo estado: $estado');
+
+        // Podés hacer algo dependiendo del estado
+        switch (estado) {
+          case 'Procesando':
+            print('📦 Pedido $pedidoId está siendo procesado.');
+            _newOrders--;
+            break;
+          case 'Enviando':
+            print('🚚 Pedido $pedidoId se está enviando.');
+            break;
+          case 'No Leído':
+            print('🕵️ Pedido $pedidoId aún no ha sido leído.');
+            break;
+          default:
+            print('⚠️ Estado desconocido para pedido $pedidoId.');
+        }
+      }
+    });
+  }
+
   void _listenToMessages() async {
     var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
     _firebaseService.getMensajesStream().listen((messages) async {
@@ -238,38 +293,19 @@ class _HomePageState extends State<HomePage>
     });
   }
 
-  String _getPedidoEstado(int pedidoId) {
-    var pedidosBox = Hive.box('pedidosBox'); // Open the Hive box
-    var pedidoEstado = pedidosBox.get(pedidoId);
-    if (pedidoEstado == null) {
-      return 'No Leído';
-    } else if (pedidoEstado == 'Procesando') {
-      return 'Procesando';
-    } else if (pedidoEstado == 'Enviando') {
-      return 'Enviando';
-    }
-    return '';
-  }
-
   void _listenToPendingOrders() {
     _ordersSubscription =
         _firebaseService.getPedidosStream().listen((orders) async {
-      var pedidosBox = await Hive.openBox('pedidosBox');
-
-      // Filtrar pedidos cuyo estado sea 'Procesando'
-      int procesandoOrdersCount = orders.where((order) {
-        var pedido = order.data() as Map<String, dynamic>;
-        int pedidoId = pedido['id'] ?? -1;
-
-        return _getPedidoEstado(pedidoId) == 'Procesando';
-      }).length;
-
       setState(() {
-        _newOrders = procesandoOrdersCount;
+        //_newOrders = orders.length;
+        _newOrders = orders.where((order) {
+          var orderData = order.data() as Map<String, dynamic>?;
+          int pedidoId = orderData?['id'] ?? -1;
+          var pedidoEstado = pedidosBox.get(pedidoId);
+          return pedidoEstado != 'Procesando';
+        }).length;
       });
-    });
 
-    _firebaseService.getPedidosStream().listen((orders) async {
       for (var order in orders) {
         var pedido = order.data() as Map<String, dynamic>; // Extract data
         int pedidoId = pedido['id'] ?? -1; // Extract ID from the data map

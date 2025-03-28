@@ -7,6 +7,9 @@ import 'package:geolocator/geolocator.dart';
 import '../services/location_service.dart'; // Add this line to import LocationService
 import 'dart:async'; // Import for Timer
 import '../utils/constantes.dart';
+import 'package:url_launcher/url_launcher.dart'; // Add this import for opening URLs
+import 'package:path_provider/path_provider.dart'; // Add this import for file handling
+import 'package:open_file/open_file.dart'; // Ensure this import is present
 
 class RioGasService {
   static const String baseUrl = 'https://www.riogas.uy/ica_geos_/appservices/';
@@ -43,7 +46,7 @@ class RioGasService {
         (timer) async {
           print('🔄 Timer triggered. Executing retry timer callback.');
           try {
-            await _processPendingRequests();
+            await processPendingRequests();
             //_retryTimer = null; // Reset the timer to null after processing
             print('⏱️ Retry timer reset to null after processing.');
           } catch (e) {
@@ -94,7 +97,8 @@ class RioGasService {
     print('❌ Request saved for retry: $endpoint');
   }
 
-  static Future<void> _processPendingRequests() async {
+  static Future<void> processPendingRequests() async {
+    // Renamed method
     print('🔍 Opening failedRequestsBox to process pending requests.');
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
@@ -491,5 +495,50 @@ class RioGasService {
       'DeviceId': deviceId,
       'FechaHora': fechaHora,
     });
+  }
+
+  static Future<void> downloadAndOpenPDF({
+    required int year,
+    required int month,
+    required int day,
+    required int hour,
+    required int minutes,
+    required int seconds,
+    required String usuMobileLogin,
+    required String termMobileEquipo,
+    required int agenciaId,
+    required int escenarioId,
+    required int movilId,
+  }) async {
+    print('📋 Parameters:');
+    print('Year: $year, Month: $month, Day: $day');
+    print('Hour: $hour, Minutes: $minutes, Seconds: $seconds');
+    print(
+        'UsuMobileLogin: $usuMobileLogin, TermMobileEquipo: $termMobileEquipo');
+    print('AgenciaId: $agenciaId, EscenarioId: $escenarioId');
+    print('MovilId: $movilId');
+    final url =
+        'https://www.riogas.uy/ica_geos_/com.icageos.urlhttprpt2?Year=$year&Month=$month&Day=$day&Hour=$hour&Minutes=$minutes&Seconds=$seconds&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId';
+
+    try {
+      print('🌐 Downloading PDF from: $url');
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final directory = await getTemporaryDirectory();
+        final filePath = '${directory.path}/report.pdf';
+        final file = File(filePath);
+
+        await file.writeAsBytes(response.bodyBytes);
+        print('✅ PDF downloaded to: $filePath');
+
+        final result = await OpenFile.open(filePath);
+        print('📂 Opened PDF with result: $result');
+      } else {
+        print('❌ Failed to download PDF. Status code: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error downloading or opening PDF: $e');
+    }
   }
 }

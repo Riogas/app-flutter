@@ -9,12 +9,14 @@ import 'dart:io'; // flutter_ignore: dart_io_import.
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator_android/geolocator_android.dart';
 import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
+import 'package:open_file_android/open_file_android.dart';
 import 'package:path_provider_android/path_provider_android.dart';
 import 'package:url_launcher_android/url_launcher_android.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator_apple/geolocator_apple.dart';
 import 'package:google_maps_flutter_ios/google_maps_flutter_ios.dart';
+import 'package:open_file_ios/open_file_ios.dart';
 import 'package:path_provider_foundation/path_provider_foundation.dart';
 import 'package:url_launcher_ios/url_launcher_ios.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
@@ -22,16 +24,19 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_local_notifications_linux/flutter_local_notifications_linux.dart';
+import 'package:open_file_linux/open_file_linux.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider_linux/path_provider_linux.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher_linux/url_launcher_linux.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator_apple/geolocator_apple.dart';
+import 'package:open_file_mac/open_file_mac.dart';
 import 'package:path_provider_foundation/path_provider_foundation.dart';
 import 'package:url_launcher_macos/url_launcher_macos.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:open_file_windows/open_file_windows.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider_windows/path_provider_windows.dart';
 import 'package:share_plus/share_plus.dart';
@@ -66,6 +71,15 @@ class _PluginRegistrant {
       } catch (err) {
         print(
           '`google_maps_flutter_android` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        OpenFileAndroid.registerWith();
+      } catch (err) {
+        print(
+          '`open_file_android` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }
@@ -121,6 +135,15 @@ class _PluginRegistrant {
       } catch (err) {
         print(
           '`google_maps_flutter_ios` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        OpenFileIOS.registerWith();
+      } catch (err) {
+        print(
+          '`open_file_ios` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }
@@ -190,6 +213,15 @@ class _PluginRegistrant {
       }
 
       try {
+        OpenFileLinux.registerWith();
+      } catch (err) {
+        print(
+          '`open_file_linux` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
         PackageInfoPlusLinuxPlugin.registerWith();
       } catch (err) {
         print(
@@ -245,6 +277,15 @@ class _PluginRegistrant {
       }
 
       try {
+        OpenFileMac.registerWith();
+      } catch (err) {
+        print(
+          '`open_file_mac` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
         PathProviderFoundation.registerWith();
       } catch (err) {
         print(
@@ -277,6 +318,15 @@ class _PluginRegistrant {
       } catch (err) {
         print(
           '`device_info_plus` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        OpenFileWindows.registerWith();
+      } catch (err) {
+        print(
+          '`open_file_windows` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }

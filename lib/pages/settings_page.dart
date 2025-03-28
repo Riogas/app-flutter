@@ -208,8 +208,54 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _generateReport() async {
     DateTime? selectedDate = await _selectDate(context);
     if (selectedDate != null) {
-      // Aquí puedes agregar el código para ejecutar el servicio de terceros
-      print('Fecha seleccionada para el reporte: $selectedDate');
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return Center(
+            child: CircularProgressIndicator(),
+          );
+        },
+      );
+
+      try {
+        // Split the selectedDate into components
+        int year = selectedDate.year;
+        int month = selectedDate.month;
+        int day = selectedDate.day;
+        int hour = selectedDate.hour;
+        int minutes = selectedDate.minute;
+        int seconds = selectedDate.second;
+
+        var box = await Hive.openBox('sessionBox');
+        String idUsuario = box.get('username');
+        String deviceId = box.get('deviceId');
+        String escenarioId = box.get('escenario', defaultValue: '0');
+        String movil = box.get('movil');
+
+        // Call the function to download and open the PDF
+        await RioGasService.downloadAndOpenPDF(
+          year: year,
+          month: month,
+          day: day,
+          hour: hour,
+          minutes: minutes,
+          seconds: seconds,
+          usuMobileLogin: idUsuario ?? '',
+          termMobileEquipo: deviceId ?? '',
+          agenciaId: 80,
+          escenarioId: int.tryParse(escenarioId) ?? 0,
+          movilId: int.tryParse(movil) ?? 0,
+        );
+
+        print('Fecha seleccionada para el reporte: $selectedDate');
+      } catch (e) {
+        _showMessage('Error al generar el reporte: $e');
+      } finally {
+        // Dismiss loading indicator
+        Navigator.of(context).pop();
+      }
     }
   }
 
@@ -348,13 +394,18 @@ class _SettingsPageState extends State<SettingsPage> {
               itemCount: errors.length,
               itemBuilder: (context, index) {
                 final error = errors[index];
+                String sanitizedPayload = error.payload?.replaceAll(
+                      '"token": "IcA.FwL.1710.!"',
+                      '"token": "I************!"',
+                    ) ??
+                    "N/A";
                 return ListTile(
                   title: Text('${error.type}: ${error.message}'),
                   subtitle: Text(
                     'Fecha: ${error.timestamp}\n'
                     'Info Adicional: ${error.additionalInfo ?? "N/A"}\n'
                     'Endpoint: ${error.endpoint ?? "N/A"}\n'
-                    'Payload: ${error.payload ?? "N/A"}',
+                    'Payload: $sanitizedPayload',
                   ),
                 );
               },

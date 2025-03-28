@@ -6,6 +6,7 @@ import '../services/firebase_service.dart';
 import '../services/riogas_service.dart';
 import '../utils/error_event.dart';
 import '../utils/constantes.dart'; // Import for getConstantValue
+import '../services/riogas_service.dart'; // Import for RioGasService
 
 class ConnectionCheck {
   final FirebaseService _firebaseService = FirebaseService();
@@ -97,6 +98,7 @@ class ConnectionCheck {
           _startRioGasTimer();
         }
       } else {
+        await RioGasService.processPendingRequests(); // Updated call
         _resetRioGasTimer();
       }
 
@@ -107,8 +109,10 @@ class ConnectionCheck {
       await _logError('Connection Check Error', e.toString());
     }
 
-    // Emit updated status
-    _connectionStatusController.add(status);
+    // Emit updated status if the stream is not closed
+    if (!_connectionStatusController.isClosed) {
+      _connectionStatusController.add(status);
+    }
   }
 
   Future<bool> _checkRioGasConnectivity() async {
