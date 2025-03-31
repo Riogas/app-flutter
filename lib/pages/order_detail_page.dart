@@ -6,6 +6,7 @@ import '../services/firebase_service.dart'; // Import FirebaseService
 import 'package:hive/hive.dart';
 import '../services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa para manejar URLs
+import 'package:MoveIT/pages/home_page.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
@@ -390,7 +391,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           print('Estado de pedidosBox después de éxito: ${pedidosBox.toMap()}');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Pedido finalizado con éxito.'),
+              content: Text('Visita finalizada con éxito.'),
             ),
           );
         } else {
@@ -403,7 +404,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           print('Estado de pedidosBox después de fallo: ${pedidosBox.toMap()}');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error al finalizar el pedido.'),
+              content: Text('Error al finalizar la visita.'),
             ),
           );
         }
@@ -416,7 +417,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
     } finally {
       Navigator.of(context).pop(); // Close loading dialog
-      Navigator.of(context).pop(); // Navigate back to the previous screen
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+            builder: (context) => HomePage()), // Navigate to HomePage widget
+      );
     }
   }
 

@@ -639,7 +639,7 @@ class _HomePageState extends State<HomePage>
 
                     return GestureDetector(
                       onTap: () => _showEstadoDropdown(
-                          context, movilDoc.id, estadoNro, subEstados),
+                          context, _movil, estadoNro, subEstados),
                       child: Row(
                         children: [
                           Container(
@@ -777,12 +777,19 @@ class _HomePageState extends State<HomePage>
     String?
         selectedEstadoDesc; // Variable to store the selected state's DescCombo
 
+    print("🔍 Debugging Estado Dropdown:");
+    print("movilId: $movilId");
+    print("currentEstado: $currentEstado");
+    print("subEstados: $subEstados");
+
     // Get the current state's DescCombo
     String currentEstadoDesc = subEstados.firstWhere(
       (element) =>
           int.tryParse(element['SubEstadoCod'].toString()) == currentEstado,
       orElse: () => {'DescCombo': 'Desconocido'},
     )['DescCombo'];
+
+    print("currentEstadoDesc: $currentEstadoDesc");
 
     showDialog(
       context: context,
@@ -799,6 +806,7 @@ class _HomePageState extends State<HomePage>
                         subEstado['VisibleEnCombo'] == true &&
                         subEstado['DescCombo'] != currentEstadoDesc)
                     .map((subEstado) {
+                  print("🔍 SubEstado disponible: ${subEstado['DescCombo']}");
                   return DropdownMenuItem<String>(
                     value: subEstado['DescCombo'] as String,
                     child: Text(subEstado['DescCombo'] as String),
@@ -807,6 +815,7 @@ class _HomePageState extends State<HomePage>
                 onChanged: (String? newValue) {
                   setState(() {
                     selectedEstadoDesc = newValue; // Update the selected state
+                    print("🔄 Estado seleccionado: $selectedEstadoDesc");
                   });
                 },
               ),
@@ -827,6 +836,9 @@ class _HomePageState extends State<HomePage>
                       int newEstadoNro = int.tryParse(
                               selectedSubEstado['SubEstadoCod'].toString()) ??
                           currentEstado;
+
+                      print("✅ SubEstado seleccionado: $selectedSubEstado");
+                      print("🔢 Nuevo EstadoNro: $newEstadoNro");
 
                       await _firebaseService.updateMovilEstado(newEstadoNro);
                       // Call the actualizarMoviles service

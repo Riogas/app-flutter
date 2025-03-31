@@ -80,28 +80,32 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
   Map<String, dynamic>? getDelayInfo(int delayMinutes) {
     for (int id in [40, 41, 42, 43]) {
-      var data = constantBox.get(id.toString());
-      print("🔍 Leyendo constante con ID $id: $data");
-      if (data != null && data['Estado'] == 'A') {
-        print("✅ Estado es 'A' para ID $id");
-        print(
-            "🔢 Comparando delayMinutes: $delayMinutes con ValorMin: ${data['ValorMin']} y ValorMax: ${data['ValorMax']}");
-        if ((delayMinutes >= data['ValorMin'] &&
-                delayMinutes <= data['ValorMax']) ||
-            (delayMinutes <= data['ValorMin'] &&
-                delayMinutes >= data['ValorMax'])) {
+      if (constantBox.isOpen) {
+        var data = constantBox.get(id.toString());
+        print("🔍 Leyendo constante con ID $id: $data");
+        if (data != null && data['Estado'] == 'A') {
+          print("✅ Estado es 'A' para ID $id");
           print(
-              "⏳ Delay $delayMinutes está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
-          return {
-            "Color": getColorFromName(data['Color']),
-            "Etiqueta": data['Etiqueta'],
-          };
+              "🔢 Comparando delayMinutes: $delayMinutes con ValorMin: ${data['ValorMin']} y ValorMax: ${data['ValorMax']}");
+          if ((delayMinutes >= data['ValorMin'] &&
+                  delayMinutes <= data['ValorMax']) ||
+              (delayMinutes <= data['ValorMin'] &&
+                  delayMinutes >= data['ValorMax'])) {
+            print(
+                "⏳ Delay $delayMinutes está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+            return {
+              "Color": getColorFromName(data['Color']),
+              "Etiqueta": data['Etiqueta'],
+            };
+          } else {
+            print(
+                "❌ Delay $delayMinutes no está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+          }
         } else {
-          print(
-              "❌ Delay $delayMinutes no está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+          print("❌ Estado no es 'A' para ID $id o data es null");
         }
       } else {
-        print("❌ Estado no es 'A' para ID $id o data es null");
+        print("⚠️ constantBox is closed. Skipping data retrieval for ID $id.");
       }
     }
     print("❌ No se encontró un rango válido para delay $delayMinutes");
