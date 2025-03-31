@@ -119,47 +119,59 @@ class _MapPageState extends State<MapPage> {
   void _getPendingOrders() {
     _firebaseService.getPedidosStream().listen((orders) {
       setState(() {
-        _markers = orders.map((order) {
-          var data = order.data() as Map<String, dynamic>;
-          var location = data['ubicacion'] as GeoPoint;
+        _markers = orders
+            .map((order) {
+              var data = order.data() as Map<String, dynamic>;
+              var location = data['ubicacion'] as GeoPoint;
+              var pedidoId = data['id'];
 
-          // Calculate delay in minutes
-          DateTime now = DateTime.now();
-          DateTime fchHoraPara =
-              (data['FchHoraMaxEntComp'] as Timestamp).toDate();
-          int delayMinutes = fchHoraPara.difference(now).inMinutes;
+              // Check the order state in Hive
+              var pedidoEstado = pedidosBox.get(pedidoId);
+              if (pedidoEstado == 'Procesando') {
+                return null; // Skip orders with "Procesando" state
+              }
 
-          // Get delay info (color and label)
-          var delayInfo = getDelayInfo(delayMinutes);
-          Color pinColor = delayInfo?["Color"] ?? Colors.red; // Default to red
+              // Calculate delay in minutes
+              DateTime now = DateTime.now();
+              DateTime fchHoraPara =
+                  (data['FchHoraMaxEntComp'] as Timestamp).toDate();
+              int delayMinutes = fchHoraPara.difference(now).inMinutes;
 
-          return Marker(
-            width: 80.0,
-            height: 80.0,
-            point: LatLng(location.latitude, location.longitude),
-            child: IconButton(
-              icon: Icon(Icons.location_on),
-              color: pinColor, // Use the color from delayInfo
-              iconSize: 40.0,
-              onPressed: () {
-                // Navegar directamente a la página de detalles
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => OrderDetailPage(
-                      detalleHtml: data['DetalleHTML'] ?? '',
-                      estadoNro: 1, // Ajusta según sea necesario
-                      totalPedido: data['TotalPedido'] ??
-                          0.0, // Ajusta según sea necesario
-                      codPedido: data['id'],
-                      pedidoTipo: data['Tipo'],
-                    ),
-                  ),
-                );
-              },
-            ),
-          );
-        }).toList();
+              // Get delay info (color and label)
+              var delayInfo = getDelayInfo(delayMinutes);
+              Color pinColor =
+                  delayInfo?["Color"] ?? Colors.red; // Default to red
+
+              return Marker(
+                width: 80.0,
+                height: 80.0,
+                point: LatLng(location.latitude, location.longitude),
+                child: IconButton(
+                  icon: Icon(Icons.location_on),
+                  color: pinColor, // Use the color from delayInfo
+                  iconSize: 40.0,
+                  onPressed: () {
+                    // Navegar directamente a la página de detalles
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => OrderDetailPage(
+                          detalleHtml: data['DetalleHTML'] ?? '',
+                          estadoNro: 1, // Ajusta según sea necesario
+                          totalPedido: data['TotalPedido'] ??
+                              0.0, // Ajusta según sea necesario
+                          codPedido: data['id'],
+                          pedidoTipo: data['Tipo'],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            })
+            .where((marker) => marker != null)
+            .toList()
+            .cast<Marker>(); // Filter out null markers and cast to List<Marker>
 
         // Center map on the client with the longest delay or the first order
         _centerMapOnPriorityOrder(

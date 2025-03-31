@@ -168,7 +168,7 @@ Future<void> _validateAppVersion() async {
 }
 
 Future<void> _checkBatteryAndBackgroundSettings() async {
-  DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  /*DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
   Battery battery = Battery();
 
   // Verificar si la aplicación está en la lista de optimización de batería
@@ -185,7 +185,7 @@ Future<void> _checkBatteryAndBackgroundSettings() async {
       _showMessage(
           'La aplicación está restringida para ejecutarse en segundo plano.');
     }
-  }
+  }*/
 }
 
 Future<void> _checkInternetConnectivity() async {

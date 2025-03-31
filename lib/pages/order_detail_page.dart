@@ -393,7 +393,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               content: Text('Pedido finalizado con éxito.'),
             ),
           );
-          Navigator.of(context).pop(); // Close the popup
         } else {
           var pedidosBox = await Hive.openBox('pedidosBox');
           if (pedidosBox.containsKey(pedidoId)) {
@@ -407,7 +406,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               content: Text('Error al finalizar el pedido.'),
             ),
           );
-          Navigator.of(context).pop(); // Close the popup
         }
       }
     } catch (e) {
@@ -418,6 +416,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
     } finally {
       Navigator.of(context).pop(); // Close loading dialog
+      Navigator.of(context).pop(); // Navigate back to the previous screen
     }
   }
 
@@ -443,12 +442,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       return StatefulBuilder(
                         builder: (context, setState) {
                           return AlertDialog(
-                            title: Text('Seleccione acción'),
+                            title: Text('Seleccione estado'),
                             content: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 DropdownButton<String>(
-                                  hint: Text('Ninguna'),
+                                  hint: Text('Seleccione'),
                                   value: _selectedSubEstado,
                                   onChanged: (newValue) {
                                     setState(() {
@@ -469,8 +468,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                   maxLength: 300,
                                   decoration: InputDecoration(
                                     labelText: 'Observaciones',
-                                    hintText:
-                                        'Ingrese observaciones (solo letras y números)',
+                                    hintText: 'Observaciones',
                                     border: OutlineInputBorder(),
                                   ),
                                   onChanged: (value) {
