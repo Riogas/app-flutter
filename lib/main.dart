@@ -60,8 +60,27 @@ void main() async {
     isLoggedIn = false; // Redirect to login if no active session
   }
 
-  WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
-  runApp(MyApp(isLoggedIn: isLoggedIn));
+  FlutterError.onError = (FlutterErrorDetails details) {
+    // Podés registrar esto en logs o mostrar una pantalla de error
+    print("Error crítico atrapado: ${details.exceptionAsString()}");
+    FlutterError.presentError(details); // Muestra el error en consola
+  };
+
+  final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  final androidInfo = await deviceInfo.androidInfo;
+  final version = androidInfo.version.sdkInt;
+
+  if (Platform.isAndroid && version < 26) {
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(child: Text('Lite Fallback App')),
+      ),
+    )); // algo más liviano, sin animaciones
+  } else {
+    runApp(MyApp(isLoggedIn: isLoggedIn));
+  }
+
+  //WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
 }
 
 Future<void> _initializeFirebaseMessaging() async {
@@ -168,7 +187,7 @@ Future<void> _validateAppVersion() async {
 }
 
 Future<void> _checkBatteryAndBackgroundSettings() async {
-  /*DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
   Battery battery = Battery();
 
   // Verificar si la aplicación está en la lista de optimización de batería
@@ -185,7 +204,7 @@ Future<void> _checkBatteryAndBackgroundSettings() async {
       _showMessage(
           'La aplicación está restringida para ejecutarse en segundo plano.');
     }
-  }*/
+  }
 }
 
 Future<void> _checkInternetConnectivity() async {
