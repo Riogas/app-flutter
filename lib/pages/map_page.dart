@@ -113,7 +113,7 @@ class _MapPageState extends State<MapPage> {
     } else if (pedidoEstado == 'Enviando') {
       return 'Enviando';
     }
-    return '';
+    return 'Nuevo';
   }
 
   void _centerMapOnPriorityOrder(List<QueryDocumentSnapshot> orders) {
