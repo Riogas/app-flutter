@@ -181,10 +181,10 @@ class _MessagePageState extends State<MessagePage> {
 
     // Open mensajesBox and update the message state to "Leido"
     var mensajesBox = await Hive.openBox('mensajesBox');
-    if (mensajesBox.containsKey(message.id)) {
-      await mensajesBox.put(message.id, 'Leido');
-      print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
-    }
+    //if (mensajesBox.containsKey(message.id)) {
+    await mensajesBox.put(message.id, 'Leido');
+    print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
+    //}
 
     print('📨 Enviando datos al servicio descargaLecturaMensajes:');
     print('EscenarioId: ${int.parse(escenario)}');
@@ -269,10 +269,10 @@ class _MessagePageState extends State<MessagePage> {
             children: [
               Text(
                 'Borrar Todo',
-                style: TextStyle(color: Colors.red),
+                style: TextStyle(color: Colors.black),
               ),
               IconButton(
-                icon: Icon(Icons.delete, color: Colors.red),
+                icon: Icon(Icons.delete, color: Colors.black),
                 onPressed: () {
                   _firebaseService.getMensajesStream().first.then((messages) {
                     _deleteAllMessages(messages);
@@ -308,29 +308,31 @@ class _MessagePageState extends State<MessagePage> {
                     ? DateFormat('dd/MM/yyyy HH:mm').format(
                         (mensaje['FchHoraCreado'] as Timestamp).toDate())
                     : '';
-                return Container(
-                  color: isRead ? Colors.white : Colors.blue.withOpacity(0.1),
+                return Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0, vertical: 8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      horizontal: 8.0, vertical: 4.0),
+                  child: Card(
+                    color: isRead ? Colors.grey[300] : Colors.lightBlue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10.0),
+                    ),
+                    elevation: 5,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          IconButton(
-                            icon: Icon(
-                              isRead
-                                  ? Icons.mark_email_read
-                                  : Icons.mark_email_unread,
-                              color: isRead ? Colors.grey : Colors.blue,
-                            ),
-                            onPressed: () {
-                              if (!isRead) {
+                          if (!isRead) // Show the button only if the message is not read
+                            IconButton(
+                              icon: Icon(
+                                Icons.mark_email_unread,
+                                color:
+                                    Colors.white, // Color for unread messages
+                              ),
+                              onPressed: () {
                                 _markMessageAsRead(messages[index]);
-                              }
-                            },
-                          ),
+                              },
+                            ),
                           SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -342,7 +344,9 @@ class _MessagePageState extends State<MessagePage> {
                                     fontWeight: isRead
                                         ? FontWeight.normal
                                         : FontWeight.bold,
-                                    color: isRead ? Colors.black : Colors.blue,
+                                    color: isRead
+                                        ? Colors.black
+                                        : Colors.white, // Updated color
                                     fontSize: 16.0,
                                   ),
                                 ),
@@ -350,7 +354,7 @@ class _MessagePageState extends State<MessagePage> {
                                 Text(
                                   formattedDate,
                                   style: TextStyle(
-                                    color: Colors.grey,
+                                    color: isRead ? Colors.black : Colors.white,
                                     fontSize: 12.0,
                                   ),
                                 ),
@@ -358,15 +362,15 @@ class _MessagePageState extends State<MessagePage> {
                             ),
                           ),
                           IconButton(
-                            icon: Icon(Icons.delete, color: Colors.red),
+                            icon: Icon(Icons.delete,
+                                color: Colors.black), // Updated color
                             onPressed: () {
                               _deleteMessage(messages[index]);
                             },
                           ),
                         ],
                       ),
-                      Divider(), // Add a horizontal line separator
-                    ],
+                    ),
                   ),
                 );
               },

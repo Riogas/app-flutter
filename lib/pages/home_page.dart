@@ -235,8 +235,7 @@ class _HomePageState extends State<HomePage>
     _firebaseService.getMensajesStream().listen((messages) async {
       int newMessagesCount = 0;
 
-      print("📦 Contenido de mensajesBox:");
-      print(mensajesBox.toMap());
+      print("📦 Contenido de mensajesBox: ${mensajesBox.toMap()}");
 
       for (var message in messages) {
         if (!mensajesBox.containsKey(message.id)) {
@@ -286,7 +285,10 @@ class _HomePageState extends State<HomePage>
       }
 
       setState(() {
-        _unreadMessages = mensajesBox.length; // Update unread messages count
+        //_unreadMessages = mensajesBox.length; // Update unread messages count
+        _unreadMessages = mensajesBox.values
+            .where((estado) => estado == 'Descargado')
+            .length; // Count only 'Descargado' messages
       });
     });
   }

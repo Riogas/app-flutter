@@ -338,48 +338,59 @@ class FirebaseService {
   }
 
   Stream<List<DocumentSnapshot>> getMensajesStream() async* {
-    var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0').toString();
-    int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
+    try {
+      var box = await Hive.openBox('sessionBox');
+      String escenarioId = box.get('escenario', defaultValue: '0').toString();
+      int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
-    String collectionName = 'Mensajes-$escenarioId';
-    String fechaActualStr = DateTime.now()
-        .toUtc()
-        .subtract(Duration(hours: 3))
-        .toIso8601String()
-        .split('T')[0]
-        .replaceAll('-', '');
-    int fechaActual = int.tryParse(fechaActualStr) ?? 0;
+      String collectionName = 'Mensajes-$escenarioId';
+      String fechaActualStr = DateTime.now()
+          .toUtc()
+          .subtract(Duration(hours: 3))
+          .toIso8601String()
+          .split('T')[0]
+          .replaceAll('-', '');
+      int fechaActual = int.tryParse(fechaActualStr) ?? 0;
 
-    Stream<List<DocumentSnapshot>> mensajesStream = _firestore
-        .collection(collectionName)
-        .where('Movil', isEqualTo: movil)
-        .where('VisibleEnApp', isEqualTo: 'S')
-        .where('FchMsj', isEqualTo: fechaActual)
-        .snapshots()
-        .handleError((error) async {
-      if (error is FirebaseException && error.code == 'permission-denied') {
-        await _logFirestorePermissionError(
-            error.message ?? 'Permission denied');
-      } else {
-        print('Error fetching mensajes: $error');
-        await _logError('Firestore Error', error.toString());
+      try {
+        Stream<List<DocumentSnapshot>> mensajesStream = _firestore
+            .collection(collectionName)
+            .where('Movil', isEqualTo: movil)
+            .where('VisibleEnApp', isEqualTo: 'S')
+            .where('FchMsj', isEqualTo: fechaActual)
+            .snapshots()
+            .handleError((error) async {
+          print('❌ Error in Firestore stream: $error');
+          if (error is FirebaseException && error.code == 'permission-denied') {
+            await _logFirestorePermissionError(
+                error.message ?? 'Permission denied');
+          } else {
+            await _logError('Firestore Error', error.toString());
+          }
+          bool isConnected = await checkFirestoreConnectivity();
+          if (!isConnected) {
+            print('⚠ Pérdida de conectividad con Firestore.');
+          }
+        }).map((snapshot) {
+          print('Fetched ${snapshot.docs.length} mensajes');
+          snapshot.docs.forEach((doc) {
+            print('Mensaje: ${doc.data()}');
+          });
+          return snapshot.docs;
+        });
+
+        monitorStream(mensajesStream, 'MensajesStream'); // Monitorea el stream
+        yield* mensajesStream;
+      } catch (e, stackTrace) {
+        print('❌ Error setting up Firestore stream: $e');
+        print('StackTrace: $stackTrace');
+        await _logError('Stream Setup Error', e.toString());
       }
-      bool isConnected = await checkFirestoreConnectivity();
-      if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        print('⚠ Pérdida de conectividad con Firestore.');
-      }
-    }).map((snapshot) {
-      print('Fetched ${snapshot.docs.length} mensajes');
-      snapshot.docs.forEach((doc) {
-        print('Mensaje: ${doc.data()}');
-      });
-      return snapshot.docs;
-    });
-
-    monitorStream(mensajesStream, 'MensajesStream'); // Monitorea el stream
-    yield* mensajesStream;
+    } catch (e, stackTrace) {
+      print('❌ Error in getMensajesStream: $e');
+      print('StackTrace: $stackTrace');
+      await _logError('General Error', e.toString());
+    }
   }
 
   Future<List<DocumentSnapshot>> getUnreadMessages() async {
