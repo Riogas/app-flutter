@@ -65,6 +65,7 @@ class RioGasService {
   // Ensure the timer starts at least once during initialization
   static Future<void> initializeService() async {
     await initializeRetryInterval();
+    await deleteOldRequests(); // Call the method to delete old requests
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
     // Listen for changes in the failedRequestsBox
@@ -93,12 +94,24 @@ class RioGasService {
       return;
     }
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
+    // Check if the same endpoint + payload already exists
+    bool exists = failedRequestsBox.values.any((request) {
+      return request['endpoint'] == endpoint &&
+          Map<String, dynamic>.from(request['payload'] as Map).toString() ==
+              payload.toString();
+    });
+
+    if (exists) {
+      print('⚠️ Duplicate request detected. Not saving again: $endpoint');
+      return;
+    }
+
     await failedRequestsBox.add({'endpoint': endpoint, 'payload': payload});
     print('❌ Request saved for retry: $endpoint');
   }
 
   static Future<void> processPendingRequests() async {
-    // Renamed method
     print('🔍 Opening failedRequestsBox to process pending requests.');
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
@@ -155,7 +168,8 @@ class RioGasService {
                 '📨 Executed request for endpoint "$endpoint" without extra logic.');
           }
 
-          await failedRequestsBox.delete(key); // ✅ Borrás el correcto
+          await failedRequestsBox
+              .delete(key); // ✅ Remove successfully processed request
           print('🗑️ Removed successfully processed request with key $key.');
         } else {
           print('⚠️ Request to $endpoint failed. Response is null.');
@@ -540,5 +554,39 @@ class RioGasService {
     } catch (e) {
       print('❌ Error downloading or opening PDF: $e');
     }
+  }
+
+  static Future<void> deleteOldRequests() async {
+    print('🗑️ Checking for old requests to delete.');
+    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
+    // Check if the box contains more than 500 records
+    if (failedRequestsBox.length > 500) {
+      print('⚠️ More than 500 records found. Clearing the box.');
+      await failedRequestsBox.clear(); // Clear all records
+      print('✅ All records cleared from failedRequestsBox.');
+      return;
+    }
+
+    DateTime today = DateTime.now();
+
+    List<dynamic> keysToDelete = failedRequestsBox.keys.where((key) {
+      var request = failedRequestsBox.get(key);
+      if (request != null && request is Map) {
+        DateTime? timestamp = DateTime.tryParse(request['timestamp'] ?? '');
+        if (timestamp != null) {
+          return timestamp
+              .isBefore(DateTime(today.year, today.month, today.day));
+        }
+      }
+      return false;
+    }).toList();
+
+    for (var key in keysToDelete) {
+      await failedRequestsBox.delete(key);
+      print('🗑️ Deleted old request with key: $key');
+    }
+
+    print('✅ Finished deleting old requests.');
   }
 }
