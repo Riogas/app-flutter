@@ -70,7 +70,11 @@ class FirebaseService {
 
   Future<void> _updateConnectionErrorState(bool hasError) async {
     var conexionBox = await Hive.openBox('conexionBox');
-    DateTime now = DateTime.now();
+    DateTime? now = DateTime.now();
+    if (now == null) {
+      print('⚠ Error: DateTime.now() returned null.');
+      return; // Handle the error or exit the function gracefully
+    }
 
     if (hasError) {
       if (!conexionBox.containsKey('firstErrorTimeFirestore')) {

@@ -104,15 +104,37 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+  String _getPedidoEstado(int pedidoId) {
+    var pedidoEstado = pedidosBox.get(pedidoId);
+    if (pedidoEstado == null) {
+      return 'No Leído';
+    } else if (pedidoEstado == 'Procesando') {
+      return ''; // Ignorar pedidos con estado "Procesando"
+    } else if (pedidoEstado == 'Enviando') {
+      return 'Enviando';
+    }
+    return '';
+  }
+
   void _centerMapOnPriorityOrder(List<QueryDocumentSnapshot> orders) {
-    if (orders.isNotEmpty) {
-      var firstOrder = orders.first;
+    // Filtrar pedidos que no tengan estado "Procesando"
+    var filteredOrders = orders.where((order) {
+      var data = order.data() as Map<String, dynamic>;
+      var pedidoId = data['id'];
+      return _getPedidoEstado(pedidoId) != '';
+    }).toList();
+
+    if (filteredOrders.isNotEmpty) {
+      var firstOrder = filteredOrders.first;
       var data = firstOrder.data() as Map<String, dynamic>;
       var location = data['ubicacion'] as GeoPoint;
 
       setState(() {
         _focusedPosition = LatLng(location.latitude, location.longitude);
       });
+    } else if (_currentPosition != null) {
+      // Si no hay pedidos para geolocalizar, centrar en la ubicación actual
+      _mapController.move(_currentPosition!, 15.0);
     }
   }
 
