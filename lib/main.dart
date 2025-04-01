@@ -106,6 +106,8 @@ Future<void> _initializeFirebaseMessaging() async {
     description:
         'This channel is used for important notifications.', // description
     importance: Importance.high,
+    sound: RawResourceAndroidNotificationSound(
+        'iphone_notification'), // Configura el sonido personalizado
   );
 
   await flutterLocalNotificationsPlugin
