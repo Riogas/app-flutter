@@ -716,6 +716,7 @@ class _SettingsPageState extends State<SettingsPage> {
         maxLength: 1,
         textAlign: TextAlign.center,
         keyboardType: TextInputType.number,
+        readOnly: true, // Prevent manual input
         decoration: InputDecoration(
           counterText: '',
           border: OutlineInputBorder(),
