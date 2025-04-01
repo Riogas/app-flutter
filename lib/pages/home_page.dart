@@ -241,7 +241,10 @@ class _HomePageState extends State<HomePage>
       for (var message in messages) {
         if (!mensajesBox.containsKey(message.id)) {
           await mensajesBox.put(message.id, 'Descargado'); // Mark as downloaded
-          newMessagesCount++;
+          newMessagesCount = mensajesBox.values
+              .where((estado) => estado == 'Descargado')
+              .length; // Count only 'Descargado' messages
+          //newMessagesCount++;
 
           // Parse message ID as an integer
           final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
@@ -273,11 +276,6 @@ class _HomePageState extends State<HomePage>
               position.latitude.toString(), // latitud
               position.longitude.toString(), // longitud
             );
-          }
-        } else {
-          if (mensajesBox.get(message.id) == 'Leido') {
-            // Ya está descargado
-            newMessagesCount--;
           }
         }
       }

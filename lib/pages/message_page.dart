@@ -178,6 +178,14 @@ class _MessagePageState extends State<MessagePage> {
 
     print('📨 Marcando mensaje como leído: $messageId');
     await _firebaseService.markMessageAsRead(message.id);
+
+    // Open mensajesBox and update the message state to "Leido"
+    var mensajesBox = await Hive.openBox('mensajesBox');
+    if (mensajesBox.containsKey(message.id)) {
+      await mensajesBox.put(message.id, 'Leido');
+      print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
+    }
+
     print('📨 Enviando datos al servicio descargaLecturaMensajes:');
     print('EscenarioId: ${int.parse(escenario)}');
     print('MovilId: ${int.parse(movil)}');
@@ -217,6 +225,14 @@ class _MessagePageState extends State<MessagePage> {
   void _deleteMessage(DocumentSnapshot message) async {
     await _firebaseService
         .updateMessageField(message.id, {'VisibleEnApp': 'N'});
+
+    // Open mensajesBox and update the message state to "Leido"
+    var mensajesBox = await Hive.openBox('mensajesBox');
+    if (mensajesBox.containsKey(message.id)) {
+      await mensajesBox.put(message.id, 'Leido');
+      print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
+    }
+
     if (mounted) {
       setState(() {
         _readMessageIds.remove(message.id);
@@ -228,6 +244,13 @@ class _MessagePageState extends State<MessagePage> {
     for (var message in messages) {
       await _firebaseService
           .updateMessageField(message.id, {'VisibleEnApp': 'N'});
+
+      // Open mensajesBox and update the message state to "Leido"
+      var mensajesBox = await Hive.openBox('mensajesBox');
+      if (mensajesBox.containsKey(message.id)) {
+        await mensajesBox.put(message.id, 'Leido');
+        print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
+      }
     }
     if (mounted) {
       setState(() {
