@@ -287,29 +287,40 @@ class _MessagePageState extends State<MessagePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Mensajes'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.call, color: Colors.black), // Call icon
-            onPressed: () async {
-              final phoneNumber =
-                  await getConstantValue('160') ?? ''; // Retrieve phone number
-              if (phoneNumber.isNotEmpty) {
-                final Uri callUri = Uri(scheme: 'tel', path: phoneNumber);
-                if (await canLaunchUrl(callUri)) {
-                  await launchUrl(callUri);
+        title: Row(
+          children: [
+            IconButton(
+              icon:
+                  Icon(Icons.headset_mic, color: Colors.black), // Headset icon
+              onPressed: () async {
+                final phoneNumber = await getConstantValue('160') ??
+                    ''; // Retrieve phone number
+                if (phoneNumber.isNotEmpty) {
+                  final Uri callUri = Uri(scheme: 'tel', path: phoneNumber);
+                  if (await canLaunchUrl(callUri)) {
+                    await launchUrl(callUri);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content: Text('No se pudo realizar la llamada.')),
+                    );
+                  }
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('No se pudo realizar la llamada.')),
+                    SnackBar(
+                        content: Text('Número de teléfono no disponible.')),
                   );
                 }
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Número de teléfono no disponible.')),
-                );
-              }
-            },
-          ),
+              },
+            ),
+            SizedBox(width: 8), // Add spacing between icon and text
+            Text(
+              'Despacho',
+              style: TextStyle(color: Colors.black, fontSize: 18),
+            ),
+          ],
+        ),
+        actions: [
           Row(
             children: [
               Text('Borrar Todo', style: TextStyle(color: Colors.black)),

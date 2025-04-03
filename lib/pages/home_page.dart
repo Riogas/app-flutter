@@ -598,7 +598,10 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Riogas - MoveIT'),
+        title: Text(
+          'Riogas - MoveIT',
+          style: TextStyle(fontSize: 14.0), // Reduced font size
+        ),
         toolbarHeight: 40.0,
         backgroundColor: Colors.lightBlueAccent,
         actions: [

@@ -147,6 +147,12 @@ class _MapPageState extends State<MapPage> {
         _markers = orders
             .map((order) {
               var data = order.data() as Map<String, dynamic>;
+
+              // Check if 'ubicacion' field exists
+              if (!data.containsKey('ubicacion') || data['ubicacion'] == null) {
+                return null; // Skip orders without 'ubicacion'
+              }
+
               var location = data['ubicacion'] as GeoPoint;
               var pedidoId = data['id'];
 

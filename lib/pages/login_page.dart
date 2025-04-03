@@ -15,6 +15,7 @@ import 'dart:math'; // Add this import for random number generation
 import 'package:sms_autofill/sms_autofill.dart'; // Import SmsAutoFill package
 import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth package
 import '../utils/config.dart'; // Import Config class
+import '../utils/constantes.dart'; // Import Constants class
 
 class LoginPage extends StatefulWidget {
   @override
@@ -592,6 +593,13 @@ class _LoginPageState extends State<LoginPage> {
     String? selectedMovil;
     bool isLoading = false;
     TextEditingController licensePlateController = TextEditingController();
+    bool showLicensePlateField = false;
+
+    // Fetch the constant value with ID 170
+    String? value = await getConstantValue('170');
+    if (value == 'S') {
+      showLicensePlateField = true;
+    }
 
     print("Mostrar diálogo de selección de móviles");
 
@@ -630,15 +638,17 @@ class _LoginPageState extends State<LoginPage> {
                             );
                           }).toList(),
                         ),
-                        SizedBox(height: 10),
-                        TextField(
-                          controller: licensePlateController,
-                          keyboardType: TextInputType.text,
-                          decoration: InputDecoration(
-                            labelText: 'Matrícula del Vehículo',
-                            border: OutlineInputBorder(),
+                        if (showLicensePlateField) ...[
+                          SizedBox(height: 10),
+                          TextField(
+                            controller: licensePlateController,
+                            keyboardType: TextInputType.text,
+                            decoration: InputDecoration(
+                              labelText: 'Matrícula del Vehículo',
+                              border: OutlineInputBorder(),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
               actions: <Widget>[
@@ -653,7 +663,8 @@ class _LoginPageState extends State<LoginPage> {
                   ElevatedButton(
                     onPressed: () async {
                       if (selectedMovil != null &&
-                          licensePlateController.text.isNotEmpty) {
+                          (!showLicensePlateField ||
+                              licensePlateController.text.isNotEmpty)) {
                         setState(() {
                           isLoading = true;
                         });
@@ -661,7 +672,10 @@ class _LoginPageState extends State<LoginPage> {
                         // 🔹 Guardar móvil seleccionado y matrícula en Hive
                         var box = await Hive.openBox('sessionBox');
                         await box.put('movil', selectedMovil);
-                        await box.put('matricula', licensePlateController.text);
+                        if (showLicensePlateField) {
+                          await box.put(
+                              'matricula', licensePlateController.text);
+                        }
 
                         Navigator.of(dialogContext).pop();
 
@@ -994,8 +1008,8 @@ class _LoginPageState extends State<LoginPage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Image.asset(
-                              'assets/logomoveit.png',
+                            Image.network(
+                              'https://www.riogas.uy/ica_geos_/static/Resources/LogoTransparente.png',
                               width: 150,
                               height: 150,
                             ),
