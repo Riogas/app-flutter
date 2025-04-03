@@ -7,6 +7,7 @@ import 'package:hive/hive.dart';
 import '../services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa para manejar URLs
 import 'package:MoveIT/pages/home_page.dart';
+import '../utils/screenBlock.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
@@ -15,12 +16,13 @@ class OrderDetailPage extends StatefulWidget {
   final int codPedido;
   final String pedidoTipo;
 
-  OrderDetailPage(
-      {required this.detalleHtml,
-      required this.estadoNro,
-      required this.totalPedido, // Initialize it
-      required this.codPedido,
-      required this.pedidoTipo});
+  OrderDetailPage({
+    required this.detalleHtml,
+    required this.estadoNro,
+    required this.totalPedido, // Initialize it
+    required this.codPedido,
+    required this.pedidoTipo,
+  });
 
   @override
   _OrderDetailPageState createState() => _OrderDetailPageState();
@@ -37,41 +39,43 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   @override
   void initState() {
     super.initState();
-
+    //secureScreen();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(NavigationDelegate(
-        onNavigationRequest: (NavigationRequest request) async {
-          final url = request.url;
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (NavigationRequest request) async {
+            final url = request.url;
 
-          if (url.startsWith("https://waze.com/ul")) {
-            final uri = Uri.parse(url);
-            if (await canLaunchUrl(uri)) {
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (url.startsWith("https://waze.com/ul")) {
+              final uri = Uri.parse(url);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+              return NavigationDecision.prevent;
+            } else if (url.startsWith("https://www.google.com/maps")) {
+              final uri = Uri.parse(url);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+              return NavigationDecision.prevent;
+            } else if (url.startsWith("tel:")) {
+              final uri = Uri.parse(url);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+              return NavigationDecision.prevent;
             }
-            return NavigationDecision.prevent;
-          } else if (url.startsWith("https://www.google.com/maps")) {
-            final uri = Uri.parse(url);
-            if (await canLaunchUrl(uri)) {
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            }
-            return NavigationDecision.prevent;
-          } else if (url.startsWith("tel:")) {
-            final uri = Uri.parse(url);
-            if (await canLaunchUrl(uri)) {
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            }
-            return NavigationDecision.prevent;
-          }
 
-          return NavigationDecision.navigate;
-        },
-      ))
+            return NavigationDecision.navigate;
+          },
+        ),
+      )
       ..loadHtmlString(_getHtmlWithViewport(widget.detalleHtml));
 
-    _firebaseService
-        .getSubEstadoFinalizacionPedidosStream()
-        .listen((subEstados) {
+    _firebaseService.getSubEstadoFinalizacionPedidosStream().listen((
+      subEstados,
+    ) {
       if (mounted) {
         setState(() {
           _subEstados = subEstados;
@@ -197,8 +201,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                     paymentMethods[index]['method'] = newValue;
                                   });
                                 },
-                                items: ['Efectivo', 'Tarjeta', 'Transferencia']
-                                    .map((method) {
+                                items: [
+                                  'Efectivo',
+                                  'Tarjeta',
+                                  'Transferencia',
+                                ].map((method) {
                                   return DropdownMenuItem<String>(
                                     value: method,
                                     child: Text(method),
@@ -260,8 +267,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       border: OutlineInputBorder(),
                     ),
                     onChanged: (value) {
-                      final sanitizedValue =
-                          value.replaceAll(RegExp(r'[^a-zA-Z0-9 ]'), '');
+                      final sanitizedValue = value.replaceAll(
+                        RegExp(r'[^a-zA-Z0-9 ]'),
+                        '',
+                      );
                       if (sanitizedValue != value) {
                         _observacionesController.text = sanitizedValue;
                         _observacionesController.selection =
@@ -335,9 +344,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         // Execute the service directly if conditions are not met
         if (_selectedSubEstado == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Debe seleccionar al menos una acción.'),
-            ),
+            SnackBar(content: Text('Debe seleccionar al menos una acción.')),
           );
           return;
         }
@@ -353,27 +360,29 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
         if (currentLocation == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('No se pudo obtener la ubicación actual.'),
-            ),
+            SnackBar(content: Text('No se pudo obtener la ubicación actual.')),
           );
           return;
         }
 
         // Debug print: State of pedidosBox before service execution
-        print('Estado inicial de pedidosBox: ${pedidosBox.toMap()}');
+        // print('Estado inicial de pedidosBox: ${pedidosBox.toMap()}');
+
+        var box = await Hive.openBox('sessionBox');
+
+        String deviceId = box.get('deviceId');
 
         var response = await RioGasService.finalizarPedido(
           int.parse(escenario), // Convert escenario to int
           pedidoId,
           pedidoTpo,
           usuario,
-          _observaciones ?? '',
           '',
+          deviceId,
           2,
           int.parse(_selectedSubEstado!),
           '',
-          '',
+          _observaciones ?? '',
           DateTime.now().toUtc().toIso8601String(),
           '',
           '',
@@ -385,41 +394,40 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           var pedidosBox = await Hive.openBox('pedidosBox');
           if (pedidosBox.containsKey(pedidoId)) {
             await pedidosBox.put(
-                pedidoId, 'Procesando'); // Update to 'Procesando' on success
+              pedidoId,
+              'Procesando',
+            ); // Update to 'Procesando' on success
           }
           // Debug print: State of pedidosBox after successful service execution
-          print('Estado de pedidosBox después de éxito: ${pedidosBox.toMap()}');
+          // print('Estado de pedidosBox después de éxito: ${pedidosBox.toMap()}');
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Visita finalizada con éxito.'),
-            ),
+            SnackBar(content: Text('Visita finalizada con éxito.')),
           );
         } else {
           var pedidosBox = await Hive.openBox('pedidosBox');
           if (pedidosBox.containsKey(pedidoId)) {
             await pedidosBox.put(
-                pedidoId, 'Enviando'); // Update to 'Enviando' on failure
+              pedidoId,
+              'Enviando',
+            ); // Update to 'Enviando' on failure
           }
           // Debug print: State of pedidosBox after failed service execution
-          print('Estado de pedidosBox después de fallo: ${pedidosBox.toMap()}');
+          // print('Estado de pedidosBox después de fallo: ${pedidosBox.toMap()}');
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error al finalizar la visita.'),
-            ),
+            SnackBar(content: Text('Error al finalizar la visita.')),
           );
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ocurrió un error inesperado.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Ocurrió un error inesperado.')));
     } finally {
       Navigator.of(context).pop(); // Close loading dialog
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-            builder: (context) => HomePage()), // Navigate to HomePage widget
+          builder: (context) => HomePage(),
+        ), // Navigate to HomePage widget
       );
     }
   }
@@ -427,14 +435,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Detalle'),
-      ),
+      appBar: AppBar(title: Text('Detalle')),
       body: Column(
         children: [
-          Expanded(
-            child: WebViewWidget(controller: _controller),
-          ),
+          Expanded(child: WebViewWidget(controller: _controller)),
           if (widget.estadoNro == 1) // Show button only if estadoNro is 1
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -462,14 +466,18 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                     return DropdownMenuItem<String>(
                                       value:
                                           subEstado['SubEstadoCod'].toString(),
-                                      child: Text(subEstado['SubEstadoDesc']),
+                                      child: Text(
+                                        subEstado['SubEstadoDesc'],
+                                      ),
                                     );
                                   }).toList(),
                                 ),
                                 SizedBox(height: 16),
                                 TextField(
                                   controller: _observacionesController,
-                                  maxLength: 300,
+                                  maxLength: 100,
+                                  maxLines:
+                                      3, // Allow the field to occupy 2 or 3 rows
                                   decoration: InputDecoration(
                                     labelText: 'Observaciones',
                                     hintText: 'Observaciones',
@@ -477,14 +485,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                   ),
                                   onChanged: (value) {
                                     final sanitizedValue = value.replaceAll(
-                                        RegExp(r'[^a-zA-Z0-9 ]'), '');
+                                      RegExp(r'[^a-zA-Z0-9 ]'),
+                                      '',
+                                    );
                                     if (sanitizedValue != value) {
                                       _observacionesController.text =
                                           sanitizedValue;
                                       _observacionesController.selection =
                                           TextSelection.fromPosition(
                                         TextPosition(
-                                            offset: sanitizedValue.length),
+                                          offset: sanitizedValue.length,
+                                        ),
                                       );
                                     }
                                     _observaciones = sanitizedValue;
@@ -502,14 +513,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                               TextButton(
                                 onPressed: () async {
                                   if (_selectedSubEstado == 'Cumplido') {
-                                    debugPrint('Opción seleccionada: Cumplido');
+                                    print('Opción seleccionada: Cumplido');
                                     _checkConstantAndProceed(
-                                        context); // Check constant 70
+                                      context,
+                                    ); // Check constant 70
                                   } else {
-                                    debugPrint(
-                                        'Opción seleccionada: $_selectedSubEstado');
+                                    print(
+                                      'Opción seleccionada: $_selectedSubEstado',
+                                    );
                                     _checkConstantAndProceed(
-                                        context); // Check constant 70
+                                      context,
+                                    ); // Check constant 70
                                   }
                                 },
                                 child: Text('Confirmar'),

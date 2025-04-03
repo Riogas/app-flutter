@@ -28,7 +28,8 @@ class ConstantsService {
     var constantBox = await Hive.openBox('constantBox');
 
     print(
-        "📥 Número de documentos obtenidos de Firestore: ${querySnapshot.docs.length}");
+      "📥 Número de documentos obtenidos de Firestore: ${querySnapshot.docs.length}",
+    );
 
     for (var doc in querySnapshot.docs) {
       Map<String, dynamic> data = doc.data() as Map<String, dynamic>;

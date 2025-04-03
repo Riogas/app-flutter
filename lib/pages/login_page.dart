@@ -32,6 +32,8 @@ class _LoginPageState extends State<LoginPage> {
   List<String> _availableMoviles = [];
   bool _wasActiveSessionForAnotherUser = false;
   String _phoneNumber = ''; // Global variable to store the phone number
+  TextEditingController licensePlateController =
+      TextEditingController(); // New controller for license plate
 
   @override
   void initState() {
@@ -83,7 +85,8 @@ class _LoginPageState extends State<LoginPage> {
       // 🔹 Validar dispositivo antes de mostrar selección de móviles
       bool isDeviceValid = await _validateDevice();
       print(
-          "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}");
+        "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+      );
 
       if (!isDeviceValid) {
         print("🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
@@ -91,8 +94,9 @@ class _LoginPageState extends State<LoginPage> {
 
         if (shouldRegister) {
           print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
-          bool registrationSuccess =
-              await _registerDevice(_usernameController.text);
+          bool registrationSuccess = await _registerDevice(
+            _usernameController.text,
+          );
 
           if (registrationSuccess) {
             var box = await Hive.openBox('sessionBox');
@@ -100,11 +104,13 @@ class _LoginPageState extends State<LoginPage> {
 
             if (habilitado == 'N') {
               print(
-                  "✅ Dispositivo registrado con éxito. Esperando aprobación...");
+                "✅ Dispositivo registrado con éxito. Esperando aprobación...",
+              );
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                      'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.'),
+                    'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
+                  ),
                   backgroundColor: Colors.green,
                 ),
               );
@@ -121,9 +127,11 @@ class _LoginPageState extends State<LoginPage> {
 
               if (_availableMoviles.isNotEmpty) {
                 print(
-                    "📋 Móviles disponibles para seleccionar: $_availableMoviles");
+                  "📋 Móviles disponibles para seleccionar: $_availableMoviles",
+                );
                 print(
-                    "🛑 Mostrando selección de móviles antes de continuar...");
+                  "🛑 Mostrando selección de móviles antes de continuar...",
+                );
 
                 // 🔹 Mostrar selección de móviles antes de continuar
                 await _showMobileSelectionDialog(response);
@@ -165,7 +173,8 @@ class _LoginPageState extends State<LoginPage> {
       // 🔹 Validar dispositivo antes de mostrar selección de móviles
       bool isDeviceValid = await _validateDevice();
       print(
-          "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}");
+        "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+      );
 
       if (!isDeviceValid) {
         print("🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
@@ -173,8 +182,9 @@ class _LoginPageState extends State<LoginPage> {
 
         if (shouldRegister) {
           print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
-          bool registrationSuccess =
-              await _registerDevice(_usernameController.text);
+          bool registrationSuccess = await _registerDevice(
+            _usernameController.text,
+          );
 
           if (registrationSuccess) {
             var box = await Hive.openBox('sessionBox');
@@ -182,11 +192,13 @@ class _LoginPageState extends State<LoginPage> {
 
             if (habilitado == 'N') {
               print(
-                  "✅ Dispositivo registrado con éxito. Esperando aprobación...");
+                "✅ Dispositivo registrado con éxito. Esperando aprobación...",
+              );
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                      'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.'),
+                    'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
+                  ),
                   backgroundColor: Colors.green,
                 ),
               );
@@ -206,7 +218,8 @@ class _LoginPageState extends State<LoginPage> {
                 // 🔹 Validar dispositivo antes de mostrar selección de móviles
                 bool isDeviceValid = await _validateDevice();
                 print(
-                    "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}");
+                  "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+                );
 
                 // 🔹 Extraer lista de móviles de la respuesta
                 print("📥 Extrayendo lista de móviles...");
@@ -219,9 +232,11 @@ class _LoginPageState extends State<LoginPage> {
 
                 if (_availableMoviles.isNotEmpty) {
                   print(
-                      "📋 Móviles disponibles para seleccionar: $_availableMoviles");
+                    "📋 Móviles disponibles para seleccionar: $_availableMoviles",
+                  );
                   print(
-                      "🛑 Mostrando selección de móviles antes de continuar...");
+                    "🛑 Mostrando selección de móviles antes de continuar...",
+                  );
 
                   // 🔹 Mostrar selección de móviles antes de continuar
                   await _showMobileSelectionDialog(response);
@@ -247,24 +262,19 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'En este momento no es posible comunicarse con los servidores de RioGas. Favor intente más tarde.'),
+            'En este momento no es posible comunicarse con los servidores de RioGas. Favor intente más tarde.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
     } else if (response != null && response['OK'] > 0 && response['OK'] != 9) {
       String errorMessage = response['message'] ?? 'Error desconocido';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
       );
     } else if (response != null && response.containsKey('error')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(response['error']),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(response['error']), backgroundColor: Colors.red),
       );
     }
   }
@@ -440,7 +450,8 @@ class _LoginPageState extends State<LoginPage> {
 
                           if (receivedCode == storedOtp) {
                             print(
-                                '✅ OTP auto-completado y validado: $receivedCode');
+                              '✅ OTP auto-completado y validado: $receivedCode',
+                            );
                             shouldRegister = true;
                             if (context.mounted) Navigator.of(context).pop();
                           }
@@ -533,17 +544,24 @@ class _LoginPageState extends State<LoginPage> {
       Map<String, String> deviceInfo = await obtenerMarcaYModelo();
       String marca = deviceInfo['marca']!;
       String modelo = deviceInfo['modelo']!;
-      String info = '';
 
-      final response = await RioGasService.registrarDispositivo(_deviceId,
-          document, _appNroVersion, _phoneNumber, marca, modelo, info);
+      final response = await RioGasService.registrarDispositivo(
+        _deviceId,
+        document,
+        _appNroVersion,
+        _phoneNumber,
+        marca,
+        modelo,
+        '', // Do not send license plate in the info field
+      );
 
       if (response != null && response['OK'] == 0) {
         var box = await Hive.openBox('sessionBox');
         await box.put('NombreUsuario', response['NombreUsuario']);
         await box.put('Habilitado', response['habilitar']);
         print(
-            '✅ NombreUsuario guardado en sessionBox: ${response['NombreUsuario']}');
+          '✅ NombreUsuario guardado en sessionBox: ${response['NombreUsuario']}',
+        );
         return true;
       } else {
         // 🔹 Si el servicio devuelve un mensaje de error, lo mostramos en el SnackBar
@@ -552,10 +570,7 @@ class _LoginPageState extends State<LoginPage> {
         print("❌ Error en respuesta del servicio: $errorMessage");
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
         );
         return false;
       }
@@ -576,6 +591,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _showMobileSelectionDialog(Map<String, dynamic> response) async {
     String? selectedMovil;
     bool isLoading = false;
+    TextEditingController licensePlateController = TextEditingController();
 
     print("Mostrar diálogo de selección de móviles");
 
@@ -595,21 +611,35 @@ class _LoginPageState extends State<LoginPage> {
                         Text('Guardando selección...'),
                       ],
                     )
-                  : DropdownButton<String>(
-                      hint: Text('Seleccione un móvil'),
-                      value: selectedMovil,
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          selectedMovil = newValue;
-                        });
-                      },
-                      items: _availableMoviles
-                          .map<DropdownMenuItem<String>>((String movil) {
-                        return DropdownMenuItem<String>(
-                          value: movil,
-                          child: Text(movil),
-                        );
-                      }).toList(),
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        DropdownButton<String>(
+                          hint: Text('Seleccione un móvil'),
+                          value: selectedMovil,
+                          onChanged: (String? newValue) {
+                            setState(() {
+                              selectedMovil = newValue;
+                            });
+                          },
+                          items: _availableMoviles
+                              .map<DropdownMenuItem<String>>((String movil) {
+                            return DropdownMenuItem<String>(
+                              value: movil,
+                              child: Text(movil),
+                            );
+                          }).toList(),
+                        ),
+                        SizedBox(height: 10),
+                        TextField(
+                          controller: licensePlateController,
+                          keyboardType: TextInputType.text,
+                          decoration: InputDecoration(
+                            labelText: 'Matrícula del Vehículo',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
                     ),
               actions: <Widget>[
                 if (!isLoading)
@@ -622,14 +652,16 @@ class _LoginPageState extends State<LoginPage> {
                 if (!isLoading)
                   ElevatedButton(
                     onPressed: () async {
-                      if (selectedMovil != null) {
+                      if (selectedMovil != null &&
+                          licensePlateController.text.isNotEmpty) {
                         setState(() {
                           isLoading = true;
                         });
 
-                        // 🔹 Guardar móvil seleccionado en Hive
+                        // 🔹 Guardar móvil seleccionado y matrícula en Hive
                         var box = await Hive.openBox('sessionBox');
                         await box.put('movil', selectedMovil);
+                        await box.put('matricula', licensePlateController.text);
 
                         Navigator.of(dialogContext).pop();
 
@@ -637,11 +669,14 @@ class _LoginPageState extends State<LoginPage> {
 
                         // 🔹 Continuar con el flujo después de la selección del móvil
                         await _proceedAfterMobileSelection(
-                            response, selectedMovil);
+                          response,
+                          selectedMovil,
+                        );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Seleccione un móvil.'),
+                            content: Text(
+                                'Seleccione un móvil y complete la matrícula.'),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -658,7 +693,9 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _proceedAfterMobileSelection(
-      Map<String, dynamic> response, String? selectedMovil) async {
+    Map<String, dynamic> response,
+    String? selectedMovil,
+  ) async {
     print("Proceder después de seleccionar un móvil");
     _showLoadingDialog();
 
@@ -668,7 +705,9 @@ class _LoginPageState extends State<LoginPage> {
     var box = await Hive.openBox('sessionBox');
     await box.put('username', _usernameController.text);
     await box.put(
-        'escenario', response['EscenarioId'] == "1000" ? "1000" : "2000");
+      'escenario',
+      response['EscenarioId'] == "1000" ? "1000" : "2000",
+    );
     await box.put('NombreUsuario', response['NombreUsuario'].trim());
     await box.put('deviceId', _deviceId);
 
@@ -696,12 +735,15 @@ class _LoginPageState extends State<LoginPage> {
     await box.flush(); // ✅ Asegura que el valor se escriba inmediatamente
 
     // Obtener datos de la versión actual y guardar ReleaseNotes en Hive
-    var versionData =
-        await RioGasService.DatosVersionActual(_appVersion, _deviceId);
+    var versionData = await RioGasService.DatosVersionActual(
+      _appVersion,
+      _deviceId,
+    );
     if (versionData != null && versionData.containsKey('ReleaseNotes')) {
       await box.put('ReleaseNotes', versionData['ReleaseNotes']);
       print(
-          "?? ReleaseNotes guardado en sessionBox: ${versionData['ReleaseNotes']}");
+        "?? ReleaseNotes guardado en sessionBox: ${versionData['ReleaseNotes']}",
+      );
     }
 
     // 🔹 Imprimir el contenido de sessionBox después de asegurarnos que se guardó correctamente
@@ -725,7 +767,9 @@ class _LoginPageState extends State<LoginPage> {
       // 🔹 Cerrar el diálogo de carga y navegar a HomePage
       Navigator.pop(context);
       Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (context) => HomePage()));
+        context,
+        MaterialPageRoute(builder: (context) => HomePage()),
+      );
     } else {
       // 🔹 Cargar y guardar constantes desde Firebase
       print("Cargando y guardando constantes desde Firebase...");
@@ -737,7 +781,9 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<bool> _checkActiveSession(
-      Map<String, dynamic> response, String? selectedMovil) async {
+    Map<String, dynamic> response,
+    String? selectedMovil,
+  ) async {
     print('📦 Abriendo caja Hive: sessionBox...');
     var box = await Hive.openBox('sessionBox');
 
@@ -758,7 +804,8 @@ class _LoginPageState extends State<LoginPage> {
         idTerminal == null ||
         nombreUsuario == null) {
       print(
-          '⚠️ Falta información en sessionBox. No se puede validar sesión activa.');
+        '⚠️ Falta información en sessionBox. No se puede validar sesión activa.',
+      );
       return false;
     }
 
@@ -820,8 +867,10 @@ class _LoginPageState extends State<LoginPage> {
       var data = activeDocSnapshot.data() as Map<String, dynamic>;
       if (data['idUsuario'] != idUsuario || data['idTerminal'] != idTerminal) {
         _wasActiveSessionForAnotherUser = true;
-        bool shouldProceed =
-            await _showActiveSessionDialog(selectedMovil!, data['nomUsuario']);
+        bool shouldProceed = await _showActiveSessionDialog(
+          selectedMovil!,
+          data['nomUsuario'],
+        );
         return shouldProceed;
       }
     }
@@ -829,7 +878,9 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<bool> _showActiveSessionDialog(
-      String selectedMovil, String activeUser) async {
+    String selectedMovil,
+    String activeUser,
+  ) async {
     bool shouldProceed = false;
     await showDialog(
       context: context,
@@ -837,7 +888,8 @@ class _LoginPageState extends State<LoginPage> {
         return AlertDialog(
           title: Text('Sesión Activa Encontrada'),
           content: Text(
-              'Usted se está intentando conectar al móvil $selectedMovil, en el cual está logueado el usuario $activeUser. ¿Desea continuar?'),
+            'Usted se está intentando conectar al móvil $selectedMovil, en el cual está logueado el usuario $activeUser. ¿Desea continuar?',
+          ),
           actions: <Widget>[
             TextButton(
               onPressed: () {
@@ -899,7 +951,7 @@ class _LoginPageState extends State<LoginPage> {
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 10),
-              Text('Cargando información...')
+              Text('Cargando información...'),
             ],
           ),
         );
@@ -969,8 +1021,10 @@ class _LoginPageState extends State<LoginPage> {
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide(color: Colors.black),
                                 ),
-                                prefixIcon:
-                                    Icon(Icons.person, color: Colors.black),
+                                prefixIcon: Icon(
+                                  Icons.person,
+                                  color: Colors.black,
+                                ),
                               ),
                             ),
                             SizedBox(height: 10),
@@ -995,8 +1049,10 @@ class _LoginPageState extends State<LoginPage> {
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide(color: Colors.black),
                                 ),
-                                prefixIcon:
-                                    Icon(Icons.lock, color: Colors.black),
+                                prefixIcon: Icon(
+                                  Icons.lock,
+                                  color: Colors.black,
+                                ),
                               ),
                             ),
                             SizedBox(height: 20),
@@ -1007,7 +1063,9 @@ class _LoginPageState extends State<LoginPage> {
                                 backgroundColor: Colors.blue,
                                 foregroundColor: Colors.white,
                                 padding: EdgeInsets.symmetric(
-                                    horizontal: 50, vertical: 15),
+                                  horizontal: 50,
+                                  vertical: 15,
+                                ),
                                 textStyle: TextStyle(fontSize: 18),
                               ),
                             ),
@@ -1015,8 +1073,10 @@ class _LoginPageState extends State<LoginPage> {
                             Text(
                               _appVersion,
                               textAlign: TextAlign.center,
-                              style:
-                                  TextStyle(fontSize: 14, color: Colors.grey),
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey,
+                              ),
                             ),
                             SizedBox(height: 20),
                           ],
@@ -1033,7 +1093,10 @@ class _LoginPageState extends State<LoginPage> {
                           child: Text(
                             'ID: $_deviceId',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
                           ),
                         ),
                         Align(

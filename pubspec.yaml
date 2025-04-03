@@ -43,6 +43,7 @@ dependencies:
   path_provider: ^2.0.11
   flutter_email_sender: ^7.0.0
   open_file: ^3.2.1
+  #flutter_windowmanager: ^0.2.0
   
 
 dev_dependencies:

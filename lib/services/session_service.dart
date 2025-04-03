@@ -57,8 +57,9 @@ class SessionService {
     // 🔹 Referencias en Firestore
     DocumentReference fechaDocRef =
         _firestore.collection('Sesiones-$escenarioId').doc(fechaActual);
-    CollectionReference movilCollectionRef =
-        fechaDocRef.collection('Movil-$movil');
+    CollectionReference movilCollectionRef = fechaDocRef.collection(
+      'Movil-$movil',
+    );
     DocumentReference sessionDocRef = movilCollectionRef.doc(horaActual);
     DocumentReference ultimaDocRef = movilCollectionRef.doc('activo');
 
@@ -74,11 +75,15 @@ class SessionService {
       'infoDispositivo': infoDispositivo,
       'nomUsuario': nombreUsuario,
       'movil': movil,
-      'primeraUbicacion':
-          GeoPoint(primeraUbicacion.latitude, primeraUbicacion.longitude),
+      'primeraUbicacion': GeoPoint(
+        primeraUbicacion.latitude,
+        primeraUbicacion.longitude,
+      ),
       'tiempoLogueoMins': tiempoLogueoMins,
-      'ultUbicacion':
-          GeoPoint(primeraUbicacion.latitude, primeraUbicacion.longitude),
+      'ultUbicacion': GeoPoint(
+        primeraUbicacion.latitude,
+        primeraUbicacion.longitude,
+      ),
       'versionApp': versionApp,
       'versionAndroid': versionAndroid,
       'nivelBateria': nivelBateria,
@@ -92,7 +97,8 @@ class SessionService {
       // ✅ Asegurar que el documento padre (fecha) tenga un campo para ser reconocido
       await fechaDocRef.set({'FchHoraCreacion': now}, SetOptions(merge: true));
       print(
-          'Documento padre (fecha) asegurado en Firestore con FchHoraCreacion.');
+        'Documento padre (fecha) asegurado en Firestore con FchHoraCreacion.',
+      );
 
       /*// ✅ Guardar la sesión actual
       await sessionDocRef.set(sessionData);
@@ -125,8 +131,9 @@ class SessionService {
         print('Documento "activo" borrado correctamente.');
 
         final dir = await getApplicationDocumentsDirectory();
-        final hiveDir =
-            Directory('${dir.path}/'); // o Hive.defaultPath si lo configuraste
+        final hiveDir = Directory(
+          '${dir.path}/',
+        ); // o Hive.defaultPath si lo configuraste
 
         if (await hiveDir.exists() && tipoDeCierreDeSesion == "logoutUser") {
           final files = hiveDir.listSync();

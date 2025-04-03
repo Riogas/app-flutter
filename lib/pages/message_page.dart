@@ -10,6 +10,8 @@ import 'package:geolocator/geolocator.dart'; // Import the Geolocator package
 import 'package:hive/hive.dart'; // Import the Hive package
 import 'package:firebase_messaging/firebase_messaging.dart'; // Import Firebase Messaging
 import 'package:firebase_core/firebase_core.dart'; // Import Firebase Core
+import 'package:url_launcher/url_launcher.dart'; // Import url_launcher package
+import '../utils/constantes.dart'; // Import the constantes.dart file
 
 class MessagePage extends StatefulWidget {
   @override
@@ -24,10 +26,12 @@ class _MessagePageState extends State<MessagePage> {
       FirebaseMessaging.instance; // Add FirebaseMessaging instance
   List<String> _readMessageIds = [];
   StreamSubscription<List<DocumentSnapshot>>? _messageSubscription;
+  bool _isLocationServiceEnabled = true;
 
   @override
   void initState() {
     super.initState();
+    _checkLocationService();
     _initializeNotifications();
     _listenToMessages();
     _setupFCM(); // Initialize FCM for background notifications
@@ -37,6 +41,18 @@ class _MessagePageState extends State<MessagePage> {
   void dispose() {
     _messageSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _checkLocationService() async {
+    bool isEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!isEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Por favor, active el GPS para continuar.')),
+      );
+    }
+    setState(() {
+      _isLocationServiceEnabled = isEnabled;
+    });
   }
 
   void _initializeNotifications() {
@@ -49,8 +65,9 @@ class _MessagePageState extends State<MessagePage> {
 
   void _listenToMessages() async {
     var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
-    _messageSubscription =
-        _firebaseService.getMensajesStream().listen((messages) {
+    _messageSubscription = _firebaseService.getMensajesStream().listen((
+      messages,
+    ) {
       if (mounted) {
         setState(() {
           _readMessageIds =
@@ -76,7 +93,8 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   Future<void> _showForegroundNotification(
-      RemoteNotification notification) async {
+    RemoteNotification notification,
+  ) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       'messages_channel_id',
@@ -86,8 +104,9 @@ class _MessagePageState extends State<MessagePage> {
       priority: Priority.high,
       showWhen: true,
     );
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+    );
     await flutterLocalNotificationsPlugin.show(
       notification.hashCode,
       notification.title,
@@ -97,7 +116,8 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   static Future<void> _firebaseMessagingBackgroundHandler(
-      RemoteMessage message) async {
+    RemoteMessage message,
+  ) async {
     await Firebase.initializeApp();
     print('Handling a background message: ${message.messageId}');
   }
@@ -121,8 +141,9 @@ class _MessagePageState extends State<MessagePage> {
       priority: Priority.high,
       showWhen: false,
     );
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+    );
     await flutterLocalNotificationsPlugin.show(
       0,
       'Nuevo Mensaje',
@@ -139,11 +160,11 @@ class _MessagePageState extends State<MessagePage> {
     String? username = box.get('username');
     String? deviceId = box.get('deviceId');
 
-    print('📦 Datos obtenidos de Hive:');
-    print('Escenario: $escenario');
-    print('Movil: $movil');
-    print('Username: $username');
-    print('DeviceId: $deviceId');
+    // print('📦 Datos obtenidos de Hive:');
+    // print('Escenario: $escenario');
+    // print('Movil: $movil');
+    // print('Username: $username');
+    // print('DeviceId: $deviceId');
 
     if (escenario == null ||
         movil == null ||
@@ -158,8 +179,9 @@ class _MessagePageState extends State<MessagePage> {
       forceAndroidLocationManager: true,
     );
 
-    print(
-        '📍 Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
+    // print(
+    //   '📍 Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
+    // );
 
     var data = message.data() as Map<String, dynamic>;
 
@@ -172,18 +194,18 @@ class _MessagePageState extends State<MessagePage> {
     int messageId = int.parse(numericIdMatch.group(0)!);
 
     if (data.containsKey('FchHoraLeido')) {
-      print('📨 Mensaje ya leído: $messageId');
+      // print('📨 Mensaje ya leído: $messageId');
       return;
     }
 
-    print('📨 Marcando mensaje como leído: $messageId');
+    // print('📨 Marcando mensaje como leído: $messageId');
     await _firebaseService.markMessageAsRead(message.id);
 
     // Open mensajesBox and update the message state to "Leido"
     var mensajesBox = await Hive.openBox('mensajesBox');
     //if (mensajesBox.containsKey(message.id)) {
     await mensajesBox.put(message.id, 'Leido');
-    print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
+    // print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
     //}
 
     print('📨 Enviando datos al servicio descargaLecturaMensajes:');
@@ -223,14 +245,15 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   void _deleteMessage(DocumentSnapshot message) async {
-    await _firebaseService
-        .updateMessageField(message.id, {'VisibleEnApp': 'N'});
+    await _firebaseService.updateMessageField(message.id, {
+      'VisibleEnApp': 'N',
+    });
 
     // Open mensajesBox and update the message state to "Leido"
     var mensajesBox = await Hive.openBox('mensajesBox');
     if (mensajesBox.containsKey(message.id)) {
       await mensajesBox.put(message.id, 'Leido');
-      print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
+      // print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
     }
 
     if (mounted) {
@@ -242,14 +265,15 @@ class _MessagePageState extends State<MessagePage> {
 
   void _deleteAllMessages(List<DocumentSnapshot> messages) async {
     for (var message in messages) {
-      await _firebaseService
-          .updateMessageField(message.id, {'VisibleEnApp': 'N'});
+      await _firebaseService.updateMessageField(message.id, {
+        'VisibleEnApp': 'N',
+      });
 
       // Open mensajesBox and update the message state to "Leido"
       var mensajesBox = await Hive.openBox('mensajesBox');
       if (mensajesBox.containsKey(message.id)) {
         await mensajesBox.put(message.id, 'Leido');
-        print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
+        // print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
       }
     }
     if (mounted) {
@@ -265,12 +289,30 @@ class _MessagePageState extends State<MessagePage> {
       appBar: AppBar(
         title: Text('Mensajes'),
         actions: [
+          IconButton(
+            icon: Icon(Icons.call, color: Colors.black), // Call icon
+            onPressed: () async {
+              final phoneNumber =
+                  await getConstantValue('160') ?? ''; // Retrieve phone number
+              if (phoneNumber.isNotEmpty) {
+                final Uri callUri = Uri(scheme: 'tel', path: phoneNumber);
+                if (await canLaunchUrl(callUri)) {
+                  await launchUrl(callUri);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('No se pudo realizar la llamada.')),
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Número de teléfono no disponible.')),
+                );
+              }
+            },
+          ),
           Row(
             children: [
-              Text(
-                'Borrar Todo',
-                style: TextStyle(color: Colors.black),
-              ),
+              Text('Borrar Todo', style: TextStyle(color: Colors.black)),
               IconButton(
                 icon: Icon(Icons.delete, color: Colors.black),
                 onPressed: () {
@@ -283,101 +325,117 @@ class _MessagePageState extends State<MessagePage> {
           ),
         ],
       ),
-      body: StreamBuilder<List<DocumentSnapshot>>(
-        stream: _firebaseService.getMensajesStream(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text('No hay mensajes disponibles.'));
-          } else {
-            var messages = snapshot.data!;
-            messages.sort((a, b) {
-              var aDate = (a['FchHoraCreado'] as Timestamp).toDate();
-              var bDate = (b['FchHoraCreado'] as Timestamp).toDate();
-              return bDate.compareTo(aDate);
-            });
-            return ListView.builder(
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                var mensaje = messages[index].data() as Map<String, dynamic>;
-                bool isRead = mensaje.containsKey('FchHoraLeido');
-                String formattedDate = mensaje['FchHoraCreado'] != null
-                    ? DateFormat('dd/MM/yyyy HH:mm').format(
-                        (mensaje['FchHoraCreado'] as Timestamp).toDate())
-                    : '';
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8.0, vertical: 4.0),
-                  child: Card(
-                    color: isRead ? Colors.grey[300] : Colors.lightBlue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    elevation: 5,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          if (!isRead) // Show the button only if the message is not read
-                            IconButton(
-                              icon: Icon(
-                                Icons.mark_email_unread,
-                                color:
-                                    Colors.white, // Color for unread messages
-                              ),
-                              onPressed: () {
-                                _markMessageAsRead(messages[index]);
-                              },
-                            ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+      body: _isLocationServiceEnabled
+          ? StreamBuilder<List<DocumentSnapshot>>(
+              stream: _firebaseService.getMensajesStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Center(child: Text('No hay mensajes disponibles.'));
+                } else {
+                  var messages = snapshot.data!;
+                  messages.sort((a, b) {
+                    var aDate = (a['FchHoraCreado'] as Timestamp).toDate();
+                    var bDate = (b['FchHoraCreado'] as Timestamp).toDate();
+                    return bDate.compareTo(aDate);
+                  });
+                  return ListView.builder(
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) {
+                      var mensaje =
+                          messages[index].data() as Map<String, dynamic>;
+                      bool isRead = mensaje.containsKey('FchHoraLeido');
+                      String formattedDate = mensaje['FchHoraCreado'] != null
+                          ? DateFormat('dd/MM/yyyy HH:mm').format(
+                              (mensaje['FchHoraCreado'] as Timestamp).toDate(),
+                            )
+                          : '';
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8.0,
+                          vertical: 4.0,
+                        ),
+                        child: Card(
+                          color: isRead ? Colors.grey[300] : Colors.lightBlue,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          elevation: 5,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Text(
-                                  mensaje['Mensaje'] ?? 'Sin contenido',
-                                  style: TextStyle(
-                                    fontWeight: isRead
-                                        ? FontWeight.normal
-                                        : FontWeight.bold,
-                                    color: isRead
-                                        ? Colors.black
-                                        : Colors.white, // Updated color
-                                    fontSize: 16.0,
+                                if (!isRead) // Show the button only if the message is not read
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.mark_email_unread,
+                                      color: Colors
+                                          .white, // Color for unread messages
+                                    ),
+                                    onPressed: () {
+                                      _markMessageAsRead(messages[index]);
+                                    },
+                                  ),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        mensaje['Mensaje'] ?? 'Sin contenido',
+                                        style: TextStyle(
+                                          fontWeight: isRead
+                                              ? FontWeight.normal
+                                              : FontWeight.bold,
+                                          color: isRead
+                                              ? Colors.black
+                                              : Colors.white, // Updated color
+                                          fontSize: 16.0,
+                                        ),
+                                      ),
+                                      SizedBox(height: 5),
+                                      Text(
+                                        formattedDate,
+                                        style: TextStyle(
+                                          color: isRead
+                                              ? Colors.black
+                                              : Colors.white,
+                                          fontSize: 12.0,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                SizedBox(height: 5),
-                                Text(
-                                  formattedDate,
-                                  style: TextStyle(
-                                    color: isRead ? Colors.black : Colors.white,
-                                    fontSize: 12.0,
-                                  ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.delete,
+                                    color: Colors.black,
+                                  ), // Updated color
+                                  onPressed: () {
+                                    _deleteMessage(messages[index]);
+                                  },
                                 ),
                               ],
                             ),
                           ),
-                          IconButton(
-                            icon: Icon(Icons.delete,
-                                color: Colors.black), // Updated color
-                            onPressed: () {
-                              _deleteMessage(messages[index]);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
+                        ),
+                      );
+                    },
+                  );
+                }
               },
-            );
-          }
-        },
-      ),
+            )
+          : Center(
+              child: Text(
+                'Bloqueado - Sin GPS Activado',
+                style: TextStyle(color: Colors.grey, fontSize: 18),
+              ),
+            ),
     );
   }
 }

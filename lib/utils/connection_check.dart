@@ -38,9 +38,9 @@ class ConnectionCheck {
       var constantValue = await getConstantValue('50'); // Fetch constant
       _maxCounter = int.tryParse(constantValue?.toString() ?? '0') ??
           0; // Convert to String if needed
-      print('⏱️ Max counter value set to: $_maxCounter seconds');
+      // print('⏱️ Max counter value set to: $_maxCounter seconds');
     } catch (e) {
-      print('❌ Error fetching constant 50 value: $e');
+      // print('❌ Error fetching constant 50 value: $e');
     }
   }
 
@@ -65,22 +65,22 @@ class ConnectionCheck {
       }
       if (!status['network']) {
         // Log no network connectivity
-        print('❌ No network connectivity detected.');
+        // print('❌ No network connectivity detected.');
         // If no network, set all connections to false
         status['conexionFirestore'] = false;
         status['conexionRioGas'] = false;
       } else {
         // Log network connectivity
-        print('✅ Network connectivity detected.');
+        // print('✅ Network connectivity detected.');
 
         // Check Firestore connectivity
         status['firestore'] =
             await _firebaseService.checkFirestoreConnectivity();
-        print('Firestore connectivity: ${status['firestore']}');
+        // print('Firestore connectivity: ${status['firestore']}');
 
         // Check RioGas connectivity
         status['riogas'] = await _checkRioGasConnectivity();
-        print('RioGas connectivity: ${status['riogas']}');
+        // print('RioGas connectivity: ${status['riogas']}');
       }
 
       // Update Hive box
@@ -105,7 +105,7 @@ class ConnectionCheck {
       // Emit popup flag if counter exceeds max
       status['showPopup'] = _counter >= _maxCounter;
     } catch (e) {
-      print('❌ Error during connectivity check: $e');
+      // print('❌ Error during connectivity check: $e');
       await _logError('Connection Check Error', e.toString());
     }
 
@@ -126,10 +126,10 @@ class ConnectionCheck {
   }
 
   void _startRioGasTimer() {
-    print('⏱️ Starting RioGas connectivity timer...');
+    // print('⏱️ Starting RioGas connectivity timer...');
     _rioGasTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       _counter++;
-      print('⏱️ Counter: $_counter');
+      // print('⏱️ Counter: $_counter');
       if (_counter >= _maxCounter) {
         _rioGasTimer?.cancel(); // Stop the timer after counter reaches max
         _counter = 0; // Reset the counter
@@ -138,7 +138,7 @@ class ConnectionCheck {
   }
 
   void _resetRioGasTimer() {
-    print('✅ RioGas connectivity restored. Resetting timer...');
+    // print('✅ RioGas connectivity restored. Resetting timer...');
     _rioGasTimer?.cancel();
     _rioGasTimer = null;
     _counter = 0;

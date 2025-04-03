@@ -20,6 +20,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart'; /
 import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivity_plus
 import '../services/counter_service.dart'; // Import the new CounterService
 import '../utils/connection_check.dart';
+import '../utils/screenBlock.dart'; // Import secureScreen
 
 class HomePage extends StatefulWidget {
   @override
@@ -62,19 +63,23 @@ class _HomePageState extends State<HomePage>
   @override
   void initState() {
     super.initState();
+    //secureScreen();
+
     _blinkController = AnimationController(
       duration: const Duration(seconds: 1),
       vsync: this,
     )..repeat(reverse: true); // Blinking effect
     _initializeHomePage();
     _initPedidosBoxListener();
+    _initMensajesBoxListener(); // Add this to initialize the listener
 
     // 🔹 Resetear la bandera para futuros chequeos de sesión
     Future.delayed(Duration(seconds: 10), () async {
       var box = await Hive.openBox('sessionBox');
       await box.put('firstLoginDone', false);
-      print(
-          "🔄 Reset de la bandera firstLoginDone, futuras sesiones serán chequeadas normalmente.");
+      // print(
+      //   "🔄 Reset de la bandera firstLoginDone, futuras sesiones serán chequeadas normalmente.",
+      // );
     });
 
     // 🔹 Inicializar el servicio de ubicación
@@ -86,9 +91,9 @@ class _HomePageState extends State<HomePage>
     // 🔹 Inicializar la verificación de conectividad
     _checkInternetConnectivity();
 
-    _connectivitySubscription = Connectivity()
-        .onConnectivityChanged
-        .listen((List<ConnectivityResult> results) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
       // Handle connectivity changes
     });
 
@@ -143,15 +148,15 @@ class _HomePageState extends State<HomePage>
   Future<void> _initializeLocationService() async {
     await _locationService.initializeLocationUpdates(context);
     _locationSubscription = _locationService.locationStream.listen((location) {
-      print('📍 Nueva ubicación recibida en HomePage: $location');
+      // print('📍 Nueva ubicación recibida en HomePage: $location');
     });
     _locationServiceCompleter.complete();
   }
 
   Future<void> _loadSessionData() async {
     var box = await Hive.openBox('sessionBox');
-    print("📦 Contenido de sessionBox:");
-    box.toMap().forEach((key, value) => print('$key: $value'));
+    // print("📦 Contenido de sessionBox:");
+    box.toMap().forEach((key, value) => null);
     setState(() {
       _movil = box.get('movil', defaultValue: '0');
     });
@@ -165,14 +170,14 @@ class _HomePageState extends State<HomePage>
         QuerySnapshot querySnapshot = await FirebaseFirestore.instance
             .collection('Constantes-$escenario')
             .get();
-        print("📂 Documentos en 'Constantes-$escenario':");
-        querySnapshot.docs.forEach((doc) => print('📝 ${doc.id}'));
+        // print("📂 Documentos en 'Constantes-$escenario':");
+        querySnapshot.docs.forEach((doc) => null);
 
         setState(() {
           _constantsLoaded = true;
         });
       } catch (e) {
-        print("❌ Error al obtener documentos de 'Constantes-1000': $e");
+        // print("❌ Error al obtener documentos de 'Constantes-1000': $e");
       }
     }
   }
@@ -191,7 +196,7 @@ class _HomePageState extends State<HomePage>
           try {
             pedidoId = int.parse(event.key.toString());
           } catch (_) {
-            print('❌ Clave no válida: ${event.key}');
+            // print('❌ Clave no válida: ${event.key}');
             return;
           }
         }
@@ -209,24 +214,35 @@ class _HomePageState extends State<HomePage>
         }
 
         String estado = _getPedidoEstado(pedidoId);
-        print('🔔 Cambio en pedido $pedidoId. Nuevo estado: $estado');
+        // print('🔔 Cambio en pedido $pedidoId. Nuevo estado: $estado');
 
         // Podés hacer algo dependiendo del estado
         switch (estado) {
           case 'Procesando':
-            print('📦 Pedido $pedidoId está siendo procesado.');
+            // print('📦 Pedido $pedidoId está siendo procesado.');
             _newOrders--;
             break;
           case 'Enviando':
-            print('🚚 Pedido $pedidoId se está enviando.');
+            // print('🚚 Pedido $pedidoId se está enviando.');
             break;
           case 'No Leído':
-            print('🕵️ Pedido $pedidoId aún no ha sido leído.');
+            // print('🕵️ Pedido $pedidoId aún no ha sido leído.');
             break;
           default:
-            print('⚠️ Estado desconocido para pedido $pedidoId.');
+          // print('⚠️ Estado desconocido para pedido $pedidoId.');
         }
       }
+    });
+  }
+
+  void _initMensajesBoxListener() async {
+    var mensajesBox = await Hive.openBox('mensajesBox');
+    mensajesBox.watch().listen((event) {
+      setState(() {
+        _unreadMessages = mensajesBox.values
+            .where((estado) => estado == 'Descargado')
+            .length; // Count only 'Descargado' messages
+      });
     });
   }
 
@@ -235,15 +251,19 @@ class _HomePageState extends State<HomePage>
     _firebaseService.getMensajesStream().listen((messages) async {
       int newMessagesCount = 0;
 
-      print("📦 Contenido de mensajesBox: ${mensajesBox.toMap()}");
+      // print("📦 Contenido de mensajesBox: ${mensajesBox.toMap()}");
 
       for (var message in messages) {
-        if (!mensajesBox.containsKey(message.id)) {
+        var messageData =
+            message.data() as Map<String, dynamic>?; // Extract message data
+        if (!mensajesBox.containsKey(message.id) &&
+            (messageData == null ||
+                messageData['VisibleEnApp'] == null ||
+                messageData['VisibleEnApp'] == 'S')) {
           await mensajesBox.put(message.id, 'Descargado'); // Mark as downloaded
           newMessagesCount = mensajesBox.values
               .where((estado) => estado == 'Descargado')
               .length; // Count only 'Descargado' messages
-          //newMessagesCount++;
 
           // Parse message ID as an integer
           final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
@@ -258,9 +278,9 @@ class _HomePageState extends State<HomePage>
           Position? position = await _locationService
               .getCurrentLocation(); // Use LocationService's method
           if (position != null) {
-            print('📨 Enviando datos al servicio descargaLecturaMensajes:');
-            print('Latitud: ${position.latitude}');
-            print('Longitud: ${position.longitude}');
+            // print('📨 Enviando datos al servicio descargaLecturaMensajes:');
+            // print('Latitud: ${position.latitude}');
+            // print('Longitud: ${position.longitude}');
             await RioGasService.descargaLecturaMensajes(
               int.parse(escenario), // escenarioId
               int.parse(movil), // movilId
@@ -276,16 +296,22 @@ class _HomePageState extends State<HomePage>
               position.longitude.toString(), // longitud
             );
           }
+        } else if (messageData != null &&
+            messageData['VisibleEnApp'] == 'N' &&
+            mensajesBox.containsKey(message.id)) {
+          await mensajesBox.put(message.id, 'Leido'); // Mark as read
+          // print('📨 Mensaje ${message.id} marcado como "Leido" en Hive.');
         }
       }
 
       if (newMessagesCount > 0) {
         _showNotification(
-            'Nuevo Mensaje', 'Tienes $newMessagesCount mensajes nuevos.');
+          'Nuevo Mensaje',
+          'Tienes $newMessagesCount mensajes nuevos.',
+        );
       }
 
       setState(() {
-        //_unreadMessages = mensajesBox.length; // Update unread messages count
         _unreadMessages = mensajesBox.values
             .where((estado) => estado == 'Descargado')
             .length; // Count only 'Descargado' messages
@@ -294,8 +320,9 @@ class _HomePageState extends State<HomePage>
   }
 
   void _listenToPendingOrders() {
-    _ordersSubscription =
-        _firebaseService.getPedidosStream().listen((orders) async {
+    _ordersSubscription = _firebaseService.getPedidosStream().listen((
+      orders,
+    ) async {
       setState(() {
         //_newOrders = orders.length;
         _newOrders = orders.where((order) {
@@ -314,9 +341,13 @@ class _HomePageState extends State<HomePage>
 
         if (!pedidosBox.containsKey(pedidoId.toString())) {
           await pedidosBox.put(
-              pedidoId.toString(), 'Descargado'); // Mark as "Descargado"
+            pedidoId.toString(),
+            'Descargado',
+          ); // Mark as "Descargado"
           _showNotification(
-              'Nueva Visita', 'Tienes un nueva visita pendiente.');
+            'Nueva Visita',
+            'Tienes un nueva visita pendiente.',
+          );
 
           // Call the download and read routine here
           await _callDescargaLecturaPedidos(pedido, pedidoId);
@@ -326,7 +357,9 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _callDescargaLecturaPedidos(
-      Map<String, dynamic> pedido, int pedidoId) async {
+    Map<String, dynamic> pedido,
+    int pedidoId,
+  ) async {
     String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? '1' : '2';
     String lectDesc = 'DESCARGA';
     String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
@@ -336,7 +369,7 @@ class _HomePageState extends State<HomePage>
     Position? position = await _locationService
         .getCurrentLocation(); // Use LocationService's method
     if (position == null) {
-      print('⚠️ No se pudo obtener la ubicación. Usando valores por defecto.');
+      // print('⚠️ No se pudo obtener la ubicación. Usando valores por defecto.');
       position = Position(
         latitude: 0.0,
         longitude: 0.0,
@@ -377,22 +410,22 @@ class _HomePageState extends State<HomePage>
   }
 
   void _listenToFirestoreChanges() {
-    FirebaseFirestore.instance
-        .collection('Pedidos')
-        .snapshots()
-        .listen((snapshot) {
+    FirebaseFirestore.instance.collection('Pedidos').snapshots().listen((
+      snapshot,
+    ) {
       for (var doc in snapshot.docChanges) {
         if (doc.type == DocumentChangeType.added) {
           _showNotification(
-              'Nueva Visita', 'Tienes un nueva visita pendiente.');
+            'Nueva Visita',
+            'Tienes un nueva visita pendiente.',
+          );
         }
       }
     });
 
-    FirebaseFirestore.instance
-        .collection('Mensajes')
-        .snapshots()
-        .listen((snapshot) {
+    FirebaseFirestore.instance.collection('Mensajes').snapshots().listen((
+      snapshot,
+    ) {
       for (var doc in snapshot.docChanges) {
         if (doc.type == DocumentChangeType.added) {
           _showNotification('Nuevo Mensaje', 'Tienes un nuevo mensaje.');
@@ -411,11 +444,13 @@ class _HomePageState extends State<HomePage>
       priority: Priority.high,
       showWhen: false,
       sound: RawResourceAndroidNotificationSound(
-          'iphone_notification'), // Archivo en res/raw
+        'iphone_notification',
+      ), // Archivo en res/raw
       //vibrationPattern: Int64List.fromList([0, 500, 100, 1500]), // Vibración prolongada
     );
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+    );
     await flutterLocalNotificationsPlugin.show(
       0,
       title,
@@ -432,17 +467,22 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _showForcedLogoutDialog(
-      BuildContext context, String nomUsuario, String movil) {
+    BuildContext context,
+    String nomUsuario,
+    String movil,
+  ) {
     return AlertDialog(
       title: Text('Deslogueo forzado'),
       content: Text(
-          'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.'),
+        'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.',
+      ),
       actions: [
         TextButton(
           onPressed: () async {
             await Hive.openBox('sessionBox').then((box) => box.clear());
-            await Hive.openBox('mensajesBox')
-                .then((box) => box.clear()); // Clear mensajesBox
+            await Hive.openBox(
+              'mensajesBox',
+            ).then((box) => box.clear()); // Clear mensajesBox
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => LoginPage()),
               (Route<dynamic> route) => false,
@@ -455,25 +495,25 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _checkInternetConnectivity() async {
-    print('🔍 Verificando conectividad a Internet...');
+    // print('🔍 Verificando conectividad a Internet...');
     var connectivityResult = await Connectivity().checkConnectivity();
-    print('🔍 Resultado de conectividad: $connectivityResult');
+    // print('🔍 Resultado de conectividad: $connectivityResult');
 
     if (connectivityResult == ConnectivityResult.none ||
         (connectivityResult is List &&
             connectivityResult.contains(ConnectivityResult.none))) {
-      print('❌ No hay conexión a Internet.');
+      // print('❌ No hay conexión a Internet.');
       if (!showPopup) _showNoInternetDialog(); // entra a modo "bloqueo"
       //_showNoInternetDialog(); // entra a modo "bloqueo"
     } else {
-      print('✅ Conexión a Internet disponible.');
+      // print('✅ Conexión a Internet disponible.');
       showPopup = false;
       // Podés continuar con la app aquí si querés.
     }
   }
 
   void _showNoInternetDialog() {
-    print('⚠️ Mostrando diálogo de "Sin Conexión a Internet".');
+    // print('⚠️ Mostrando diálogo de "Sin Conexión a Internet".');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       showDialog(
         context: navigatorKey.currentContext!,
@@ -482,11 +522,12 @@ class _HomePageState extends State<HomePage>
           return AlertDialog(
             title: Text('Sin Conexión a Internet'),
             content: Text(
-                'No tienes conexión a Internet. Por favor, verifica tu conexión.'),
+              'No tienes conexión a Internet. Por favor, verifica tu conexión.',
+            ),
             actions: <Widget>[
               TextButton(
                 onPressed: () async {
-                  print('🔄 Reintentando conectividad a Internet...');
+                  // print('🔄 Reintentando conectividad a Internet...');
                   Navigator.of(context).pop(); // Cierra el diálogo actual
                   showPopup = true;
                 },
@@ -500,27 +541,27 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _retryInternetConnectivity() async {
-    print('🔁 Reintento de conexión iniciado...');
+    // print('🔁 Reintento de conexión iniciado...');
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none ||
         (connectivityResult is List &&
             connectivityResult.contains(ConnectivityResult.none))) {
-      print('🚫 Aún sin conexión. Mostrando diálogo nuevamente.');
+      // print('🚫 Aún sin conexión. Mostrando diálogo nuevamente.');
       _showNoInternetDialog(); // vuelve a mostrar el diálogo si sigue sin internet
     } else {
-      print('✅ Conexión restaurada.');
+      // print('✅ Conexión restaurada.');
       // Aquí podés continuar con el flujo normal de tu app
     }
   }
 
   void _checkConnectivityAndPerformAction() async {
-    print('🔄 Checking connectivity...');
+    // print('🔄 Checking connectivity...');
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
-      print('❌ No connectivity detected. Performing fallback action...');
+      // print('❌ No connectivity detected. Performing fallback action...');
       // Placeholder for future action when no connectivity is detected
     } else {
-      print('✅ Connectivity available.');
+      // print('✅ Connectivity available.');
       // Placeholder for future action when connectivity is available
     }
   }
@@ -528,11 +569,11 @@ class _HomePageState extends State<HomePage>
   Future<void> _markMessageAsRead(String messageId) async {
     var mensajesBox = await Hive.openBox('mensajesBox');
     await mensajesBox.put(messageId, 'Leido'); // Mark as read
-    print('📨 Mensaje $messageId marcado como "Leido" en Hive.');
+    // print('📨 Mensaje $messageId marcado como "Leido" en Hive.');
   }
 
   void _showRioGasConnectivityModal() {
-    print('⚠️ Showing RioGas connectivity modal...');
+    // print('⚠️ Showing RioGas connectivity modal...');
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -540,7 +581,8 @@ class _HomePageState extends State<HomePage>
         return AlertDialog(
           title: Text('Conectividad con RioGas'),
           content: Text(
-              'Actualmente no hay conectividad con RioGas. Por favor, verifica tu conexión.'),
+            'Actualmente no hay conectividad con RioGas. Por favor, verifica tu conexión.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -556,7 +598,7 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('MoveIT'),
+        title: Text('Riogas - MoveIT'),
         toolbarHeight: 40.0,
         backgroundColor: Colors.lightBlueAccent,
         actions: [
@@ -578,8 +620,10 @@ class _HomePageState extends State<HomePage>
                             opacity: shouldBlink
                                 ? (_blinkController.value > 0.5 ? 1.0 : 0.0)
                                 : 1.0,
-                            child:
-                                Icon(Icons.network_cell, color: antennaColor),
+                            child: Icon(
+                              Icons.network_cell,
+                              color: antennaColor,
+                            ),
                           );
                         },
                       ),
@@ -602,7 +646,7 @@ class _HomePageState extends State<HomePage>
                 var movilDoc = movilSnapshot.data!;
                 var movilData = movilDoc.data() as Map<String, dynamic>;
                 int estadoNro = movilData['EstadoNro'];
-                print('EstadoNro from Movil: $estadoNro'); // Log estadoNro
+                // print('EstadoNro from Movil: $estadoNro'); // Log estadoNro
 
                 return StreamBuilder<List<Map<String, dynamic>>>(
                   // New stream for SubEstadoMoviles
@@ -613,38 +657,50 @@ class _HomePageState extends State<HomePage>
                     }
 
                     var subEstados = subEstadoSnapshot.data!;
-                    print('SubEstados fetched: $subEstados'); // Log subEstados
+                    // print('SubEstados fetched: $subEstados'); // Log subEstados
 
                     var subEstado = subEstados.firstWhere(
                       (element) =>
                           int.tryParse(element['SubEstadoCod'].toString()) ==
                           estadoNro,
-                      orElse: () =>
-                          {'DescCombo': 'Desconocido', 'CodColor': '000000'},
+                      orElse: () => {
+                        'DescCombo': 'Desconocido',
+                        'CodColor': '000000',
+                      },
                     );
 
-                    print(
-                        'Matched SubEstado: $subEstado'); // Log matched subEstado
+                    // print(
+                    //   'Matched SubEstado: $subEstado',
+                    // ); // Log matched subEstado
 
                     String estadoText = subEstado['DescCombo'];
                     String codColor = subEstado['CodColor'];
                     List<String> rgb = codColor.split(',');
                     String hexColor = rgb.length == 3
                         ? rgb
-                            .map((c) =>
-                                int.parse(c).toRadixString(16).padLeft(2, '0'))
+                            .map(
+                              (c) => int.parse(
+                                c,
+                              ).toRadixString(16).padLeft(2, '0'),
+                            )
                             .join()
                         : '000000';
                     Color estadoColor = Color(int.parse('0xff$hexColor'));
 
                     return GestureDetector(
                       onTap: () => _showEstadoDropdown(
-                          context, _movil, estadoNro, subEstados),
+                        context,
+                        _movil,
+                        estadoNro,
+                        subEstados,
+                      ),
                       child: Row(
                         children: [
                           Container(
                             padding: EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: estadoColor,
                               borderRadius: BorderRadius.circular(12),
@@ -675,42 +731,57 @@ class _HomePageState extends State<HomePage>
           bool firstLoginDone = box.get('firstLoginDone', defaultValue: false);
           bool existeSession = Hive.isBoxOpen('sessionBox');
 
-          print('🔒 firstLoginDone home_page: $firstLoginDone');
-          print('🔒 existeSession home_page: $existeSession');
+          // print('🔒 firstLoginDone home_page: $firstLoginDone');
+          // print('🔒 existeSession home_page: $existeSession');
 
           // ✅ Si es el primer login manual, ignorar completamente el chequeo de sesión activa
           if (firstLoginDone && existeSession) {
-            print(
-                "🚀 Ignorando chequeo de logout forzado en el primer login manual...");
+            // print(
+            //   "🚀 Ignorando chequeo de logout forzado en el primer login manual...",
+            // );
             return _widgetOptions.elementAt(_selectedIndex);
           } else {
             if (existeSession) {
-              print("🔒 Chequeando logout forzado en Firestore...");
+              // print("🔒 Chequeando logout forzado en Firestore...");
               // ✅ Si no es el primer login, proceder con la validación en Firestore
               return StreamBuilder<Map<String, dynamic>?>(
-                  stream: _firebaseService.getSesionesStream(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Center(child: Text('Error: ${snapshot.error}'));
-                    }
+                stream: _firebaseService.getSesionesStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
 
-                    if (snapshot.hasData) {
-                      var data = snapshot.data;
+                  if (snapshot.hasData) {
+                    var data = snapshot.data;
+                    if (Hive.isBoxOpen('sessionBox')) {
+                      var box = Hive.box('sessionBox');
                       if (data != null &&
                           data['idTerminal'] != box.get('deviceId')) {
                         return _showForcedLogoutDialog(
-                            context, data['nomUsuario'], data['movil']);
+                          context,
+                          data?['nomUsuario'] ?? 'Desconocido',
+                          data?['movil'] ?? 'Desconocido',
+                        );
                       }
                     } else {
-                      return _showForcedLogoutDialog(
-                          context, 'Desconocido', 'Desconocido');
+                      // print(
+                      //   '⚠️ sessionBox is not open. Skipping forced logout check.',
+                      // );
                     }
+                  } else {
+                    return _showForcedLogoutDialog(
+                      context,
+                      'Desconocido',
+                      'Desconocido',
+                    );
+                  }
 
-                    return _widgetOptions.elementAt(_selectedIndex);
-                  });
+                  return _widgetOptions.elementAt(_selectedIndex);
+                },
+              );
             } else {
               return _widgetOptions.elementAt(_selectedIndex);
             }
@@ -723,7 +794,10 @@ class _HomePageState extends State<HomePage>
           _buildBottomNavigationBarItem(Icons.check_circle, 'Finalizados', 0),
           _buildBottomNavigationBarItem(Icons.map, 'Mapa', 0),
           _buildBottomNavigationBarItem(
-              Icons.message, 'Mensajes', _unreadMessages),
+            Icons.message,
+            'Mensajes',
+            _unreadMessages,
+          ),
           _buildBottomNavigationBarItem(Icons.settings, 'Configuración', 0),
         ],
         currentIndex: _selectedIndex,
@@ -733,10 +807,14 @@ class _HomePageState extends State<HomePage>
         backgroundColor: Colors.white,
         type: BottomNavigationBarType.fixed,
         elevation: 10,
-        selectedLabelStyle:
-            TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
-        unselectedLabelStyle:
-            TextStyle(fontWeight: FontWeight.normal, fontSize: 10),
+        selectedLabelStyle: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 10,
+        ),
+        unselectedLabelStyle: TextStyle(
+          fontWeight: FontWeight.normal,
+          fontSize: 10,
+        ),
         showSelectedLabels: true,
         showUnselectedLabels: false,
       ),
@@ -744,16 +822,16 @@ class _HomePageState extends State<HomePage>
   }
 
   BottomNavigationBarItem _buildBottomNavigationBarItem(
-      IconData icon, String label, int badgeCount) {
+    IconData icon,
+    String label,
+    int badgeCount,
+  ) {
     return BottomNavigationBarItem(
       icon: Stack(
         children: [
           Icon(icon, size: 20),
           if (badgeCount > 0)
-            Positioned(
-              right: 0,
-              child: _buildBadge(badgeCount),
-            ),
+            Positioned(right: 0, child: _buildBadge(badgeCount)),
         ],
       ),
       label: label,
@@ -764,32 +842,40 @@ class _HomePageState extends State<HomePage>
     return Container(
       padding: EdgeInsets.all(1),
       decoration: BoxDecoration(
-          color: Colors.red, borderRadius: BorderRadius.circular(6)),
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(6),
+      ),
       constraints: BoxConstraints(minWidth: 12, minHeight: 12),
-      child: Text('$count',
-          style: TextStyle(color: Colors.white, fontSize: 8),
-          textAlign: TextAlign.center),
+      child: Text(
+        '$count',
+        style: TextStyle(color: Colors.white, fontSize: 8),
+        textAlign: TextAlign.center,
+      ),
     );
   }
 
-  void _showEstadoDropdown(BuildContext context, String movilId,
-      int currentEstado, List<Map<String, dynamic>> subEstados) {
+  void _showEstadoDropdown(
+    BuildContext context,
+    String movilId,
+    int currentEstado,
+    List<Map<String, dynamic>> subEstados,
+  ) {
     String?
         selectedEstadoDesc; // Variable to store the selected state's DescCombo
 
-    print("🔍 Debugging Estado Dropdown:");
-    print("movilId: $movilId");
-    print("currentEstado: $currentEstado");
-    print("subEstados: $subEstados");
+    // print("🔍 Debugging Estado Dropdown:");
+    // print("movilId: $movilId");
+    // print("currentEstado: $currentEstado");
+    // print("subEstados: $subEstados");
 
     // Get the current state's DescCombo
     String currentEstadoDesc = subEstados.firstWhere(
       (element) =>
           int.tryParse(element['SubEstadoCod'].toString()) == currentEstado,
-      orElse: () => {'DescCombo': 'Desconocido'},
-    )['DescCombo'];
+      orElse: () => {'TipoEstado': 'Desconocido'},
+    )['TipoEstado'];
 
-    print("currentEstadoDesc: $currentEstadoDesc");
+    // print("currentEstadoDesc: $currentEstadoDesc");
 
     showDialog(
       context: context,
@@ -802,11 +888,15 @@ class _HomePageState extends State<HomePage>
                 value: selectedEstadoDesc,
                 hint: Text('Selecciona un estado'),
                 items: subEstados
-                    .where((subEstado) =>
-                        subEstado['VisibleEnCombo'] == true &&
-                        subEstado['DescCombo'] != currentEstadoDesc)
+                    .where(
+                  (subEstado) =>
+                      subEstado['VisibleEnCombo'] == true &&
+                      subEstado['TipoEstado'] != currentEstadoDesc,
+                )
                     .map((subEstado) {
-                  print("🔍 SubEstado disponible: ${subEstado['DescCombo']}");
+                  // print(
+                  //   "🔍 SubEstado disponible: ${subEstado['DescCombo']}",
+                  // );
                   return DropdownMenuItem<String>(
                     value: subEstado['DescCombo'] as String,
                     child: Text(subEstado['DescCombo'] as String),
@@ -815,7 +905,7 @@ class _HomePageState extends State<HomePage>
                 onChanged: (String? newValue) {
                   setState(() {
                     selectedEstadoDesc = newValue; // Update the selected state
-                    print("🔄 Estado seleccionado: $selectedEstadoDesc");
+                    // print("🔄 Estado seleccionado: $selectedEstadoDesc");
                   });
                 },
               ),
@@ -834,23 +924,29 @@ class _HomePageState extends State<HomePage>
                       );
 
                       int newEstadoNro = int.tryParse(
-                              selectedSubEstado['SubEstadoCod'].toString()) ??
+                            selectedSubEstado['SubEstadoCod'].toString(),
+                          ) ??
                           currentEstado;
 
-                      print("✅ SubEstado seleccionado: $selectedSubEstado");
-                      print("🔢 Nuevo EstadoNro: $newEstadoNro");
+                      // print("✅ SubEstado seleccionado: $selectedSubEstado");
+                      // print("🔢 Nuevo EstadoNro: $newEstadoNro");
 
                       await _firebaseService.updateMovilEstado(newEstadoNro);
                       // Call the actualizarMoviles service
                       var result = await RioGasService.actualizarMoviles(
-                        int.parse(await Hive.box('sessionBox')
-                            .get('escenario', defaultValue: '0')),
+                        int.parse(
+                          await Hive.box(
+                            'sessionBox',
+                          ).get('escenario', defaultValue: '0'),
+                        ),
                         int.parse(movilId),
-                        await Hive.box('sessionBox')
-                            .get('username', defaultValue: ''),
+                        await Hive.box(
+                          'sessionBox',
+                        ).get('username', defaultValue: ''),
                         '', // NroSesion (if available, replace with actual value)
-                        await Hive.box('sessionBox')
-                            .get('deviceId', defaultValue: ''),
+                        await Hive.box(
+                          'sessionBox',
+                        ).get('deviceId', defaultValue: ''),
                         newEstadoNro.toString(),
                         '', // Latitude (if available, replace with actual value)
                         '', // Longitude (if available, replace with actual value)
@@ -860,13 +956,14 @@ class _HomePageState extends State<HomePage>
                       );
 
                       if (result != null) {
-                        print('✅ Estado del móvil actualizado correctamente.');
+                        // print('✅ Estado del móvil actualizado correctamente.');
                       } else {
-                        print('❌ Error al actualizar el estado del móvil.');
+                        // print('❌ Error al actualizar el estado del móvil.');
                       }
 
-                      Navigator.of(context)
-                          .pop(); // Close dialog after confirmation
+                      Navigator.of(
+                        context,
+                      ).pop(); // Close dialog after confirmation
                     }
                   },
                   child: Text('Confirmar'),
@@ -881,14 +978,16 @@ class _HomePageState extends State<HomePage>
 
   void _showConnectivityDialog(BuildContext context) async {
     var box = await Hive.openBox('conexionBox');
-    print("📦 Contenido de conexionBox:");
-    box.toMap().forEach((key, value) => print('$key: $value'));
+    // print("📦 Contenido de conexionBox:");
+    box.toMap().forEach((key, value) => null);
     bool conexionFirestore = box.get('conexionFirestore', defaultValue: true);
     bool conexionRioGas = box.get('conexionRioGas', defaultValue: false);
-    String lastConnectivityDateFirestore =
-        _formatTime(box.get('lastSuccessfulConnection', defaultValue: 'N/A'));
-    String lastConnectivityDateRiogas =
-        _formatTime(box.get('conexionRioGasTimestamp', defaultValue: 'N/A'));
+    String lastConnectivityDateFirestore = _formatTime(
+      box.get('lastSuccessfulConnection', defaultValue: 'N/A'),
+    );
+    String lastConnectivityDateRiogas = _formatTime(
+      box.get('conexionRioGasTimestamp', defaultValue: 'N/A'),
+    );
     var connectivityResult = await Connectivity().checkConnectivity();
 
     Color firestoreColor = conexionFirestore ? Colors.green : Colors.red;
@@ -912,9 +1011,15 @@ class _HomePageState extends State<HomePage>
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildConnectivityRow(
-                  'Nube', firestoreColor, lastConnectivityDateFirestore),
+                'Nube',
+                firestoreColor,
+                lastConnectivityDateFirestore,
+              ),
               _buildConnectivityRow(
-                  'RioGas', rioGasColor, lastConnectivityDateRiogas),
+                'RioGas',
+                rioGasColor,
+                lastConnectivityDateRiogas,
+              ),
               Row(
                 children: [
                   Container(
@@ -948,10 +1053,7 @@ class _HomePageState extends State<HomePage>
         Container(
           width: 12,
           height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         SizedBox(width: 8),
         Text('$label - ult. Hora: $date'),

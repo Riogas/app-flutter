@@ -33,32 +33,32 @@ class RioGasService {
   static Timer? _retryTimer;
 
   static Future<void> startRetryTimer() async {
-    print('🔄 Iniciando el temporizador de reintentos.');
+    // print('🔄 Iniciando el temporizador de reintentos.');
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-    print("📦 requestbox values: ${failedRequestsBox.values}");
+    // print("📦 requestbox values: ${failedRequestsBox.values}");
     if (failedRequestsBox.isNotEmpty) {
-      print('📦 Pending requests found: ${failedRequestsBox.length}');
+      // print('📦 Pending requests found: ${failedRequestsBox.length}');
       //_retryTimer?.cancel(); // Cancel any existing timer
-      print('⏱️ Existing retry timer canceled.');
-      print('⏱️ Setting retry interval to: $retryIntervalSeconds seconds.');
-      _retryTimer = Timer.periodic(
-        Duration(seconds: retryIntervalSeconds),
-        (timer) async {
-          print('🔄 Timer triggered. Executing retry timer callback.');
-          try {
-            await processPendingRequests();
-            //_retryTimer = null; // Reset the timer to null after processing
-            print('⏱️ Retry timer reset to null after processing.');
-          } catch (e) {
-            print('❌ Error in retry timer callback: $e');
-          }
-        },
-      );
-      print(
-          '🔄 Retry timer started with interval: $retryIntervalSeconds seconds.');
+      // print('⏱️ Existing retry timer canceled.');
+      // print('⏱️ Setting retry interval to: $retryIntervalSeconds seconds.');
+      _retryTimer = Timer.periodic(Duration(seconds: retryIntervalSeconds), (
+        timer,
+      ) async {
+        // print('🔄 Timer triggered. Executing retry timer callback.');
+        try {
+          await processPendingRequests();
+          //_retryTimer = null; // Reset the timer to null after processing
+          // print('⏱️ Retry timer reset to null after processing.');
+        } catch (e) {
+          // print('❌ Error in retry timer callback: $e');
+        }
+      });
+      // print(
+      //   '🔄 Retry timer started with interval: $retryIntervalSeconds seconds.',
+      // );
     } else {
-      print('⚠️ No pending requests in failedRequestsBox.');
-      print('⚠️ Retry timer will not be started.');
+      // print('⚠️ No pending requests in failedRequestsBox.');
+      // print('⚠️ Retry timer will not be started.');
     }
   }
 
@@ -71,26 +71,30 @@ class RioGasService {
     // Listen for changes in the failedRequestsBox
     failedRequestsBox.watch().listen((event) async {
       if (failedRequestsBox.isNotEmpty) {
-        print(
-            '📦 Detected new data in failedRequestsBox. Starting retry timer.');
+        // print(
+        //   '📦 Detected new data in failedRequestsBox. Starting retry timer.',
+        // );
         await startRetryTimer();
       } else {
-        print('📦 failedRequestsBox is empty. No retry timer will be started.');
+        // print('📦 failedRequestsBox is empty. No retry timer will be started.');
       }
     });
 
     // Start the retry timer if there is already data in the box
     if (failedRequestsBox.isNotEmpty) {
-      print('📦 failedRequestsBox has existing data. Starting retry timer.');
+      // print('📦 failedRequestsBox has existing data. Starting retry timer.');
       await startRetryTimer();
     }
   }
 
   static Future<void> _saveFailedRequest(
-      String? endpoint, Map<String, dynamic>? payload) async {
+    String? endpoint,
+    Map<String, dynamic>? payload,
+  ) async {
     if (endpoint == null || payload == null) {
-      print(
-          '⚠️ No se puede guardar la solicitud fallida: endpoint o payload es null.');
+      // print(
+      //   '⚠️ No se puede guardar la solicitud fallida: endpoint o payload es null.',
+      // );
       return;
     }
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
@@ -103,16 +107,16 @@ class RioGasService {
     });
 
     if (exists) {
-      print('⚠️ Duplicate request detected. Not saving again: $endpoint');
+      // print('⚠️ Duplicate request detected. Not saving again: $endpoint');
       return;
     }
 
     await failedRequestsBox.add({'endpoint': endpoint, 'payload': payload});
-    print('❌ Request saved for retry: $endpoint');
+    // print('❌ Request saved for retry: $endpoint');
   }
 
   static Future<void> processPendingRequests() async {
-    print('🔍 Opening failedRequestsBox to process pending requests.');
+    // print('🔍 Opening failedRequestsBox to process pending requests.');
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
     List<MapEntry<dynamic, Map<String, dynamic>>> pendingRequests =
@@ -124,16 +128,17 @@ class RioGasService {
                 final map = Map<String, dynamic>.from(entry.value as Map);
                 return MapEntry(entry.key, map);
               } catch (error) {
-                print(
-                    '❌ Error converting request with key ${entry.key}: $error');
+                // print(
+                //   '❌ Error converting request with key ${entry.key}: $error',
+                // );
                 return null;
               }
             })
             .whereType<MapEntry<dynamic, Map<String, dynamic>>>()
             .toList();
 
-    print('📋 Total pending requests: ${pendingRequests.length}');
-    print('📋 Pending requests: $pendingRequests'); // Debugging print
+    // print('📋 Total pending requests: ${pendingRequests.length}');
+    // print('📋 Pending requests: $pendingRequests'); // Debugging print
 
     for (var entry in pendingRequests) {
       final key = entry.key;
@@ -141,60 +146,66 @@ class RioGasService {
 
       try {
         String endpoint = request['endpoint'];
-        Map<String, dynamic> payload =
-            Map<String, dynamic>.from(request['payload'] as Map);
+        Map<String, dynamic> payload = Map<String, dynamic>.from(
+          request['payload'] as Map,
+        );
 
-        print('🔄 Retrying request for endpoint: $endpoint');
-        print('📦 Payload: $payload');
+        // print('🔄 Retrying request for endpoint: $endpoint');
+        // print('📦 Payload: $payload');
 
         var response = await _post(endpoint, payload);
         if (response != null) {
-          print('✅ Request to $endpoint succeeded.');
+          // print('✅ Request to $endpoint succeeded.');
 
           if (endpoint == 'FinalizarPedido' &&
               payload.containsKey('PedidoId')) {
             var pedidosBox = await Hive.openBox('pedidosBox');
             int pedidoId = payload['PedidoId'];
-            print('📦 Checking pedidosBox for PedidoId: $pedidoId');
+            // print('📦 Checking pedidosBox for PedidoId: $pedidoId');
             if (pedidosBox.containsKey(pedidoId)) {
               await pedidosBox.put(pedidoId, 'Procesando');
-              print(
-                  '📦 Pedido $pedidoId updated to "Procesando" in pedidosBox.');
+              // print(
+              //   '📦 Pedido $pedidoId updated to "Procesando" in pedidosBox.',
+              // );
             } else {
-              print('⚠️ PedidoId $pedidoId not found in pedidosBox.');
+              // print('⚠️ PedidoId $pedidoId not found in pedidosBox.');
             }
           } else {
-            print(
-                '📨 Executed request for endpoint "$endpoint" without extra logic.');
+            // print(
+            //   '📨 Executed request for endpoint "$endpoint" without extra logic.',
+            // );
           }
 
-          await failedRequestsBox
-              .delete(key); // ✅ Remove successfully processed request
-          print('🗑️ Removed successfully processed request with key $key.');
+          await failedRequestsBox.delete(
+            key,
+          ); // ✅ Remove successfully processed request
+          // print('🗑️ Removed successfully processed request with key $key.');
         } else {
-          print('⚠️ Request to $endpoint failed. Response is null.');
+          // print('⚠️ Request to $endpoint failed. Response is null.');
         }
       } catch (e) {
-        print('❌ Exception while retrying request with key $key: $e');
+        // print('❌ Exception while retrying request with key $key: $e');
       }
     }
 
-    print('✅ Finished processing all pending requests.');
+    // print('✅ Finished processing all pending requests.');
   }
 
   static Future<Map<String, dynamic>?> _post(
-      String endpoint, Map<String, dynamic> body) async {
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
     try {
       // Procesar el valor de la versión para que solo incluya el número
       if (body.containsKey('version')) {
         body['version'] = body['version'].replaceAll(RegExp(r'[^0-9.]'), '');
       }
 
-      print('Ejecutando servicio: $endpoint');
-      print('Solicitud (request):');
-      print('URL: $baseUrl$endpoint');
-      print('Headers: $headers');
-      print('Body $endpoint: ${jsonEncode({...body, 'token': token})}');
+      // print('Ejecutando servicio: $endpoint');
+      // print('Solicitud (request):');
+      // print('URL: $baseUrl$endpoint');
+      // print('Headers: $headers');
+      // print('Body $endpoint: ${jsonEncode({...body, 'token': token})}');
 
       final response = await http.post(
         Uri.parse('$baseUrl$endpoint'),
@@ -202,8 +213,8 @@ class RioGasService {
         body: jsonEncode({...body, 'token': token}),
       );
 
-      print('[$endpoint] Código de respuesta: ${response.statusCode}');
-      print('[$endpoint] Respuesta: ${response.body}');
+      // print('[$endpoint] Código de respuesta: ${response.statusCode}');
+      // print('[$endpoint] Respuesta: ${response.body}');
 
       if (response.statusCode == 200) {
         _lastErrorTime = null; // Reset error tracking on success
@@ -221,9 +232,9 @@ class RioGasService {
       }
       return null;
     } catch (e) {
-      print('❌ Error en [$endpoint]: $e');
+      // print('❌ Error en [$endpoint]: $e');
       if (e is SocketException) {
-        print('⚠️ Error de red detectado: ${e.message}');
+        // print('⚠️ Error de red detectado: ${e.message}');
       }
       await _saveFailedRequest(endpoint, body); // Save failed request
       await _logError(
@@ -244,15 +255,20 @@ class RioGasService {
     if (isConnected) {
       await conexionBox.put('conexionRioGas', true);
       await conexionBox.put('conexionRioGasTimestamp', now.toIso8601String());
-      print('✅ Connection successful: conexionRioGas set to true.');
+      // print('✅ Connection successful: conexionRioGas set to true.');
     } else {
       await conexionBox.put('conexionRioGas', false);
-      print('❌ Connection failed: conexionRioGas set to false.');
+      // print('❌ Connection failed: conexionRioGas set to false.');
     }
   }
 
-  static Future<void> _logError(String type, String message,
-      [String? additionalInfo, String? endpoint, String? payload]) async {
+  static Future<void> _logError(
+    String type,
+    String message, [
+    String? additionalInfo,
+    String? endpoint,
+    String? payload,
+  ]) async {
     var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
     var errorEvent = ErrorEvent(
       type: type,
@@ -263,8 +279,9 @@ class RioGasService {
       payload: payload ?? 'No payload',
     );
     await errorBox.add(errorEvent);
-    print(
-        '📋 Error logged: ${errorEvent.toString()}'); // Log full details of errorEvent
+    // print(
+    //   '📋 Error logged: ${errorEvent.toString()}',
+    // ); // Log full details of errorEvent
 
     // Track persistent errors
     await _handlePersistentErrors();
@@ -278,15 +295,22 @@ class RioGasService {
       Duration difference = now.difference(_lastErrorTime!);
       if (difference.inMinutes >= errorThresholdMinutes) {
         await _updateConnectionStatus(
-            false); // Update connection status on persistent error
+          false,
+        ); // Update connection status on persistent error
       }
     }
   }
 
   static Future<Map<String, dynamic>?> validarUsuario(
-      String usuario, String password, String deviceId) {
-    return _post('ValidarUsuario',
-        {'usuario': usuario, 'password': password, 'DeviceId': deviceId});
+    String usuario,
+    String password,
+    String deviceId,
+  ) {
+    return _post('ValidarUsuario', {
+      'usuario': usuario,
+      'password': password,
+      'DeviceId': deviceId,
+    });
   }
 
   static Future<Map<String, dynamic>?> validarDispositivo(String deviceId) {
@@ -294,13 +318,14 @@ class RioGasService {
   }
 
   static Future<Map<String, dynamic>?> registrarDispositivo(
-      String deviceId,
-      String documento,
-      String version,
-      String number,
-      String marca,
-      String modelo,
-      String info) {
+    String deviceId,
+    String documento,
+    String version,
+    String number,
+    String marca,
+    String modelo,
+    String info,
+  ) {
     return _post('RegistrarDispositivo', {
       'DeviceId': deviceId,
       'Documento': documento,
@@ -308,25 +333,33 @@ class RioGasService {
       'numero': number,
       'Marca': marca,
       'Modelo': modelo,
-      'Info': info
+      'Info': info,
     });
   }
 
   // Nuevo método para validar la versión
   static Future<Map<String, dynamic>?> validarVersion(
-      String version, String deviceId) {
+    String version,
+    String deviceId,
+  ) {
     return _post('ValidarVersion', {'version': version, 'DeviceId': deviceId});
   }
 
   // Nuevo método para obtener datos de la versión
   static Future<Map<String, dynamic>?> DatosVersionActual(
-      String version, String deviceId) {
-    return _post(
-        'DatosVersionActual', {'version': version, 'DeviceId': deviceId});
+    String version,
+    String deviceId,
+  ) {
+    return _post('DatosVersionActual', {
+      'version': version,
+      'DeviceId': deviceId,
+    });
   }
 
   static Future<Map<String, dynamic>?> cambioPassword(
-      String usuMobileLogin, String usuMobilePassword) {
+    String usuMobileLogin,
+    String usuMobilePassword,
+  ) {
     return _post('CambioPassword', {
       'UsuMobileLogin': usuMobileLogin,
       'UsuMobilePassword': usuMobilePassword,
@@ -334,18 +367,19 @@ class RioGasService {
   }
 
   static Future<Map<String, dynamic>?> descargaLecturaMensajes(
-      int escenarioId,
-      int movilId,
-      int messageId,
-      String usuario,
-      String nroSesion,
-      String termMobileEquipo,
-      String lectDesc,
-      String fechaHoraCmbEst,
-      String inAux1,
-      String inAux2,
-      String latitud,
-      String longitud) {
+    int escenarioId,
+    int movilId,
+    int messageId,
+    String usuario,
+    String nroSesion,
+    String termMobileEquipo,
+    String lectDesc,
+    String fechaHoraCmbEst,
+    String inAux1,
+    String inAux2,
+    String latitud,
+    String longitud,
+  ) {
     return _post('DescargaLecturaMensajes', {
       'EscenarioId': escenarioId,
       'MovilId': movilId,
@@ -363,18 +397,19 @@ class RioGasService {
   }
 
   static Future<Map<String, dynamic>?> descargaLecturaPedidos(
-      int escenarioId,
-      int pedidoId,
-      String pedidoTpo,
-      String usuario,
-      String nroSesion,
-      String termMobileEquipo,
-      String lectDesc,
-      String fechaHoraCmbEst,
-      String inAux1,
-      String inAux2,
-      String latitud,
-      String longitud) {
+    int escenarioId,
+    int pedidoId,
+    String pedidoTpo,
+    String usuario,
+    String nroSesion,
+    String termMobileEquipo,
+    String lectDesc,
+    String fechaHoraCmbEst,
+    String inAux1,
+    String inAux2,
+    String latitud,
+    String longitud,
+  ) {
     return _post('DescargaLecturaPedidos', {
       'EscenarioId': escenarioId,
       'PedidoId': pedidoId,
@@ -392,21 +427,22 @@ class RioGasService {
   }
 
   static Future<Map<String, dynamic>?> finalizarPedido(
-      int escenarioId,
-      int pedidoId,
-      String pedidoTpo,
-      String usuario,
-      String nroSesion,
-      String termMobileEquipo,
-      int estado,
-      int subEstado,
-      String formaPago,
-      String motCancel,
-      String fechaHoraCmbEst,
-      String inAux1,
-      String inAux2,
-      String latitud,
-      String longitud) {
+    int escenarioId,
+    int pedidoId,
+    String pedidoTpo,
+    String usuario,
+    String nroSesion,
+    String termMobileEquipo,
+    int estado,
+    int subEstado,
+    String formaPago,
+    String motCancel,
+    String fechaHoraCmbEst,
+    String inAux1,
+    String inAux2,
+    String latitud,
+    String longitud,
+  ) {
     return _post('FinalizarPedido', {
       'EscenarioId': escenarioId,
       'PedidoId': pedidoId,
@@ -427,17 +463,18 @@ class RioGasService {
   }
 
   static Future<Map<String, dynamic>?> actualizarMoviles(
-      int escenarioId,
-      int movilId,
-      String usuario,
-      String nroSesion,
-      String termMobileEquipo,
-      String estadoStr,
-      String latitud,
-      String longitud,
-      String fechaHoraCmbEst,
-      String inAux1,
-      String inAux2) {
+    int escenarioId,
+    int movilId,
+    String usuario,
+    String nroSesion,
+    String termMobileEquipo,
+    String estadoStr,
+    String latitud,
+    String longitud,
+    String fechaHoraCmbEst,
+    String inAux1,
+    String inAux2,
+  ) {
     return _post('ActualizarMoviles', {
       'EscenarioId': escenarioId,
       'MovilId': movilId,
@@ -454,20 +491,22 @@ class RioGasService {
   }
 
   static Future<Map<String, dynamic>?> actualizarMovilesEstado(
-      int movilId, int estado) async {
+    int movilId,
+    int estado,
+  ) async {
     var box = await Hive.openBox('sessionBox');
     String? escenarioId = box.get('escenario');
     String? usuario = box.get('username');
     String? deviceId = box.get('deviceId');
 
     if (escenarioId == null || usuario == null || deviceId == null) {
-      print('❌ No se pudo obtener el escenario, usuario o deviceId de Hive.');
+      // print('❌ No se pudo obtener el escenario, usuario o deviceId de Hive.');
       return null;
     }
 
     Position? position = await LocationService().getCurrentLocation();
     if (position == null) {
-      print('❌ No se pudo obtener la ubicación actual.');
+      // print('❌ No se pudo obtener la ubicación actual.');
       return null;
     }
 
@@ -490,7 +529,10 @@ class RioGasService {
   }
 
   static Future<Map<String, dynamic>?> enviarOTP(
-      int nroTelefono, int codigoOTP, String hash) {
+    int nroTelefono,
+    int codigoOTP,
+    String hash,
+  ) {
     return _post('EnviarOTP', {
       'token': token,
       'nroTelefono': nroTelefono,
@@ -499,8 +541,13 @@ class RioGasService {
     });
   }
 
-  static Future<Map<String, dynamic>?> registrarCoordenadas(int movil,
-      String latitud, String longitud, String deviceId, String fechaHora) {
+  static Future<Map<String, dynamic>?> registrarCoordenadas(
+    int movil,
+    String latitud,
+    String longitud,
+    String deviceId,
+    String fechaHora,
+  ) {
     return _post('RegistrarCoordenadas', {
       'token': token,
       'movil': movil,
@@ -524,18 +571,19 @@ class RioGasService {
     required int escenarioId,
     required int movilId,
   }) async {
-    print('📋 Parameters:');
-    print('Year: $year, Month: $month, Day: $day');
-    print('Hour: $hour, Minutes: $minutes, Seconds: $seconds');
-    print(
-        'UsuMobileLogin: $usuMobileLogin, TermMobileEquipo: $termMobileEquipo');
-    print('AgenciaId: $agenciaId, EscenarioId: $escenarioId');
-    print('MovilId: $movilId');
+    // print('📋 Parameters:');
+    // print('Year: $year, Month: $month, Day: $day');
+    // print('Hour: $hour, Minutes: $minutes, Seconds: $seconds');
+    // print(
+    //   'UsuMobileLogin: $usuMobileLogin, TermMobileEquipo: $termMobileEquipo',
+    // );
+    // print('AgenciaId: $agenciaId, EscenarioId: $escenarioId');
+    // print('MovilId: $movilId');
     final url =
         'https://www.riogas.uy/ica_geos_/com.icageos.urlhttprpt2?Year=$year&Month=$month&Day=$day&Hour=$hour&Minutes=$minutes&Seconds=$seconds&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId';
 
     try {
-      print('🌐 Downloading PDF from: $url');
+      // print('🌐 Downloading PDF from: $url');
       final response = await http.get(Uri.parse(url));
 
       if (response.statusCode == 200) {
@@ -544,27 +592,27 @@ class RioGasService {
         final file = File(filePath);
 
         await file.writeAsBytes(response.bodyBytes);
-        print('✅ PDF downloaded to: $filePath');
+        // print('✅ PDF downloaded to: $filePath');
 
         final result = await OpenFile.open(filePath);
-        print('📂 Opened PDF with result: $result');
+        // print('📂 Opened PDF with result: $result');
       } else {
-        print('❌ Failed to download PDF. Status code: ${response.statusCode}');
+        // print('❌ Failed to download PDF. Status code: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ Error downloading or opening PDF: $e');
+      // print('❌ Error downloading or opening PDF: $e');
     }
   }
 
   static Future<void> deleteOldRequests() async {
-    print('🗑️ Checking for old requests to delete.');
+    // print('🗑️ Checking for old requests to delete.');
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
     // Check if the box contains more than 500 records
     if (failedRequestsBox.length > 500) {
-      print('⚠️ More than 500 records found. Clearing the box.');
+      // print('⚠️ More than 500 records found. Clearing the box.');
       await failedRequestsBox.clear(); // Clear all records
-      print('✅ All records cleared from failedRequestsBox.');
+      // print('✅ All records cleared from failedRequestsBox.');
       return;
     }
 
@@ -575,8 +623,9 @@ class RioGasService {
       if (request != null && request is Map) {
         DateTime? timestamp = DateTime.tryParse(request['timestamp'] ?? '');
         if (timestamp != null) {
-          return timestamp
-              .isBefore(DateTime(today.year, today.month, today.day));
+          return timestamp.isBefore(
+            DateTime(today.year, today.month, today.day),
+          );
         }
       }
       return false;
@@ -584,9 +633,9 @@ class RioGasService {
 
     for (var key in keysToDelete) {
       await failedRequestsBox.delete(key);
-      print('🗑️ Deleted old request with key: $key');
+      // print('🗑️ Deleted old request with key: $key');
     }
 
-    print('✅ Finished deleting old requests.');
+    // print('✅ Finished deleting old requests.');
   }
 }

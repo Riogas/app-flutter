@@ -36,7 +36,8 @@ class LocationService {
     await _requestIgnoreBatteryOptimizations();
     await _getLocationPermission();
     await ensureCorrectLocationPermission(
-        context); // 🔹 Verifica y solicita permiso en background
+      context,
+    ); // 🔹 Verifica y solicita permiso en background
     await _enableBackgroundExecution();
     _startLocationUpdates();
     await _startLocationAndSyncTimers(); // 🔹 Configura los timers para Firestore y RioGas
@@ -66,7 +67,7 @@ class LocationService {
     String? valorFinal;
 
     if (data != null) {
-      print("📦 Contenido del documento con ID '31': $data");
+      // print("📦 Contenido del documento con ID '31': $data");
 
       if (data['Estado'] == 'A') {
         _isUpdateEnabled = true; // 🔹 Enable updates
@@ -77,19 +78,22 @@ class LocationService {
           valorFinal = data['Valor']; // Default to Valor
         }
         _updateInterval = _parseUpdateInterval(valorFinal); // Convertir a int
-        print(
-            "✅ Estado es 'A'. Intervalo de actualización configurado a $_updateInterval segundos.");
+        // print(
+        //   "✅ Estado es 'A'. Intervalo de actualización configurado a $_updateInterval segundos.",
+        // );
         return true;
       } else {
         _isUpdateEnabled = false; // 🔹 Disable updates
-        print(
-            "❌ Estado no es 'A'. No se iniciarán las actualizaciones de ubicación.");
+        // print(
+        //   "❌ Estado no es 'A'. No se iniciarán las actualizaciones de ubicación.",
+        // );
         return false;
       }
     } else {
       _isUpdateEnabled = false; // 🔹 Disable updates
-      print(
-          "❌ No se encontró el documento con ID '31'. No se iniciarán las actualizaciones de ubicación.");
+      // print(
+      //   "❌ No se encontró el documento con ID '31'. No se iniciarán las actualizaciones de ubicación.",
+      // );
       return false;
     }
   }
@@ -112,7 +116,7 @@ class LocationService {
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       _locationPermissionDenied = true;
-      print('❌ Permisos de ubicación denegados.');
+      // print('❌ Permisos de ubicación denegados.');
       return;
     }
 
@@ -122,7 +126,7 @@ class LocationService {
           await Geolocator.requestPermission();
 
       if (backgroundPermission != LocationPermission.always) {
-        print('⚠️ Permiso de ubicación en background denegado.');
+        // print('⚠️ Permiso de ubicación en background denegado.');
       }
     }
   }
@@ -138,15 +142,16 @@ class LocationService {
     );
 
     bool hasPermissions = await FlutterBackground.hasPermissions;
-    print('🔄 hasPermissions antes de inicializar: $hasPermissions');
+    // print('🔄 hasPermissions antes de inicializar: $hasPermissions');
 
     if (hasPermissions) {
       try {
-        hasPermissions =
-            await FlutterBackground.initialize(androidConfig: androidConfig);
-        print('🔄 hasPermissions después de inicializar: $hasPermissions');
+        hasPermissions = await FlutterBackground.initialize(
+          androidConfig: androidConfig,
+        );
+        // print('🔄 hasPermissions después de inicializar: $hasPermissions');
       } catch (e) {
-        print('❌ Error al inicializar FlutterBackground: $e');
+        // print('❌ Error al inicializar FlutterBackground: $e');
       }
     }
 
@@ -154,12 +159,12 @@ class LocationService {
       try {
         await FlutterBackground.enableBackgroundExecution();
         _isBackgroundEnabled = true;
-        print('✅ Ejecución en segundo plano habilitada.');
+        // print('✅ Ejecución en segundo plano habilitada.');
       } catch (e) {
-        print('❌ Error al habilitar la ejecución en segundo plano: $e');
+        // print('❌ Error al habilitar la ejecución en segundo plano: $e');
       }
     } else {
-      print('❌ No se pudo habilitar la ejecución en segundo plano.');
+      // print('❌ No se pudo habilitar la ejecución en segundo plano.');
     }
   }
 
@@ -168,8 +173,9 @@ class LocationService {
     LocationPermission permission = await Geolocator.checkPermission();
 
     if (permission == LocationPermission.whileInUse) {
-      print(
-          "⚠️ El usuario solo concedió 'Mientras se usa la app'. Solicitando 'Permitir todo el tiempo'...");
+      // print(
+      //   "⚠️ El usuario solo concedió 'Mientras se usa la app'. Solicitando 'Permitir todo el tiempo'...",
+      // );
 
       // 🔹 Muestra un popup antes de redirigir a la configuración
       bool shouldRedirect = await _showPermissionDialog(context);
@@ -233,8 +239,9 @@ class LocationService {
     if (_locationPermissionDenied) return;
 
     _getAndShowLocation(); // 🔹 Obtener ubicación inmediatamente
-    print(
-        '📍 Iniciando actualización de coordenadas cada $_updateInterval segundos.');
+    // print(
+    //   '📍 Iniciando actualización de coordenadas cada $_updateInterval segundos.',
+    // );
 
     // 🔹 Configura el stream para calcular distancia recorrida en tiempo real
     const locationSettings = LocationSettings(
@@ -242,9 +249,9 @@ class LocationService {
     );
 
     _positionStreamSubscription?.cancel(); // Cancela cualquier stream previo
-    _positionStreamSubscription =
-        Geolocator.getPositionStream(locationSettings: locationSettings)
-            .listen((Position position) async {
+    _positionStreamSubscription = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
+    ).listen((Position position) async {
       LatLng newLocation = LatLng(position.latitude, position.longitude);
 
       if (_lastPosition != null) {
@@ -256,8 +263,9 @@ class LocationService {
         );
 
         _totalDistance += distance;
-        print(
-            '📏 Distancia recorrida: $distance mts | Total: $_totalDistance mts');
+        // print(
+        //   '📏 Distancia recorrida: $distance mts | Total: $_totalDistance mts',
+        // );
         await _updateLocationAndDistanceInHive(newLocation, _totalDistance);
       }
 
@@ -267,13 +275,10 @@ class LocationService {
 
     // 🔹 Mantiene el timer para guardar coordenadas en Firestore
     _timer?.cancel(); // Evita múltiples timers
-    _timer = Timer.periodic(
-      Duration(seconds: _updateInterval),
-      (timer) async {
-        print('⏳ Obteniendo nuevas coordenadas para Firestore...');
-        await _getAndShowLocation();
-      },
-    );
+    _timer = Timer.periodic(Duration(seconds: _updateInterval), (timer) async {
+      // print('⏳ Obteniendo nuevas coordenadas para Firestore...');
+      await _getAndShowLocation();
+    });
   }
 
   /// 🔹 Obtiene la ubicación actual y la envía al Stream y Firestore
@@ -290,20 +295,25 @@ class LocationService {
       LatLng newLocation = LatLng(position.latitude, position.longitude);
       _locationStreamController.add(newLocation); // 🔹 Notifica a los listeners
 
-      print(
-          '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
+      // print(
+      //   '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
+      // );
 
       await _updateCoordinatesInFirestore(position); // 🔹 Actualiza Firestore
       await _updateLocationAndDistanceInHive(
-          newLocation, _totalDistance); // 🔹 Actualiza Hive
+        newLocation,
+        _totalDistance,
+      ); // 🔹 Actualiza Hive
     } catch (e) {
-      print('❌ Error al obtener ubicación: $e');
+      // print('❌ Error al obtener ubicación: $e');
     }
   }
 
   /// 🔹 Actualiza la última ubicación y la distancia total en Hive
   Future<void> _updateLocationAndDistanceInHive(
-      LatLng newLocation, double totalDistance) async {
+    LatLng newLocation,
+    double totalDistance,
+  ) async {
     var box = await Hive.openBox('locationBox');
 
     await box.put('lastLocation', {
@@ -312,10 +322,12 @@ class LocationService {
     });
     await box.put('totalDistance', totalDistance);
 
-    print(
-        '📦 Última ubicación guardada en Hive: Lat ${newLocation.latitude}, Lng ${newLocation.longitude}');
-    print(
-        '📦 Distancia total recorrida actualizada: ${totalDistance.toStringAsFixed(2)} mts');
+    // print(
+    //   '📦 Última ubicación guardada en Hive: Lat ${newLocation.latitude}, Lng ${newLocation.longitude}',
+    // );
+    // print(
+    //   '📦 Distancia total recorrida actualizada: ${totalDistance.toStringAsFixed(2)} mts',
+    // );
   }
 
   Future<Position?> getCurrentLocation() async {
@@ -328,14 +340,14 @@ class LocationService {
       );
       return position;
     } catch (e) {
-      print('❌ Error al obtener ubicación: $e');
+      // print('❌ Error al obtener ubicación: $e');
       return null;
     }
   }
 
   Future<void> _updateCoordinatesInFirestore(Position position) async {
     if (!_isUpdateEnabled) {
-      print('⚠️ Actualización de coordenadas en Firestore deshabilitada.');
+      // print('⚠️ Actualización de coordenadas en Firestore deshabilitada.');
       return; // 🔹 Skip updates if not enabled
     }
 
@@ -344,7 +356,7 @@ class LocationService {
     String? movil = box.get('movil');
 
     if (escenario == null || movil == null) {
-      print('❌ No se pudo obtener el escenario o el móvil de Hive.');
+      // print('❌ No se pudo obtener el escenario o el móvil de Hive.');
       return;
     }
 
@@ -358,9 +370,7 @@ class LocationService {
         .doc(fechaActual);
 
     // Agregar el campo fechahoraCreacion al documento yyyyMMdd
-    await fechaDocRef.set({
-      'fechahoraCreacion': now,
-    }, SetOptions(merge: true));
+    await fechaDocRef.set({'fechahoraCreacion': now}, SetOptions(merge: true));
 
     DocumentReference movilDocRef =
         fechaDocRef.collection('Movil-$movil').doc(horaActual);
@@ -372,7 +382,7 @@ class LocationService {
     };
 
     await movilDocRef.set(coordinatesData, SetOptions(merge: true));
-    print('📍 Coordenadas guardadas en Firestore: $coordinatesData');
+    // print('📍 Coordenadas guardadas en Firestore: $coordinatesData');
   }
 
   /// 🔹 Inicia los timers para sincronización con Firestore y RioGas
@@ -383,49 +393,52 @@ class LocationService {
     int rioGasInterval = 0;
     int firestoreInterval = 0;
 
-    print('intervalo firestore  $firestoreIntervalValue');
-    print('intervalo riogas $rioGasIntervalValue');
+    // print('intervalo firestore  $firestoreIntervalValue');
+    // print('intervalo riogas $rioGasIntervalValue');
 
     // Parsear los intervalos en segundos
     if (firestoreIntervalValue != null) {
       firestoreInterval = _parseUpdateInterval(firestoreIntervalValue);
 
-      print(
-          '⏳ Configurando timer para Firestore cada $firestoreInterval segundos.');
+      // print(
+      //   '⏳ Configurando timer para Firestore cada $firestoreInterval segundos.',
+      // );
     }
 
     if (rioGasIntervalValue != null) {
       rioGasInterval = _parseUpdateInterval(rioGasIntervalValue);
 
-      print('⏳ Configurando timer para RioGas cada $rioGasInterval segundos.');
+      // print('⏳ Configurando timer para RioGas cada $rioGasInterval segundos.');
     }
 
     if (firestoreInterval == null || firestoreInterval == 0) {
-      print('❌ No se pudo obtener los intervalos de las constantes.');
+      // print('❌ No se pudo obtener los intervalos de las constantes.');
     } else {
       // Timer para Firestore
-      Timer.periodic(Duration(seconds: firestoreInterval),
-          (firestoreTimer) async {
+      Timer.periodic(Duration(seconds: firestoreInterval), (
+        firestoreTimer,
+      ) async {
         Position? position = await getCurrentLocation();
         if (position == null) {
-          print('❌ No se pudo obtener la ubicación actual para Firestore.');
+          // print('❌ No se pudo obtener la ubicación actual para Firestore.');
           return;
         }
 
-        print(
-            '📍 Actualizando Firestore con coordenadas: Lat ${position.latitude}, Lng ${position.longitude}');
+        // print(
+        //   '📍 Actualizando Firestore con coordenadas: Lat ${position.latitude}, Lng ${position.longitude}',
+        // );
         await _updateCoordinatesInFirestore(position);
       });
     }
 
     if (rioGasInterval == null || rioGasInterval == 0) {
-      print('❌ No se pudo obtener los intervalos de las constantes.');
+      // print('❌ No se pudo obtener los intervalos de las constantes.');
     } else {
       // Timer para RioGas
       Timer.periodic(Duration(seconds: rioGasInterval), (rioGasTimer) async {
         Position? position = await getCurrentLocation();
         if (position == null) {
-          print('❌ No se pudo obtener la ubicación actual para RioGas.');
+          // print('❌ No se pudo obtener la ubicación actual para RioGas.');
           return;
         }
 
@@ -434,15 +447,17 @@ class LocationService {
         String? deviceId = sessionBox.get('deviceId');
 
         if (movil == null || deviceId == null) {
-          print(
-              '❌ No se pudo obtener el móvil o el DeviceId de Hive para RioGas.');
+          // print(
+          //   '❌ No se pudo obtener el móvil o el DeviceId de Hive para RioGas.',
+          // );
           return;
         }
 
         String fechaHora = DateTime.now().toUtc().toIso8601String();
 
-        print(
-            '📍 Enviando coordenadas a RioGas: Lat ${position.latitude}, Lng ${position.longitude}');
+        // print(
+        //   '📍 Enviando coordenadas a RioGas: Lat ${position.latitude}, Lng ${position.longitude}',
+        // );
         await RioGasService.registrarCoordenadas(
           int.parse(movil),
           position.latitude.toString(),
@@ -460,6 +475,6 @@ class LocationService {
     _positionStreamSubscription?.cancel(); // Cancela el stream de posición
     FlutterBackground.disableBackgroundExecution();
     _isBackgroundEnabled = false;
-    print("⏹️ Se detuvo la actualización de coordenadas.");
+    // print("⏹️ Se detuvo la actualización de coordenadas.");
   }
 }

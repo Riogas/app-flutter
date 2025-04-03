@@ -82,38 +82,52 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     for (int id in [40, 41, 42, 43]) {
       if (constantBox.isOpen) {
         var data = constantBox.get(id.toString());
-        print("🔍 Leyendo constante con ID $id: $data");
+        // print("🔍 Leyendo constante con ID $id: $data");
         if (data != null && data['Estado'] == 'A') {
-          print("✅ Estado es 'A' para ID $id");
-          print(
-              "🔢 Comparando delayMinutes: $delayMinutes con ValorMin: ${data['ValorMin']} y ValorMax: ${data['ValorMax']}");
+          // print("✅ Estado es 'A' para ID $id");
+          // print(
+          //   "🔢 Comparando delayMinutes: $delayMinutes con ValorMin: ${data['ValorMin']} y ValorMax: ${data['ValorMax']}",
+          // );
           if ((delayMinutes >= data['ValorMin'] &&
                   delayMinutes <= data['ValorMax']) ||
               (delayMinutes <= data['ValorMin'] &&
                   delayMinutes >= data['ValorMax'])) {
-            print(
-                "⏳ Delay $delayMinutes está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+            // print(
+            //   "⏳ Delay $delayMinutes está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id",
+            // );
             return {
               "Color": getColorFromName(data['Color']),
               "Etiqueta": data['Etiqueta'],
             };
           } else {
-            print(
-                "❌ Delay $delayMinutes no está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+            // print(
+            //   "❌ Delay $delayMinutes no está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id",
+            // );
           }
         } else {
-          print("❌ Estado no es 'A' para ID $id o data es null");
+          // print("❌ Estado no es 'A' para ID $id o data es null");
         }
       } else {
-        print("⚠️ constantBox is closed. Skipping data retrieval for ID $id.");
+        // print("⚠️ constantBox is closed. Skipping data retrieval for ID $id.");
       }
     }
-    print("❌ No se encontró un rango válido para delay $delayMinutes");
+    // print("❌ No se encontró un rango válido para delay $delayMinutes");
     return null;
   }
 
   Future<void> _markAsReadAndNavigate(
-      Map<String, dynamic> pedido, int pedidoId) async {
+    Map<String, dynamic> pedido,
+    int pedidoId,
+  ) async {
+    // Check if GPS is enabled
+    bool isLocationServiceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!isLocationServiceEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Por favor, active el GPS para continuar.')),
+      );
+      return; // Exit the function if GPS is not enabled
+    }
+
     // Navegar inmediatamente
     Navigator.push(
       context,
@@ -130,8 +144,11 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
     // Realizar operaciones en segundo plano
     Future.microtask(() async {
-      await pedidosBox.put(pedidoId, 'Leido');
-      await _callDescargaLecturaPedidos(pedido, pedidoId);
+      var pedidoEstado = pedidosBox.get(pedidoId);
+      if (pedidoEstado != 'Leido') {
+        await _callDescargaLecturaPedidos(pedido, pedidoId);
+        await pedidosBox.put(pedidoId, 'Leido');
+      }
     });
 
     if (mounted) {
@@ -140,7 +157,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   }
 
   Future<void> _callDescargaLecturaPedidos(
-      Map<String, dynamic> pedido, int pedidoId) async {
+    Map<String, dynamic> pedido,
+    int pedidoId,
+  ) async {
     String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? '1' : '2';
     String lectDesc = 'LECTURA';
     String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
@@ -152,7 +171,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     String inAux2 = '';
 
     Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
+      desiredAccuracy: LocationAccuracy.high,
+    );
     String latitud = position.latitude.toString();
     String longitud = position.longitude.toString();
 
@@ -176,9 +196,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   Widget build(BuildContext context) {
     if (!Hive.isBoxOpen('pedidosBox')) {
       return Scaffold(
-        appBar: AppBar(
-          title: Text('Pedidos Pendientes (Cargando...)'),
-        ),
+        appBar: AppBar(title: Text('Pedidos Pendientes (Cargando...)')),
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -251,12 +269,26 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                 Color etiquetaColor = _getPedidoEstadoColor(pedidoId);
 
                 // Depuración: imprimir el valor de urltelefono
-                if (pedido.containsKey('urltelefono')) {
-                  print('urltelefono: ${pedido['urltelefono']}');
-                }
+                // if (pedido.containsKey('urltelefono')) {
+                //   print('urltelefono: ${pedido['urltelefono']}');
+                // }
 
                 return GestureDetector(
                   onTap: () async {
+                    // Check if GPS is enabled
+                    bool isLocationServiceEnabled =
+                        await Geolocator.isLocationServiceEnabled();
+                    if (!isLocationServiceEnabled) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Por favor, active el GPS para interactuar con los pedidos.',
+                          ),
+                        ),
+                      );
+                      return; // Exit if GPS is not enabled
+                    }
+
                     if (pedido.containsKey('DetalleHTML') &&
                         pedido['DetalleHTML'].isNotEmpty) {
                       await _markAsReadAndNavigate(pedido, pedidoId);
@@ -268,133 +300,154 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8.0, vertical: 4.0),
-                    child: Card(
-                      color: _getPedidoEstado(pedidoId) == 'No Leído'
-                          ? (tipo == 'Services'
-                              ? Colors.deepPurpleAccent
-                              : Colors.lightBlue)
-                          : (tipo == 'Services'
-                              ? Colors.deepPurple.withOpacity(0.7)
-                              : Colors.blueGrey),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                      ),
-                      elevation: 5,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(height: 4.0),
-                            Row(
+                      horizontal: 8.0,
+                      vertical: 4.0,
+                    ),
+                    child: FutureBuilder<bool>(
+                      future: Geolocator.isLocationServiceEnabled(),
+                      builder: (context, snapshot) {
+                        bool isLocationServiceEnabled = snapshot.data ?? false;
+
+                        return Card(
+                          color: !isLocationServiceEnabled
+                              ? Colors.grey // Gray color if GPS is disabled
+                              : (_getPedidoEstado(pedidoId) == 'No Leído'
+                                  ? (tipo == 'Services'
+                                      ? Colors.deepPurpleAccent
+                                      : Colors.lightBlue)
+                                  : (tipo == 'Services'
+                                      ? Colors.deepPurple.withOpacity(0.7)
+                                      : Colors.blueGrey)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          elevation: 5,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Número: $pedidoId',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                    fontSize: 14.0,
-                                  ),
-                                ),
-                                SizedBox(width: 8.0),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 6.0, vertical: 2.0),
-                                  decoration: BoxDecoration(
-                                    color: etiquetaColor,
-                                    borderRadius: BorderRadius.circular(8.0),
-                                  ),
-                                  child: etiquetaTexto.isNotEmpty
-                                      ? Text(
-                                          etiquetaTexto,
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12.0,
+                                SizedBox(height: 4.0),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Número: $pedidoId',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        fontSize: 14.0,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8.0),
+                                    if (isLocationServiceEnabled)
+                                      Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 6.0,
+                                          vertical: 2.0,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: etiquetaColor,
+                                          borderRadius: BorderRadius.circular(
+                                            8.0,
                                           ),
-                                        )
-                                      : SizedBox.shrink(),
-                                ),
-                                Spacer(),
-                                Icon(
-                                  tipo == 'Services'
-                                      ? Icons.build
-                                      : Icons.local_shipping,
-                                  color: Colors.white,
-                                  size: 20.0,
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 4.0),
-                            Row(
-                              children: [
-                                Text(
-                                  'Dirección: $direccionCorta',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12.0,
-                                  ),
-                                ),
-                                Spacer(),
-                                if (pedido.containsKey('WazeURL'))
-                                  Container(
-                                    child: Icon(
-                                      Icons.location_on,
+                                        ),
+                                        child: etiquetaTexto.isNotEmpty
+                                            ? Text(
+                                                etiquetaTexto,
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12.0,
+                                                ),
+                                              )
+                                            : SizedBox.shrink(),
+                                      ),
+                                    Spacer(),
+                                    Icon(
+                                      tipo == 'Services'
+                                          ? Icons.build
+                                          : Icons.local_shipping,
                                       color: Colors.white,
                                       size: 20.0,
                                     ),
-                                  ),
-                              ],
-                            ),
-                            SizedBox(height: 4.0),
-                            Row(
-                              children: [
-                                Text(
-                                  tipo == 'Pedidos'
-                                      ? 'Servicio: ${pedido['ServicioNombre'] ?? 'Desconocido'}'
-                                      : 'Defecto: ${pedido['Defecto'] ?? 'Desconocido'}',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12.0,
-                                  ),
+                                  ],
                                 ),
-                                Spacer(),
-                                if (pedido.containsKey('Precio'))
-                                  Text(
-                                    'Importe: ${pedido['Precio']}',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12.0,
+                                SizedBox(height: 4.0),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Dirección: ${!isLocationServiceEnabled ? 'Bloqueado - Sin GPS Activado' : direccionCorta}',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12.0,
+                                      ),
                                     ),
+                                    Spacer(),
+                                    if (isLocationServiceEnabled &&
+                                        pedido.containsKey('WazeURL'))
+                                      Container(
+                                        child: Icon(
+                                          Icons.location_on,
+                                          color: Colors.white,
+                                          size: 20.0,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                SizedBox(height: 4.0),
+                                Row(
+                                  children: [
+                                    Text(
+                                      tipo == 'Pedidos'
+                                          ? 'Servicio: ${!isLocationServiceEnabled ? 'Bloqueado - Sin GPS Activado' : (pedido['ServicioNombre'] ?? 'Desconocido')}'
+                                          : 'Defecto: ${!isLocationServiceEnabled ? 'Bloqueado - Sin GPS Activado' : (pedido['Defecto'] ?? 'Desconocido')}',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12.0,
+                                      ),
+                                    ),
+                                    Spacer(),
+                                    if (isLocationServiceEnabled &&
+                                        pedido.containsKey('Precio'))
+                                      Text(
+                                        'Importe: ${pedido['Precio']}',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12.0,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                if (isLocationServiceEnabled &&
+                                    pedido.containsKey('PedidoObs') &&
+                                    pedido['PedidoObs'].isNotEmpty)
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      SizedBox(height: 4.0),
+                                      Text(
+                                        'Observaciones: ${pedido['PedidoObs']}',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12.0,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                SizedBox(height: 4.0),
+                                if (isLocationServiceEnabled)
+                                  Row(
+                                    children: [
+                                      _buildMinutesLeftStream(pedido),
+                                      SizedBox(width: 8.0),
+                                    ],
                                   ),
                               ],
                             ),
-                            if (pedido.containsKey('PedidoObs') &&
-                                pedido['PedidoObs'].isNotEmpty)
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(height: 4.0),
-                                  Text(
-                                    'Observaciones: ${pedido['PedidoObs']}',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12.0,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            SizedBox(height: 4.0),
-                            Row(
-                              children: [
-                                _buildMinutesLeftStream(pedido),
-                                SizedBox(width: 8.0),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 );
@@ -423,10 +476,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         if (!snapshot.hasData) {
           return Text(
             'Calculando...',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 12.0,
-            ),
+            style: TextStyle(color: Colors.white, fontSize: 12.0),
           );
         } else {
           int minutesLeft = snapshot.data!;
@@ -435,10 +485,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
             children: [
               Text(
                 'Min restantes: $minutesLeft',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12.0,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 12.0),
               ),
               SizedBox(width: 8.0),
               if (delayInfo != null)

@@ -74,7 +74,8 @@ class _MapPageState extends State<MapPage> {
     }
 
     Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
+      desiredAccuracy: LocationAccuracy.high,
+    );
 
     if (mounted) {
       setState(() {
@@ -99,8 +100,10 @@ class _MapPageState extends State<MapPage> {
 
   void _centerMapOnUser() {
     if (_currentPosition != null) {
-      _mapController.move(_currentPosition!,
-          15.0); // 🟢 Mover el mapa a la posición actual con zoom 15
+      _mapController.move(
+        _currentPosition!,
+        15.0,
+      ); // 🟢 Mover el mapa a la posición actual con zoom 15
     }
   }
 
@@ -197,7 +200,8 @@ class _MapPageState extends State<MapPage> {
 
         // Center map on the client with the longest delay or the first order
         _centerMapOnPriorityOrder(
-            orders.cast<QueryDocumentSnapshot<Object?>>());
+          orders.cast<QueryDocumentSnapshot<Object?>>(),
+        );
       });
     });
   }
@@ -209,20 +213,23 @@ class _MapPageState extends State<MapPage> {
       if (data != null && data['Estado'] == 'A') {
         print("✅ Estado es 'A' para ID $id");
         print(
-            "🔢 Comparando delayMinutes: $delayMinutes con ValorMin: ${data['ValorMin']} y ValorMax: ${data['ValorMax']}");
+          "🔢 Comparando delayMinutes: $delayMinutes con ValorMin: ${data['ValorMin']} y ValorMax: ${data['ValorMax']}",
+        );
         if ((delayMinutes >= data['ValorMin'] &&
                 delayMinutes <= data['ValorMax']) ||
             (delayMinutes <= data['ValorMin'] &&
                 delayMinutes >= data['ValorMax'])) {
           print(
-              "⏳ Delay $delayMinutes está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+            "⏳ Delay $delayMinutes está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id",
+          );
           return {
             "Color": getColorFromName(data['Color']),
             "Etiqueta": data['Etiqueta'],
           };
         } else {
           print(
-              "❌ Delay $delayMinutes no está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id");
+            "❌ Delay $delayMinutes no está entre ${data['ValorMin']} y ${data['ValorMax']} para ID $id",
+          );
         }
       } else {
         print("❌ Estado no es 'A' para ID $id o data es null");
@@ -278,9 +285,7 @@ class _MapPageState extends State<MapPage> {
                       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                   subdomains: ['a', 'b', 'c'],
                 ),
-                MarkerLayer(
-                  markers: _markers,
-                ),
+                MarkerLayer(markers: _markers),
               ],
             ),
     );

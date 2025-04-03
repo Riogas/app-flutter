@@ -19,6 +19,7 @@ import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivi
 import 'package:http/http.dart'
     as http; // Importa http para realizar solicitudes HTTP
 import 'package:cloud_firestore/cloud_firestore.dart'; // Importa cloud_firestore para usar Firestore
+import 'utils/constantes.dart'; // Importa constantes para usar getConstantValue
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -62,7 +63,7 @@ void main() async {
 
   FlutterError.onError = (FlutterErrorDetails details) {
     // Podés registrar esto en logs o mostrar una pantalla de error
-    print("Error crítico atrapado: ${details.exceptionAsString()}");
+    // print("Error crítico atrapado: ${details.exceptionAsString()}");
     FlutterError.presentError(details); // Muestra el error en consola
   };
 
@@ -71,11 +72,11 @@ void main() async {
   final version = androidInfo.version.sdkInt;
 
   if (Platform.isAndroid && version < 26) {
-    runApp(MaterialApp(
-      home: Scaffold(
-        body: Center(child: Text('Lite Fallback App')),
+    runApp(
+      MaterialApp(
+        home: Scaffold(body: Center(child: Text('Lite Fallback App'))),
       ),
-    )); // algo más liviano, sin animaciones
+    ); // algo más liviano, sin animaciones
   } else {
     runApp(MyApp(isLoggedIn: isLoggedIn));
   }
@@ -94,9 +95,9 @@ Future<void> _initializeFirebaseMessaging() async {
   );
 
   if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-    print('Usuario concedió permisos de notificación');
+    // print('Usuario concedió permisos de notificación');
   } else {
-    print('Usuario no concedió permisos de notificación');
+    // print('Usuario no concedió permisos de notificación');
   }
 
   // Configurar el canal de notificaciones
@@ -107,7 +108,8 @@ Future<void> _initializeFirebaseMessaging() async {
         'This channel is used for important notifications.', // description
     importance: Importance.high,
     sound: RawResourceAndroidNotificationSound(
-        'iphone_notification'), // Configura el sonido personalizado
+      'iphone_notification',
+    ), // Configura el sonido personalizado
   );
 
   await flutterLocalNotificationsPlugin
@@ -118,8 +120,9 @@ Future<void> _initializeFirebaseMessaging() async {
   // Inicializar las notificaciones locales
   const AndroidInitializationSettings initializationSettingsAndroid =
       AndroidInitializationSettings('@mipmap/ic_launcher');
-  final InitializationSettings initializationSettings =
-      InitializationSettings(android: initializationSettingsAndroid);
+  final InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
   // Configurar el manejo de mensajes en foreground
@@ -150,7 +153,7 @@ Future<void> _initializeFirebaseMessaging() async {
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print('Handling a background message: ${message.messageId}');
+  // print('Handling a background message: ${message.messageId}');
   RemoteNotification? notification = message.notification;
   if (notification != null) {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
@@ -162,8 +165,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       priority: Priority.high,
       showWhen: true,
     );
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+    );
     await flutterLocalNotificationsPlugin.show(
       notification.hashCode,
       notification.title,
@@ -195,38 +199,48 @@ Future<void> _checkBatteryAndBackgroundSettings() async {
   // Verificar si la aplicación está en la lista de optimización de batería
   bool isIgnoringBatteryOptimizations = await battery.isInBatterySaveMode;
   if (!isIgnoringBatteryOptimizations) {
+    String? batteryOptimizationMessage = await getConstantValue(
+      '140',
+    ); // Fetch message from constant
     _showMessage(
-        'La aplicación está optimizada para batería. Esto puede afectar su rendimiento.');
+      batteryOptimizationMessage ??
+          'La aplicación está optimizada para batería. Esto puede afectar su rendimiento.',
+    );
   }
 
   // Verificar si la aplicación está en la lista de aplicaciones en segundo plano
   if (Platform.isAndroid) {
     AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
     if (await battery.isInBatterySaveMode) {
+      String? backgroundMessage = await getConstantValue(
+        '141',
+      ); // Fetch message from constant
       _showMessage(
-          'La aplicación está restringida para ejecutarse en segundo plano.');
+        backgroundMessage ??
+            'La aplicación está restringida para ejecutarse en segundo plano.',
+      );
     }
   }
 }
 
 Future<void> _checkInternetConnectivity() async {
-  print('🔍 Verificando conectividad a Internet...');
+  // print('🔍 Verificando conectividad a Internet...');
   var connectivityResult = await Connectivity().checkConnectivity();
-  print('🔍 Resultado de conectividad: $connectivityResult');
+  // print('🔍 Resultado de conectividad: $connectivityResult');
 
   if (connectivityResult == ConnectivityResult.none ||
       (connectivityResult is List &&
           connectivityResult.contains(ConnectivityResult.none))) {
-    print('❌ No hay conexión a Internet.');
+    // print('❌ No hay conexión a Internet.');
     _showNoInternetDialog(); // entra a modo "bloqueo"
   } else {
-    print('✅ Conexión a Internet disponible. Verificando acceso a datos...');
+    // print('✅ Conexión a Internet disponible. Verificando acceso a datos...');
     bool hasDataAccess = await _checkDataAccess();
     if (!hasDataAccess) {
-      print('❌ No hay acceso a datos. Posible falta de paquete de datos.');
+      // print('❌ No hay acceso a datos. Posible falta de paquete de datos.');
       _showNoDataAccessDialog();
     } else {
-      print('✅ Acceso a datos confirmado.');
+      // print('✅ Acceso a datos confirmado.');
       // Podés continuar con la app aquí si querés.
     }
   }
@@ -243,13 +257,13 @@ Future<bool> _checkDataAccess() async {
       return false;
     }
   } catch (e) {
-    print('Error verificando acceso a datos: $e');
+    // print('Error verificando acceso a datos: $e');
     return false;
   }
 }
 
 void _showNoInternetDialog() {
-  print('⚠️ Mostrando diálogo de "Sin Conexión a Internet".');
+  // print('⚠️ Mostrando diálogo de "Sin Conexión a Internet".');
   WidgetsBinding.instance.addPostFrameCallback((_) {
     showDialog(
       context: navigatorKey.currentContext!,
@@ -258,11 +272,12 @@ void _showNoInternetDialog() {
         return AlertDialog(
           title: Text('Sin Conexión a Internet'),
           content: Text(
-              'No tienes conexión a Internet. Por favor, verifica tu conexión.'),
+            'No tienes conexión a Internet. Por favor, verifica tu conexión.',
+          ),
           actions: <Widget>[
             TextButton(
               onPressed: () async {
-                print('🔄 Reintentando conectividad a Internet...');
+                // print('🔄 Reintentando conectividad a Internet...');
                 Navigator.of(context).pop(); // Cierra el diálogo actual
               },
               child: Text('Confirmar'),
@@ -275,7 +290,7 @@ void _showNoInternetDialog() {
 }
 
 void _showNoDataAccessDialog() {
-  print('⚠️ Mostrando diálogo de "Sin Acceso a Datos".');
+  // print('⚠️ Mostrando diálogo de "Sin Acceso a Datos".');
   WidgetsBinding.instance.addPostFrameCallback((_) {
     showDialog(
       context: navigatorKey.currentContext!,
@@ -284,11 +299,12 @@ void _showNoDataAccessDialog() {
         return AlertDialog(
           title: Text('Sin Acceso a Datos'),
           content: Text(
-              'No tienes acceso a datos. Por favor, verifica tu paquete de datos o conéctate a una red Wi-Fi.'),
+            'No tienes acceso a datos. Por favor, verifica tu paquete de datos o conéctate a una red Wi-Fi.',
+          ),
           actions: <Widget>[
             TextButton(
               onPressed: () async {
-                print('🔄 Reintentando acceso a datos...');
+                // print('🔄 Reintentando acceso a datos...');
                 Navigator.of(context).pop(); // Cierra el diálogo actual
               },
               child: Text('Confirmar'),
@@ -301,15 +317,15 @@ void _showNoDataAccessDialog() {
 }
 
 Future<void> _retryInternetConnectivity() async {
-  print('🔁 Reintento de conexión iniciado...');
+  // print('🔁 Reintento de conexión iniciado...');
   var connectivityResult = await Connectivity().checkConnectivity();
   if (connectivityResult == ConnectivityResult.none ||
       (connectivityResult is List &&
           connectivityResult.contains(ConnectivityResult.none))) {
-    print('🚫 Aún sin conexión. Mostrando diálogo nuevamente.');
+    // print('🚫 Aún sin conexión. Mostrando diálogo nuevamente.');
     _showNoInternetDialog(); // vuelve a mostrar el diálogo si sigue sin internet
   } else {
-    print('✅ Conexión restaurada.');
+    // print('✅ Conexión restaurada.');
     // Aquí podés continuar con el flujo normal de tu app
   }
 }
@@ -361,7 +377,7 @@ void _showUpdateDialog(String message, String link) {
                     _showMessage('No se pudo abrir el enlace $link');
                   }
                 } catch (e) {
-                  print('Error al intentar abrir el enlace: $e');
+                  // print('Error al intentar abrir el enlace: $e');
                   _showMessage('Error al intentar abrir el enlace: $e');
                 }
               },
@@ -375,8 +391,10 @@ void _showUpdateDialog(String message, String link) {
 }
 
 Future<bool> _checkActiveSession(
-    Map<String, dynamic> response, String? selectedMovil) async {
-  print('📦 Abriendo caja Hive: sessionBox...');
+  Map<String, dynamic> response,
+  String? selectedMovil,
+) async {
+  // print('📦 Abriendo caja Hive: sessionBox...');
   var box = await Hive.openBox('sessionBox');
 
   String? escenario = box.get('escenario')?.toString();
@@ -384,19 +402,20 @@ Future<bool> _checkActiveSession(
   String? idTerminal = box.get('deviceId');
   String? nombreUsuario = box.get('NombreUsuario');
 
-  print('🔍 Datos recuperados de Hive:');
-  print('   ➤ Escenario: $escenario');
-  print('   ➤ Usuario: $idUsuario');
-  print('   ➤ Terminal: $idTerminal');
-  print('   ➤ NombreUsuario: $nombreUsuario');
+  // print('🔍 Datos recuperados de Hive:');
+  // print('   ➤ Escenario: $escenario');
+  // print('   ➤ Usuario: $idUsuario');
+  // print('   ➤ Terminal: $idTerminal');
+  // print('   ➤ NombreUsuario: $nombreUsuario');
 
   // Verificar si hay datos en sessionBox
   if (escenario == null ||
       idUsuario == null ||
       idTerminal == null ||
       nombreUsuario == null) {
-    print(
-        '⚠️ Falta información en sessionBox. No se puede validar sesión activa.');
+    // print(
+    //   '⚠️ Falta información en sessionBox. No se puede validar sesión activa.',
+    // );
     return false;
   }
 
@@ -407,7 +426,7 @@ Future<bool> _checkActiveSession(
       .replaceAll('-', '');
   String path = 'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
 
-  print('📄 Consultando documento Firestore: $path');
+  // print('📄 Consultando documento Firestore: $path');
 
   DocumentReference ultimaDocRef = FirebaseFirestore.instance
       .collection('Sesiones-$escenario')
@@ -425,29 +444,29 @@ Future<bool> _checkActiveSession(
     while (true) {
       try {
         activeDocSnapshot = await ultimaDocRef.get();
-        print('✅ Documento Firestore obtenido correctamente.');
+        // print('✅ Documento Firestore obtenido correctamente.');
         break; // Exit loop on success
       } catch (e) {
         if (e is FirebaseException && e.code == 'unavailable') {
           attempt++;
           if (attempt > maxRetries) {
-            print('❌ Máximo número de reintentos alcanzado. Error: $e');
+            // print('❌ Máximo número de reintentos alcanzado. Error: $e');
             return false;
           }
           final delay = initialDelay * attempt;
-          print('🔄 Reintentando en $delay segundos...');
+          // print('🔄 Reintentando en $delay segundos...');
           await Future.delayed(delay);
         } else if (e is FirebaseException && e.code == 'permission-denied') {
-          print('❌ Error de permisos al acceder a Firestore: ${e.message}');
+          // print('❌ Error de permisos al acceder a Firestore: ${e.message}');
           return false;
         } else {
-          print('❌ Error inesperado al acceder a Firestore: $e');
+          // print('❌ Error inesperado al acceder a Firestore: $e');
           rethrow;
         }
       }
     }
   } catch (e) {
-    print('❌ Error crítico al acceder a Firestore: $e');
+    // print('❌ Error crítico al acceder a Firestore: $e');
     rethrow;
   }
 

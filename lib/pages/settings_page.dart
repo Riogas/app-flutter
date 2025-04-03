@@ -102,19 +102,19 @@ class _SettingsPageState extends State<SettingsPage> {
       await sessionService.saveSession(
         idUsuario: idUsuario!,
         nomUsuario: nombreUsuario!,
-        primeraUbicacion:
-            LatLng(0, 0), // Reemplaza con la ubicación real si es necesario
+        primeraUbicacion: LatLng(
+          0,
+          0,
+        ), // Reemplaza con la ubicación real si es necesario
         versionApp: '1.0.0', // Reemplaza con la versión real de la app
         tipoDeCierreDeSesion: 'logoutUser',
       );
 
       // Navegar a la pantalla de inicio de sesión
       Future.microtask(() {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => LoginPage(),
-          ),
-        );
+        Navigator.of(
+          context,
+        ).pushReplacement(MaterialPageRoute(builder: (context) => LoginPage()));
       });
     }
   }
@@ -126,7 +126,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return AlertDialog(
           title: Text('Confirmación de Cierre de Sesión'),
           content: Text(
-              '¿Está seguro que desea cerrar sesión y salir de la aplicación?'),
+            '¿Está seguro que desea cerrar sesión y salir de la aplicación?',
+          ),
           actions: <Widget>[
             TextButton(
               onPressed: () {
@@ -215,9 +216,7 @@ class _SettingsPageState extends State<SettingsPage> {
         context: context,
         barrierDismissible: false,
         builder: (BuildContext context) {
-          return Center(
-            child: CircularProgressIndicator(),
-          );
+          return Center(child: CircularProgressIndicator());
         },
       );
 
@@ -251,7 +250,7 @@ class _SettingsPageState extends State<SettingsPage> {
           movilId: int.tryParse(movil) ?? 0,
         );
 
-        print('Fecha seleccionada para el reporte: $selectedDate');
+        // print('Fecha seleccionada para el reporte: $selectedDate');
       } catch (e) {
         _showMessage('Error al generar el reporte: $e');
       } finally {
@@ -282,10 +281,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (response['Ultversion'] == '') {
         _showMessage(response['message']);
       } else {
-        _showUpdateDialog(
-          response['message'],
-          response['link'],
-        );
+        _showUpdateDialog(response['message'], response['link']);
       }
     }
   }
@@ -348,8 +344,9 @@ class _SettingsPageState extends State<SettingsPage> {
         return AlertDialog(
           title: Text('Notas de la Versión'),
           content: SingleChildScrollView(
-            child:
-                Text(releaseNotes ?? 'No hay notas de la versión disponibles.'),
+            child: Text(
+              releaseNotes ?? 'No hay notas de la versión disponibles.',
+            ),
           ),
           actions: [
             TextButton(
@@ -375,14 +372,15 @@ class _SettingsPageState extends State<SettingsPage> {
     var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
     List<ErrorEvent> errors = errorBox.values.toList().cast<ErrorEvent>();
 
-    print('Contenido completo de errorBox (clave -> valor):');
-    print(errorBox.toMap());
+    // print('Contenido completo de errorBox (clave -> valor):');
+    // print(errorBox.toMap());
 
     // Sort errors by timestamp in descending order
     errors.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    String? supportEmail =
-        await getConstantValue('90'); // Fetch email from constant
+    String? supportEmail = await getConstantValue(
+      '90',
+    ); // Fetch email from constant
 
     showDialog(
       context: context,
@@ -434,7 +432,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _sendErrorsToSupport(
-      List<ErrorEvent> errors, String supportEmail) async {
+    List<ErrorEvent> errors,
+    String supportEmail,
+  ) async {
     try {
       // Crear contenido del archivo
       String content = errors.map((error) {
@@ -447,13 +447,13 @@ class _SettingsPageState extends State<SettingsPage> {
       // Obtener directorio temporal
       final directory = await getTemporaryDirectory();
       final filePath = '${directory.path}/errores_reportados.txt';
-      debugPrint('Temporary directory: $directory');
-      debugPrint('File path: $filePath');
+      // print('Temporary directory: $directory');
+      // print('File path: $filePath');
 
       // Escribir contenido en el archivo
       final file = File(filePath);
       await file.writeAsString(content);
-      debugPrint('File written successfully.');
+      // print('File written successfully.');
 
       // Preparar correo con archivo adjunto
       final Email email = Email(
@@ -466,9 +466,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
       // Enviar correo
       await FlutterEmailSender.send(email);
-      debugPrint('Email sent successfully.');
+      // print('Email sent successfully.');
     } catch (e) {
-      debugPrint('Error during _sendErrorsToSupport: $e');
+      // print('Error during _sendErrorsToSupport: $e');
       _showMessage("Error al generar el archivo de errores: $e");
     }
   }
@@ -571,7 +571,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             );
 
                             if (response != null && response['OK'] == 0) {
-                              print('🔄 OTP reenviado.');
+                              // print('🔄 OTP reenviado.');
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -615,7 +615,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       );
 
                       if (response != null && response['OK'] == 0) {
-                        print('✅ OTP enviado exitosamente.');
+                        // print('✅ OTP enviado exitosamente.');
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -643,13 +643,15 @@ class _SettingsPageState extends State<SettingsPage> {
                               otpBox.get('generatedOtp').toString();
 
                           if (receivedCode == storedOtp) {
-                            print(
-                                '✅ OTP auto-completado y validado: $receivedCode');
+                            // print(
+                            //   '✅ OTP auto-completado y validado: $receivedCode',
+                            // );
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content:
-                                      Text('Número actualizado correctamente'),
+                                  content: Text(
+                                    'Número actualizado correctamente',
+                                  ),
                                   backgroundColor: Colors.green,
                                 ),
                               );
@@ -740,18 +742,58 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildViewErrorsButton() {
+  Widget _buildSuggestionsButton() {
     return Center(
       child: ElevatedButton.icon(
-        onPressed: _viewErrors,
-        icon: Icon(Icons.error, color: Colors.red),
-        label: Text('Ver Errores'),
+        onPressed: () async {
+          String supportEmail = await getConstantValue('90') ??
+              ''; // Fetch email from constant or use default
+          final Uri emailUri = Uri(
+            scheme: 'mailto',
+            path: supportEmail,
+            query: 'subject=Sugerencias de Mejora',
+          );
+          if (await canLaunchUrl(emailUri)) {
+            await launchUrl(emailUri);
+          } else {
+            _showMessage('No se pudo abrir la aplicación de correo.');
+          }
+        },
+        icon: Icon(Icons.lightbulb, color: Colors.green),
+        label: Text('Sugerencias'),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
-          foregroundColor: Colors.red,
-          side: BorderSide(color: Colors.red),
+          foregroundColor: Colors.green,
+          side: BorderSide(color: Colors.green),
         ),
       ),
+    );
+  }
+
+  Widget _buildViewErrorsButton() {
+    return FutureBuilder<String?>(
+      future: getConstantValue('130'), // Fetch constant value
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return SizedBox.shrink(); // Show nothing while loading
+        }
+        if (snapshot.hasData && snapshot.data == 'S') {
+          return Center(
+            child: ElevatedButton.icon(
+              onPressed: _viewErrors,
+              icon: Icon(Icons.error, color: Colors.red),
+              label: Text('Ver Errores'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.red,
+                side: BorderSide(color: Colors.red),
+              ),
+            ),
+          );
+        }
+        return SizedBox
+            .shrink(); // Show nothing if "Ver Errores" is not visible
+      },
     );
   }
 
@@ -777,9 +819,12 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(height: 10),
               _buildChangePhoneNumberButton(),
               SizedBox(height: 10),
-              _buildLogoutButton(),
+              _buildSuggestionsButton(), // Ensure only one suggestions button
               SizedBox(height: 10),
               _buildViewErrorsButton(),
+              SizedBox(height: 10),
+              _buildLogoutButton(),
+              SizedBox(height: 10),
             ],
           ),
         ),
@@ -790,9 +835,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildProfileSection() {
     return Card(
       elevation: 4.0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10.0),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Row(
@@ -809,18 +852,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 if (nombreUsuario != null)
                   Text(
                     nombreUsuario!,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 if (idUsuario != null)
                   Text(
                     'ID de Usuario: $idUsuario',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
               ],
             ),
@@ -833,9 +870,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildInfoSection() {
     return Card(
       elevation: 4.0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10.0),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -844,23 +879,36 @@ class _SettingsPageState extends State<SettingsPage> {
             if (movil != null)
               _buildInfoRow(Icons.local_shipping, 'Móvil', movil!),
             if (deviceId != null)
-              _buildInfoRow(Icons.devices, 'DeviceID', deviceId!,
-                  isLongText: true),
+              _buildInfoRow(
+                Icons.devices,
+                'DeviceID',
+                deviceId!,
+                isLongText: true,
+              ),
             if (releaseNotes != null)
               GestureDetector(
                 onTap: _showReleaseNotesDialog,
                 child: _buildInfoRow(
-                    Icons.info_outline, 'Notas de la Versión', 'Mas Info',
-                    isLongText: true),
+                  Icons.info_outline,
+                  'Notas de la Versión',
+                  'Mas Info',
+                  isLongText: true,
+                ),
               ),
             _buildInfoRowWithButton(
-                Icons.check_circle,
-                'Pedidos Finalizados',
-                '$subCompletedOrdersCount/$completedOrdersCount',
-                Icons.description,
-                _generateReport),
-            _buildInfoRowWithButton(Icons.verified, 'Versión de la App',
-                appVersion, Icons.update, _checkForUpdate),
+              Icons.check_circle,
+              'Pedidos Finalizados',
+              '$subCompletedOrdersCount/$completedOrdersCount',
+              Icons.description,
+              _generateReport,
+            ),
+            _buildInfoRowWithButton(
+              Icons.verified,
+              'Versión de la App',
+              appVersion,
+              Icons.update,
+              _checkForUpdate,
+            ),
             FutureBuilder<bool>(
               future: _shouldShowDistance(),
               builder: (context, snapshot) {
@@ -872,16 +920,23 @@ class _SettingsPageState extends State<SettingsPage> {
                     builder: (context, distanceSnapshot) {
                       if (distanceSnapshot.connectionState ==
                           ConnectionState.waiting) {
-                        return _buildInfoRow(Icons.directions_walk,
-                            'Dist. recorrida', 'Cargando...');
+                        return _buildInfoRow(
+                          Icons.directions_walk,
+                          'Dist. recorrida',
+                          'Cargando...',
+                        );
                       } else if (distanceSnapshot.hasError) {
-                        return _buildInfoRow(Icons.directions_walk,
-                            'Dist. recorrida', 'Error al cargar');
+                        return _buildInfoRow(
+                          Icons.directions_walk,
+                          'Dist. recorrida',
+                          'Error al cargar',
+                        );
                       } else {
                         return _buildInfoRow(
-                            Icons.directions_walk,
-                            'Dist. recorrida',
-                            '${distanceSnapshot.data?.toStringAsFixed(2) ?? 0.0} mts.');
+                          Icons.directions_walk,
+                          'Dist. recorrida',
+                          '${distanceSnapshot.data?.toStringAsFixed(2) ?? 0.0} mts.',
+                        );
                       }
                     },
                   );
@@ -896,8 +951,13 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildInfoRowWithButton(IconData icon, String title, String value,
-      IconData buttonIcon, VoidCallback onPressed) {
+  Widget _buildInfoRowWithButton(
+    IconData icon,
+    String title,
+    String value,
+    IconData buttonIcon,
+    VoidCallback onPressed,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -907,18 +967,12 @@ class _SettingsPageState extends State<SettingsPage> {
           SizedBox(width: 10),
           Text(
             '$title: ',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -931,8 +985,12 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String title, String value,
-      {bool isLongText = false}) {
+  Widget _buildInfoRow(
+    IconData icon,
+    String title,
+    String value, {
+    bool isLongText = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -943,18 +1001,12 @@ class _SettingsPageState extends State<SettingsPage> {
           SizedBox(width: 10),
           Text(
             '$title: ',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               overflow:
                   isLongText ? TextOverflow.visible : TextOverflow.ellipsis,
             ),

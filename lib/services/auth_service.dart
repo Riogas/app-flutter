@@ -23,21 +23,26 @@ class AuthService {
   static Future<String> getAppVersion() async {
     final packageInfo = await PackageInfo.fromPlatform();
     print(
-        'Package Info: version=${packageInfo.version}, buildNumber=${packageInfo.buildNumber}');
+      'Package Info: version=${packageInfo.version}, buildNumber=${packageInfo.buildNumber}',
+    );
     return 'Versión ${packageInfo.version}.${packageInfo.buildNumber}';
   }
 
   static Future<String> getAppVersionNro() async {
     final packageInfo = await PackageInfo.fromPlatform();
     print(
-        'Package Info: version=${packageInfo.version}, buildNumber=${packageInfo.buildNumber}');
+      'Package Info: version=${packageInfo.version}, buildNumber=${packageInfo.buildNumber}',
+    );
     return '${packageInfo.version}.${packageInfo.buildNumber}';
   }
 
   static Future<bool> login(String username, String password) async {
     String deviceId = await getDeviceId();
-    var response =
-        await RioGasService.validarUsuario(username, password, deviceId);
+    var response = await RioGasService.validarUsuario(
+      username,
+      password,
+      deviceId,
+    );
 
     print("en auth_service.dart");
 
@@ -59,15 +64,23 @@ class AuthService {
   }
 
   static Future<bool> registerDevice(
-      String deviceId,
-      String document,
-      String version,
-      String number,
-      String marca,
-      String modelo,
-      String info) async {
+    String deviceId,
+    String document,
+    String version,
+    String number,
+    String marca,
+    String modelo,
+    String info,
+  ) async {
     var response = await RioGasService.registrarDispositivo(
-        deviceId, document, version, number, marca, modelo, info);
+      deviceId,
+      document,
+      version,
+      number,
+      marca,
+      modelo,
+      info,
+    );
     return response != null ? response['success'] ?? false : false;
   }
 }
