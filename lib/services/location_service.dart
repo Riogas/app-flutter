@@ -295,9 +295,9 @@ class LocationService {
       LatLng newLocation = LatLng(position.latitude, position.longitude);
       _locationStreamController.add(newLocation); // 🔹 Notifica a los listeners
 
-      // print(
-      //   '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
-      // );
+      print(
+        '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
+      );
 
       await _updateCoordinatesInFirestore(position); // 🔹 Actualiza Firestore
       await _updateLocationAndDistanceInHive(
@@ -338,9 +338,11 @@ class LocationService {
         desiredAccuracy: LocationAccuracy.high,
         forceAndroidLocationManager: true,
       );
+      print(
+          '📍 Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
       return position;
     } catch (e) {
-      // print('❌ Error al obtener ubicación: $e');
+      print('❌ Error al obtener ubicación: $e');
       return null;
     }
   }
@@ -432,7 +434,7 @@ class LocationService {
     }
 
     if (rioGasInterval == null || rioGasInterval == 0) {
-      // print('❌ No se pudo obtener los intervalos de las constantes.');
+      print('❌ No se pudo obtener los intervalos de las constantes.');
     } else {
       // Timer para RioGas
       Timer.periodic(Duration(seconds: rioGasInterval), (rioGasTimer) async {

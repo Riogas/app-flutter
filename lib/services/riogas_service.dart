@@ -79,12 +79,6 @@ class RioGasService {
         // print('📦 failedRequestsBox is empty. No retry timer will be started.');
       }
     });
-
-    // Start the retry timer if there is already data in the box
-    if (failedRequestsBox.isNotEmpty) {
-      // print('📦 failedRequestsBox has existing data. Starting retry timer.');
-      await startRetryTimer();
-    }
   }
 
   static Future<void> _saveFailedRequest(
@@ -116,9 +110,17 @@ class RioGasService {
   }
 
   static Future<void> processPendingRequests() async {
-    // print('🔍 Opening failedRequestsBox to process pending requests.');
+    print('🔄 Starting processPendingRequests...');
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+    var conexionBox = await Hive.openBox('conexionBox');
+    bool isConnected = conexionBox.get('conexionRioGas', defaultValue: false);
 
+    if (!isConnected) {
+      print('⚠️ Not connected. Skipping processing.');
+      return;
+    }
+
+    print('📦 Retrieving pending requests...');
     List<MapEntry<dynamic, Map<String, dynamic>>> pendingRequests =
         failedRequestsBox
             .toMap()
@@ -128,17 +130,14 @@ class RioGasService {
                 final map = Map<String, dynamic>.from(entry.value as Map);
                 return MapEntry(entry.key, map);
               } catch (error) {
-                // print(
-                //   '❌ Error converting request with key ${entry.key}: $error',
-                // );
+                print('❌ Error parsing request: $error');
                 return null;
               }
             })
             .whereType<MapEntry<dynamic, Map<String, dynamic>>>()
             .toList();
 
-    // print('📋 Total pending requests: ${pendingRequests.length}');
-    // print('📋 Pending requests: $pendingRequests'); // Debugging print
+    print('📋 Found ${pendingRequests.length} pending requests.');
 
     for (var entry in pendingRequests) {
       final key = entry.key;
@@ -150,45 +149,50 @@ class RioGasService {
           request['payload'] as Map,
         );
 
-        // print('🔄 Retrying request for endpoint: $endpoint');
-        // print('📦 Payload: $payload');
-
+        print(
+            '🌐 Sending request to endpoint: $endpoint with payload: $payload');
         var response = await _post(endpoint, payload);
-        if (response != null) {
-          // print('✅ Request to $endpoint succeeded.');
 
+        if (response != null) {
+          print('✅ Request to $endpoint processed successfully.');
           if (endpoint == 'FinalizarPedido' &&
               payload.containsKey('PedidoId')) {
             var pedidosBox = await Hive.openBox('pedidosBox');
             int pedidoId = payload['PedidoId'];
-            // print('📦 Checking pedidosBox for PedidoId: $pedidoId');
             if (pedidosBox.containsKey(pedidoId)) {
               await pedidosBox.put(pedidoId, 'Procesando');
-              // print(
-              //   '📦 Pedido $pedidoId updated to "Procesando" in pedidosBox.',
-              // );
-            } else {
-              // print('⚠️ PedidoId $pedidoId not found in pedidosBox.');
+              print('📦 Updated pedidoId $pedidoId to "Procesando".');
             }
-          } else {
-            // print(
-            //   '📨 Executed request for endpoint "$endpoint" without extra logic.',
-            // );
           }
-
-          await failedRequestsBox.delete(
-            key,
-          ); // ✅ Remove successfully processed request
-          // print('🗑️ Removed successfully processed request with key $key.');
+          await failedRequestsBox.delete(key);
+          print('🗑️ Deleted successfully processed request with key: $key.');
         } else {
-          // print('⚠️ Request to $endpoint failed. Response is null.');
+          print('⚠️ Request to $endpoint failed.');
+          if (endpoint == 'FinalizarPedido' &&
+              payload.containsKey('PedidoId')) {
+            var pedidosBox = await Hive.openBox('pedidosBox');
+            int pedidoId = payload['PedidoId'];
+            if (pedidosBox.containsKey(pedidoId)) {
+              await pedidosBox.put(pedidoId, 'Enviando');
+              print('📦 Updated pedidoId $pedidoId to "Enviando".');
+            }
+          }
         }
       } catch (e) {
-        // print('❌ Exception while retrying request with key $key: $e');
+        print('❌ Error processing request with key $key: $e');
+        if (request['endpoint'] == 'FinalizarPedido' &&
+            request['payload'].containsKey('PedidoId')) {
+          var pedidosBox = await Hive.openBox('pedidosBox');
+          int pedidoId = request['payload']['PedidoId'];
+          if (pedidosBox.containsKey(pedidoId)) {
+            await pedidosBox.put(pedidoId, 'Enviando');
+            print('📦 Updated pedidoId $pedidoId to "Enviando" due to error.');
+          }
+        }
       }
     }
 
-    // print('✅ Finished processing all pending requests.');
+    print('🔄 Finished processing pending requests.');
   }
 
   static Future<Map<String, dynamic>?> _post(
@@ -196,32 +200,48 @@ class RioGasService {
     Map<String, dynamic> body,
   ) async {
     try {
-      // Procesar el valor de la versión para que solo incluya el número
+      // Process the version value to include only the number
       if (body.containsKey('version')) {
         body['version'] = body['version'].replaceAll(RegExp(r'[^0-9.]'), '');
       }
 
-      // print('Ejecutando servicio: $endpoint');
-      // print('Solicitud (request):');
-      // print('URL: $baseUrl$endpoint');
-      // print('Headers: $headers');
-      // print('Body $endpoint: ${jsonEncode({...body, 'token': token})}');
+      if (endpoint == 'RegistrarCoordenadas') {
+        print('📦 Processing RegistrarCoordenadas...');
+        print('📦 RegistrarCoordenadas Body: $body');
+      }
 
+      if (endpoint == 'RegistrarCoordenadasBatch') {
+        // Ensure Latitud, longitud, and FechaHora are inside "data"
+        body = {
+          ...body,
+          'data': [
+            {
+              'Latitud': body['Latitud'],
+              'longitud': body['longitud'],
+              'FechaHora': body['FechaHora'],
+            }
+          ]
+        };
+        body.remove('Latitud');
+        body.remove('longitud');
+        body.remove('FechaHora');
+      }
+
+      print('🌐 Sending request to endpoint: $endpoint with payload: $body');
       final response = await http.post(
         Uri.parse('$baseUrl$endpoint'),
         headers: headers,
         body: jsonEncode({...body, 'token': token}),
       );
 
-      // print('[$endpoint] Código de respuesta: ${response.statusCode}');
-      // print('[$endpoint] Respuesta: ${response.body}');
-
       if (response.statusCode == 200) {
         _lastErrorTime = null; // Reset error tracking on success
         await _updateConnectionStatus(true); // Update connection status
         return jsonDecode(response.body);
       } else {
-        await _saveFailedRequest(endpoint, body); // Save failed request
+        if (endpoint != 'RegistrarCoordenadasBatch') {
+          await _saveFailedRequest(endpoint, body); // Save failed request
+        }
         await _logError(
           'HTTP Error',
           'Código de respuesta: ${response.statusCode}',
@@ -232,11 +252,59 @@ class RioGasService {
       }
       return null;
     } catch (e) {
-      // print('❌ Error en [$endpoint]: $e');
-      if (e is SocketException) {
-        // print('⚠️ Error de red detectado: ${e.message}');
+      if (endpoint == 'RegistrarCoordenadas') {
+        var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+        var existingRequest = failedRequestsBox.values.firstWhere(
+          (request) =>
+              request['endpoint'] == 'RegistrarCoordenadasBatch' &&
+              request['payload']['movil'] == body['movil'] &&
+              request['payload']['DeviceId'] == body['DeviceId'],
+          orElse: () => null,
+        );
+
+        if (existingRequest != null) {
+          List<dynamic> data = existingRequest['payload']['data'];
+          // Add new entry if it doesn't already exist
+          if (!data.any((entry) =>
+              entry['Latitud'] == body['Latitud'] &&
+              entry['longitud'] == body['longitud'] &&
+              entry['FechaHora'] == body['FechaHora'])) {
+            if (data.length >= 30) {
+              data.removeAt(
+                  0); // Remove the oldest entry to maintain a limit of 30
+            }
+            data.add({
+              'Latitud': body['Latitud'],
+              'longitud': body['longitud'],
+              'FechaHora': body['FechaHora'],
+            });
+            await failedRequestsBox.put(
+                existingRequest['key'], existingRequest);
+            print('📝 Updated existing failed request with new data: $data');
+          }
+        } else {
+          // Save a new failed request
+          var newRequest = {
+            'endpoint': 'RegistrarCoordenadasBatch',
+            'payload': {
+              'token': body['token'],
+              'movil': body['movil'],
+              'DeviceId': body['DeviceId'],
+              'data': [
+                {
+                  'Latitud': body['Latitud'],
+                  'longitud': body['longitud'],
+                  'FechaHora': body['FechaHora'],
+                }
+              ],
+            },
+          };
+          await failedRequestsBox.add(newRequest);
+          print('📝 Saved new failed request: $newRequest');
+        }
+      } else if (endpoint != 'RegistrarCoordenadasBatch') {
+        await _saveFailedRequest(endpoint, body); // Save failed request
       }
-      await _saveFailedRequest(endpoint, body); // Save failed request
       await _logError(
         'Exception',
         e.toString(),
@@ -547,15 +615,63 @@ class RioGasService {
     String longitud,
     String deviceId,
     String fechaHora,
-  ) {
-    return _post('RegistrarCoordenadas', {
-      'token': token,
-      'movil': movil,
-      'Latitud': latitud,
-      'longitud': longitud,
-      'DeviceId': deviceId,
-      'FechaHora': fechaHora,
-    });
+  ) async {
+    try {
+      // Use the specified structure for the REST service request
+      return await _post('RegistrarCoordenadas', {
+        'token': token,
+        'movil': movil,
+        'Latitud': latitud,
+        'longitud': longitud,
+        'DeviceId': deviceId,
+        'FechaHora': fechaHora,
+      });
+    } catch (e) {
+      // Save the failed request in the specified Hive structure
+      var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+      var existingRequest = failedRequestsBox.values.firstWhere(
+        (request) =>
+            request['endpoint'] == 'RegistrarCoordenadasBatch' &&
+            request['payload']['movil'] == movil &&
+            request['payload']['DeviceId'] == deviceId,
+        orElse: () => null,
+      );
+
+      if (existingRequest != null) {
+        // Add new data to the existing collection if it's not already present
+        List<dynamic> data = existingRequest['payload']['data'];
+        if (!data.any((entry) =>
+            entry['Latitud'] == latitud && entry['longitud'] == longitud)) {
+          if (data.length >= 30) {
+            data.removeAt(
+                0); // Remove the oldest entry to maintain a limit of 30
+          }
+          data.add({
+            'Latitud': latitud,
+            'longitud': longitud,
+            'FechaHora': fechaHora,
+          });
+          await failedRequestsBox.put(existingRequest['key'], existingRequest);
+          print('📝 Updated existing failed request: $existingRequest');
+        }
+      } else {
+        // Save a new failed request
+        var newRequest = {
+          'endpoint': 'RegistrarCoordenadasBatch',
+          'payload': {
+            'token': token,
+            'movil': movil,
+            'DeviceId': deviceId,
+            'data': [
+              {'Latitud': latitud, 'longitud': longitud, 'FechaHora': fechaHora}
+            ],
+          },
+        };
+        await failedRequestsBox.add(newRequest);
+        print('📝 Saved new failed request: $newRequest');
+      }
+      return null;
+    }
   }
 
   static Future<void> downloadAndOpenPDF({

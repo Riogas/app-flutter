@@ -51,6 +51,7 @@ class _HomePageState extends State<HomePage>
       ValueNotifier({'network': true, 'firestore': true, 'riogas': true});
   bool showPopup = false; // Add a flag for showing the popup
   late Box pedidosBox;
+  bool _isFirstLoad = true; // Flag to suppress notifications on first load
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -143,6 +144,11 @@ class _HomePageState extends State<HomePage>
     _listenToMessages();
     _listenToPendingOrders();
     _printConstantDocumentNames();
+
+    // Set the flag to false after the initial load
+    setState(() {
+      _isFirstLoad = false;
+    });
   }
 
   Future<void> _initializeLocationService() async {
@@ -304,7 +310,8 @@ class _HomePageState extends State<HomePage>
         }
       }
 
-      if (newMessagesCount > 0) {
+      if (newMessagesCount > 0 && !_isFirstLoad) {
+        // Suppress notifications on first load
         _showNotification(
           'Nuevo Mensaje',
           'Tienes $newMessagesCount mensajes nuevos.',
@@ -344,10 +351,14 @@ class _HomePageState extends State<HomePage>
             pedidoId.toString(),
             'Descargado',
           ); // Mark as "Descargado"
-          _showNotification(
-            'Nueva Visita',
-            'Tienes un nueva visita pendiente.',
-          );
+
+          if (!_isFirstLoad) {
+            // Suppress notifications on first load
+            _showNotification(
+              'Nueva Visita',
+              'Tienes un nueva visita pendiente.',
+            );
+          }
 
           // Call the download and read routine here
           await _callDescargaLecturaPedidos(pedido, pedidoId);

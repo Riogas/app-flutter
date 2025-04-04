@@ -596,7 +596,7 @@ class _LoginPageState extends State<LoginPage> {
     bool showLicensePlateField = false;
 
     // Fetch the constant value with ID 170
-    String? value = await getConstantValue('170');
+    String? value = await getConstantValue('180');
     if (value == 'S') {
       showLicensePlateField = true;
     }

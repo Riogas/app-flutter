@@ -414,7 +414,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           // Debug print: State of pedidosBox after failed service execution
           // print('Estado de pedidosBox después de fallo: ${pedidosBox.toMap()}');
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error al finalizar la visita.')),
+            SnackBar(content: Text('Enviando finalización de la visita.')),
           );
         }
       }

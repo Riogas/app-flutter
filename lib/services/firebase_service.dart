@@ -281,7 +281,7 @@ class FirebaseService {
     int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
     // Fetch the constant value
-    String showOnlyUser = await getConstantValue('90') ?? '';
+    String showOnlyUser = await getConstantValue('160') ?? '';
 
     String collectionName = 'Pedidos-$escenarioId';
     String fechaActualStr = DateTime.now()
