@@ -30,7 +30,7 @@ class _LoginPageState extends State<LoginPage> {
   String _appNroVersion = '0.0.0';
   bool _isLoading = true;
   bool _isDeviceRegistered = true;
-  List<String> _availableMoviles = [];
+  List<Map<String, String>> _availableMoviles = [];
   bool _wasActiveSessionForAnotherUser = false;
   String _phoneNumber = ''; // Global variable to store the phone number
   TextEditingController licensePlateController =
@@ -117,22 +117,14 @@ class _LoginPageState extends State<LoginPage> {
               );
               return; // Volver al login
             } else {
-              // 🔹 Extraer lista de móviles de la respuesta
               print("📥 Extrayendo lista de móviles...");
-              List<dynamic> listaMoviles = response['ListaMoviles'] != null
-                  ? jsonDecode(response['ListaMoviles'])
-                  : [];
-              _availableMoviles = listaMoviles
-                  .map((movil) => movil['SDT_Mov_MovMat'].toString())
-                  .toList();
+              _availableMoviles = _extractAvailableMoviles(response);
 
               if (_availableMoviles.isNotEmpty) {
                 print(
-                  "📋 Móviles disponibles para seleccionar: $_availableMoviles",
-                );
+                    "📋 Móviles disponibles para seleccionar: $_availableMoviles");
                 print(
-                  "🛑 Mostrando selección de móviles antes de continuar...",
-                );
+                    "🛑 Mostrando selección de móviles antes de continuar...");
 
                 // 🔹 Mostrar selección de móviles antes de continuar
                 await _showMobileSelectionDialog(response);
@@ -156,12 +148,7 @@ class _LoginPageState extends State<LoginPage> {
 
       // 🔹 Extraer lista de móviles de la respuesta
       print("📥 Extrayendo lista de móviles...");
-      List<dynamic> listaMoviles = response['ListaMoviles'] != null
-          ? jsonDecode(response['ListaMoviles'])
-          : [];
-      _availableMoviles = listaMoviles
-          .map((movil) => movil['SDT_Mov_MovMat'].toString())
-          .toList();
+      _availableMoviles = _extractAvailableMoviles(response);
 
       if (_availableMoviles.isNotEmpty) {
         print("📋 Móviles disponibles para seleccionar: $_availableMoviles");
@@ -224,20 +211,13 @@ class _LoginPageState extends State<LoginPage> {
 
                 // 🔹 Extraer lista de móviles de la respuesta
                 print("📥 Extrayendo lista de móviles...");
-                List<dynamic> listaMoviles = response['ListaMoviles'] != null
-                    ? jsonDecode(response['ListaMoviles'])
-                    : [];
-                _availableMoviles = listaMoviles
-                    .map((movil) => movil['SDT_Mov_MovMat'].toString())
-                    .toList();
+                _availableMoviles = _extractAvailableMoviles(response);
 
                 if (_availableMoviles.isNotEmpty) {
                   print(
-                    "📋 Móviles disponibles para seleccionar: $_availableMoviles",
-                  );
+                      "📋 Móviles disponibles para seleccionar: $_availableMoviles");
                   print(
-                    "🛑 Mostrando selección de móviles antes de continuar...",
-                  );
+                      "🛑 Mostrando selección de móviles antes de continuar...");
 
                   // 🔹 Mostrar selección de móviles antes de continuar
                   await _showMobileSelectionDialog(response);
@@ -631,10 +611,11 @@ class _LoginPageState extends State<LoginPage> {
                             });
                           },
                           items: _availableMoviles
-                              .map<DropdownMenuItem<String>>((String movil) {
+                              .map<DropdownMenuItem<String>>((movil) {
                             return DropdownMenuItem<String>(
-                              value: movil,
-                              child: Text(movil),
+                              value: movil['id'], // Use the ID as the value
+                              child: Text(movil['displayValue'] ??
+                                  'N/A'), // Show the display value or a default
                             );
                           }).toList(),
                         ),
@@ -971,6 +952,22 @@ class _LoginPageState extends State<LoginPage> {
         );
       },
     );
+  }
+
+  List<Map<String, String>> _extractAvailableMoviles(
+      Map<String, dynamic> response) {
+    List<dynamic> listaMoviles = response['ListaMoviles'] != null
+        ? jsonDecode(response['ListaMoviles'])
+        : [];
+    return listaMoviles.map((movil) {
+      String displayValue = response['EscenarioId'] == "1000"
+          ? movil['SDT_Mov_MovMat'].toString()
+          : movil['DV_P_M_MOVDESCRIPCION'].toString();
+      return {
+        'id': movil['SDT_Mov_MovId'].toString(),
+        'displayValue': displayValue
+      };
+    }).toList();
   }
 
   @override

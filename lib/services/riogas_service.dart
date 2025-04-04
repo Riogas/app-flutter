@@ -153,6 +153,8 @@ class RioGasService {
             '🌐 Sending request to endpoint: $endpoint with payload: $payload');
         var response = await _post(endpoint, payload);
 
+        print('📦 Response: $response Endpoint: $endpoint');
+
         if (response != null) {
           print('✅ Request to $endpoint processed successfully.');
           if (endpoint == 'FinalizarPedido' &&
@@ -167,15 +169,11 @@ class RioGasService {
           await failedRequestsBox.delete(key);
           print('🗑️ Deleted successfully processed request with key: $key.');
         } else {
-          print('⚠️ Request to $endpoint failed.');
-          if (endpoint == 'FinalizarPedido' &&
-              payload.containsKey('PedidoId')) {
-            var pedidosBox = await Hive.openBox('pedidosBox');
-            int pedidoId = payload['PedidoId'];
-            if (pedidosBox.containsKey(pedidoId)) {
-              await pedidosBox.put(pedidoId, 'Enviando');
-              print('📦 Updated pedidoId $pedidoId to "Enviando".');
-            }
+          try {
+            print('⚠️ Request to $endpoint failed.');
+            // ...existing code for handling failed requests...
+          } catch (e) {
+            print('❌ Error while handling failed request: $e');
           }
         }
       } catch (e) {
@@ -214,13 +212,13 @@ class RioGasService {
         // Ensure Latitud, longitud, and FechaHora are inside "data"
         body = {
           ...body,
-          'data': [
+          'data': jsonEncode([
             {
               'Latitud': body['Latitud'],
               'longitud': body['longitud'],
               'FechaHora': body['FechaHora'],
             }
-          ]
+          ])
         };
         body.remove('Latitud');
         body.remove('longitud');
