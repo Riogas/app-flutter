@@ -144,10 +144,19 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
     // Realizar operaciones en segundo plano
     Future.microtask(() async {
-      var pedidoEstado = pedidosBox.get(pedidoId);
-      if (pedidoEstado != 'Leido') {
-        await _callDescargaLecturaPedidos(pedido, pedidoId);
-        await pedidosBox.put(pedidoId, 'Leido');
+      try {
+        if (pedidosBox.isOpen) {
+          var pedidoEstado = pedidosBox.get(pedidoId);
+          if (pedidoEstado != 'Leido') {
+            await _callDescargaLecturaPedidos(pedido, pedidoId);
+            await pedidosBox.put(pedidoId, 'Leido');
+          }
+        } else {
+          debugPrint('⚠️ pedidosBox is not open. Skipping operation.');
+        }
+      } catch (e, stackTrace) {
+        debugPrint('❌ Error in processing pedidoId $pedidoId: $e');
+        debugPrint('StackTrace: $stackTrace');
       }
     });
 
