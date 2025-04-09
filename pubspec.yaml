@@ -43,7 +43,8 @@ dependencies:
   path_provider: ^2.0.11
   flutter_email_sender: ^7.0.0
   open_file: ^3.2.1
-  #dio: ^5.0.0
+  dio: ^5.0.0
+  permission_handler: ^12.0.0
   #install_plugin: ^2.1.0 # Add the install_plugin package
   #flutter_windowmanager: ^0.2.0
   

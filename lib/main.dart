@@ -20,6 +20,10 @@ import 'package:http/http.dart'
     as http; // Importa http para realizar solicitudes HTTP
 import 'package:cloud_firestore/cloud_firestore.dart'; // Importa cloud_firestore para usar Firestore
 import 'utils/constantes.dart'; // Importa constantes para usar getConstantValue
+import 'package:dio/dio.dart'; // Importa dio para la descarga
+import 'package:open_file/open_file.dart'; // Importa open_file para abrir el archivo descargado
+import 'package:path_provider/path_provider.dart'; // Importa path_provider para obtener directorios
+import 'package:permission_handler/permission_handler.dart'; // Importa permission_handler para manejar permisos
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -369,16 +373,78 @@ void _showUpdateDialog(String message, String link) {
             ),
             ElevatedButton(
               onPressed: () async {
+                print(
+                    '🔄 Confirmación recibida. Iniciando proceso de actualización.');
+
+                // Solicitar permiso REQUEST_INSTALL_PACKAGES
+                if (await Permission.requestInstallPackages.isDenied) {
+                  print(
+                      '⚠️ Permiso REQUEST_INSTALL_PACKAGES denegado. Solicitando permiso.');
+                  final status =
+                      await Permission.requestInstallPackages.request();
+                  if (!status.isGranted) {
+                    print('❌ Permiso REQUEST_INSTALL_PACKAGES no concedido.');
+                    _showMessage(
+                        'No se puede continuar sin el permiso para instalar paquetes.');
+                    return;
+                  }
+                }
+
                 try {
-                  final Uri url = Uri.parse(link);
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  // Mostrar indicador de progreso
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        title: Text('Descargando actualización...'),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 20),
+                            Text(
+                                'Por favor, espera mientras se descarga la actualización.')
+                          ],
+                        ),
+                      );
+                    },
+                  );
+
+                  // Descarga el archivo desde la URL
+                  final tempDir = await getTemporaryDirectory();
+                  final filePath = '${tempDir.path}/app_update.apk';
+
+                  Dio dio = Dio();
+                  await dio.download(link, filePath,
+                      onReceiveProgress: (received, total) {
+                    if (total != -1) {
+                      print(
+                          '📥 Progreso de descarga: ${(received / total * 100).toStringAsFixed(0)}%');
+                    }
+                  });
+
+                  Navigator.of(context).pop(); // Cierra el diálogo de progreso
+
+                  print(
+                      '✅ Descarga completada. Archivo guardado en: $filePath');
+
+                  // Abre el archivo descargado para instalarlo
+                  final result = await OpenFile.open(filePath);
+
+                  if (result.type == ResultType.done) {
+                    print('✅ Archivo abierto exitosamente.');
                   } else {
-                    _showMessage('No se pudo abrir el enlace $link');
+                    print(
+                        '⚠️ No se pudo abrir el archivo descargado. Resultado: ${result.message}');
+                    _showMessage('No se pudo abrir el archivo descargado.');
                   }
                 } catch (e) {
-                  // print('Error al intentar abrir el enlace: $e');
-                  _showMessage('Error al intentar abrir el enlace: $e');
+                  Navigator.of(context)
+                      .pop(); // Cierra el diálogo de progreso en caso de error
+                  print('❌ Error al intentar descargar o abrir el archivo: $e');
+                  _showMessage(
+                      'Error al intentar descargar o abrir el archivo: $e');
                 }
               },
               child: Text('Confirmar'),
