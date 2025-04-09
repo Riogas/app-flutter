@@ -457,16 +457,22 @@ class LocationService {
 
         String fechaHora = DateTime.now().toUtc().toIso8601String();
 
+        double velocidad = 0.0; // Placeholder for speed calculation
+        double distanciaRecorrida =
+            _totalDistance; // Use total distance tracked
+
         // print(
         //   '📍 Enviando coordenadas a RioGas: Lat ${position.latitude}, Lng ${position.longitude}',
         // );
         await RioGasService.registrarCoordenadas(
-          int.parse(movil),
-          position.latitude.toString(),
-          position.longitude.toString(),
-          deviceId,
-          fechaHora,
-        );
+            int.parse(movil),
+            position.latitude.toString(),
+            position.longitude.toString(),
+            deviceId,
+            fechaHora,
+            distanciaRecorrida, // Pass total distance
+            velocidad // Pass speed (currently 0.0)
+            );
       });
     }
   }

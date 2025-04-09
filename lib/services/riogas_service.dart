@@ -424,11 +424,13 @@ class RioGasService {
 
   static Future<Map<String, dynamic>?> cambioPassword(
     String usuMobileLogin,
-    String usuMobilePassword,
+    String currentPassword,
+    String newPassword,
   ) {
     return _post('CambioPassword', {
       'UsuMobileLogin': usuMobileLogin,
-      'UsuMobilePassword': usuMobilePassword,
+      'CurrentPassword': currentPassword,
+      'UsuMobilePassword': newPassword,
     });
   }
 
@@ -608,12 +610,14 @@ class RioGasService {
   }
 
   static Future<Map<String, dynamic>?> registrarCoordenadas(
-    int movil,
-    String latitud,
-    String longitud,
-    String deviceId,
-    String fechaHora,
-  ) async {
+      int movil,
+      String latitud,
+      String longitud,
+      String deviceId,
+      String fechaHora,
+      double distanciaRecorrida, // Add distance parameter
+      double velocidad // Add speed parameter
+      ) async {
     try {
       // Use the specified structure for the REST service request
       return await _post('RegistrarCoordenadas', {
@@ -623,6 +627,8 @@ class RioGasService {
         'longitud': longitud,
         'DeviceId': deviceId,
         'FechaHora': fechaHora,
+        'DistanciaRecorrida': distanciaRecorrida, // Pass distance to service
+        'Velocidad': velocidad // Pass speed to service
       });
     } catch (e) {
       // Save the failed request in the specified Hive structure
@@ -648,6 +654,8 @@ class RioGasService {
             'Latitud': latitud,
             'longitud': longitud,
             'FechaHora': fechaHora,
+            'DistanciaRecorrida': distanciaRecorrida, // Add distance to batch
+            'Velocidad': velocidad // Add speed to batch
           });
           await failedRequestsBox.put(existingRequest['key'], existingRequest);
           print('📝 Updated existing failed request: $existingRequest');
@@ -661,7 +669,13 @@ class RioGasService {
             'movil': movil,
             'DeviceId': deviceId,
             'data': [
-              {'Latitud': latitud, 'longitud': longitud, 'FechaHora': fechaHora}
+              {
+                'Latitud': latitud,
+                'longitud': longitud,
+                'FechaHora': fechaHora,
+                'DistanciaRecorrida': distanciaRecorrida, // Add distance
+                'Velocidad': velocidad // Add speed
+              }
             ],
           },
         };
@@ -751,5 +765,87 @@ class RioGasService {
     }
 
     // print('✅ Finished deleting old requests.');
+  }
+
+  static Future<void> registrarErrores() async {
+    var errorBox = await Hive.openBox('errorBox');
+
+    // Check if there are errors without the "enviadoARioGas" mark
+    List<dynamic> errorsToSend = errorBox.keys.where((key) {
+      var error = errorBox.get(key);
+      return error != null && error is Map && error['enviadoARioGas'] != true;
+    }).toList();
+
+    if (errorsToSend.isEmpty) {
+      print('⚠️ No errors to send. Waiting for new errors.');
+      return;
+    }
+
+    for (var key in errorsToSend) {
+      var error = errorBox.get(key);
+      if (error != null && error is Map) {
+        try {
+          // Prepare the payload
+          Map<String, dynamic> payload = {
+            'token': token,
+            'movil': error['movil'] ?? 0,
+            'DeviceId': error['DeviceId'] ?? '',
+            'usuario': error['usuario'] ?? '',
+            'data': jsonEncode(error),
+          };
+
+          // Send the error to RioGas
+          var response = await _post('RegistrarErrores', payload);
+
+          if (response != null) {
+            print('✅ Error sent successfully to RioGas: $key');
+            // Mark the error as sent
+            error['enviadoARioGas'] = true;
+            await errorBox.put(key, error);
+          } else {
+            print('❌ Failed to send error to RioGas: $key');
+          }
+        } catch (e) {
+          print('❌ Error while sending error to RioGas: $e');
+        }
+      }
+    }
+
+    // Listen for new errors being added to the box
+    errorBox.watch().listen((event) async {
+      var newErrorsToSend = errorBox.keys.where((key) {
+        var error = errorBox.get(key);
+        return error != null && error is Map && error['enviadoARioGas'] != true;
+      }).toList();
+
+      if (newErrorsToSend.isNotEmpty) {
+        print('📦 New errors detected. Sending to RioGas.');
+        await registrarErrores();
+      }
+    });
+  }
+
+  static Future<void> registrarUltLog(
+      int movil, String deviceId, String usuario) async {
+    try {
+      // Prepare the payload
+      Map<String, dynamic> payload = {
+        'token': token,
+        'movil': movil,
+        'DeviceId': deviceId,
+        'usuario': usuario,
+      };
+
+      // Send the request to RioGas
+      var response = await _post('RegistrarUltLog', payload);
+
+      if (response != null) {
+        print('✅ Último log registrado exitosamente en RioGas.');
+      } else {
+        print('❌ Falló el registro del último log en RioGas.');
+      }
+    } catch (e) {
+      print('❌ Error al registrar el último log en RioGas: $e');
+    }
   }
 }

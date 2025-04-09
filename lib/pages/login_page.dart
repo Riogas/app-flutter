@@ -662,6 +662,21 @@ class _LoginPageState extends State<LoginPage> {
 
                         print("Continuar luego de seleccionado un movil");
 
+                        // Call registrarUltLog after confirming the mobile selection
+                        var sessionBox = await Hive.openBox('sessionBox');
+                        String? username = sessionBox.get('username');
+                        String? deviceId = sessionBox.get('deviceId');
+
+                        if (username != null && deviceId != null) {
+                          await RioGasService.registrarUltLog(
+                              int.parse(selectedMovil!), deviceId, username);
+                          print(
+                              '✅ Servicio registrarUltLog llamado exitosamente.');
+                        } else {
+                          print(
+                              '⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.');
+                        }
+
                         // 🔹 Continuar con el flujo después de la selección del móvil
                         await _proceedAfterMobileSelection(
                           response,

@@ -148,8 +148,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _changePassword() async {
-    TextEditingController oldPasswordController = TextEditingController();
+    TextEditingController currentPasswordController = TextEditingController();
     TextEditingController newPasswordController = TextEditingController();
+    TextEditingController confirmPasswordController = TextEditingController();
 
     showDialog(
       context: context,
@@ -160,12 +161,17 @@ class _SettingsPageState extends State<SettingsPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: oldPasswordController,
-                decoration: InputDecoration(labelText: 'Nueva Contraseña'),
+                controller: currentPasswordController,
+                decoration: InputDecoration(labelText: 'Contraseña Actual'),
                 obscureText: true,
               ),
               TextField(
                 controller: newPasswordController,
+                decoration: InputDecoration(labelText: 'Nueva Contraseña'),
+                obscureText: true,
+              ),
+              TextField(
+                controller: confirmPasswordController,
                 decoration: InputDecoration(labelText: 'Confirmar Contraseña'),
                 obscureText: true,
               ),
@@ -180,22 +186,22 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             TextButton(
               onPressed: () async {
-                if (oldPasswordController.text == newPasswordController.text) {
+                if (newPasswordController.text ==
+                    confirmPasswordController.text) {
                   var box = await Hive.openBox('sessionBox');
                   String? nombreUsuario = box.get('username');
                   if (nombreUsuario != null) {
                     await RioGasService.cambioPassword(
                       nombreUsuario,
+                      currentPasswordController.text,
                       newPasswordController.text,
                     );
                     Navigator.of(context).pop();
                   } else {
-                    // Handle error: NombreUsuario not found in Hive
                     Navigator.of(context).pop();
                     _showMessage('Error: NombreUsuario no encontrado.');
                   }
                 } else {
-                  // Handle error: Passwords do not match
                   Navigator.of(context).pop();
                   _showMessage('Error: Las contraseñas no coinciden.');
                 }

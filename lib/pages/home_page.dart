@@ -87,7 +87,7 @@ class _HomePageState extends State<HomePage>
     _initializeLocationService();
 
     // 🔹 Escuchar cambios en Firestore para pedidos y mensajes
-    _listenToFirestoreChanges();
+    _listenToFirestoreChangesWithDelay(); // Usar la nueva función con delay
 
     // 🔹 Inicializar la verificación de conectividad
     _checkInternetConnectivity();
@@ -465,6 +465,13 @@ class _HomePageState extends State<HomePage>
           _showNotification('Nuevo Mensaje', 'Tienes un nuevo mensaje.');
         }
       }
+    });
+  }
+
+  void _listenToFirestoreChangesWithDelay() {
+    // Esperar un período inicial antes de activar notificaciones
+    Future.delayed(Duration(seconds: 10), () {
+      _listenToFirestoreChanges(); // Llamar a la función original después del delay
     });
   }
 
