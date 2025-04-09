@@ -139,8 +139,15 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _initializeHomePage() async {
     await _loadSessionData();
-    await RioGasService
-        .initializeService(); // 🔹 Inicializa el servicio de RioGas
+    await RioGasService.initializeService(); //
+    var box = await Hive.openBox('sessionBox');
+    bool firstLoginDone = box.get('firstLoginDone', defaultValue: false);
+
+    setState(() {
+      _isFirstLoad =
+          !firstLoginDone; // Set _isFirstLoad based on firstLoginDone
+    });
+
     _listenToMessages();
     _listenToPendingOrders();
     _printConstantDocumentNames();
@@ -324,6 +331,14 @@ class _HomePageState extends State<HomePage>
             .length; // Count only 'Descargado' messages
       });
     });
+
+    // Marcar todos los mensajes existentes como "Leido" si es la primera carga
+    if (_isFirstLoad) {
+      var allMessages = mensajesBox.keys;
+      for (var messageId in allMessages) {
+        await mensajesBox.put(messageId, 'Leido');
+      }
+    }
   }
 
   void _listenToPendingOrders() {
@@ -362,6 +377,14 @@ class _HomePageState extends State<HomePage>
 
           // Call the download and read routine here
           await _callDescargaLecturaPedidos(pedido, pedidoId);
+        }
+      }
+
+      // Marcar todos los pedidos existentes como "Procesando" si es la primera carga
+      if (_isFirstLoad) {
+        var allPedidos = pedidosBox.keys;
+        for (var pedidoId in allPedidos) {
+          await pedidosBox.put(pedidoId, 'Procesando');
         }
       }
     });
