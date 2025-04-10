@@ -848,4 +848,81 @@ class RioGasService {
       print('❌ Error al registrar el último log en RioGas: $e');
     }
   }
+
+  static Future<void> monitorAndSendErrors() async {
+    var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
+    var conexionBox = await Hive.openBox('conexionBox');
+
+    // Monitorear constantemente los errores
+    Timer.periodic(Duration(seconds: 10), (timer) async {
+      bool isConnected = conexionBox.get('conexionRioGas', defaultValue: false);
+
+      if (!isConnected) {
+        print('⚠️ No hay conectividad con RioGas. Esperando conexión...');
+        return;
+      }
+
+      // Filtrar errores que no han sido enviados
+      List<dynamic> errorsToSend = errorBox.keys.where((key) {
+        var error = errorBox.get(key);
+        return error != null &&
+            error is ErrorEvent &&
+            error.additionalInfo != 'enviadoARioGas';
+      }).toList();
+
+      if (errorsToSend.isEmpty) {
+        print('⚠️ No hay errores pendientes para enviar.');
+        return;
+      }
+
+      for (var key in errorsToSend) {
+        var error = errorBox.get(key);
+        if (error != null && error is ErrorEvent) {
+          try {
+            // Preparar el payload
+            Map<String, dynamic> payload = {
+              'token': token,
+              'type': error.type,
+              'message': error.message,
+              'timestamp': error.timestamp.toIso8601String(),
+              'additionalInfo': error.additionalInfo,
+              'endpoint': error.endpoint,
+              'payload': error.payload,
+            };
+
+            // Enviar el error a RioGas
+            var response = await _post('RegistrarErrores', payload);
+
+            if (response != null && response['ok'] == 0) {
+              print('✅ Error enviado exitosamente a RioGas: $key');
+              // Marcar el error como enviado
+              var updatedError = ErrorEvent(
+                type: error.type,
+                message: error.message,
+                timestamp: error.timestamp,
+                additionalInfo: 'enviadoARioGas',
+                endpoint: error.endpoint,
+                payload: error.payload,
+              );
+              await errorBox.put(key, updatedError);
+            } else {
+              print('❌ Falló el envío del error a RioGas: $key');
+              timer.cancel(); // Cancelar el timer en caso de error
+              Future.delayed(Duration(minutes: 30), () {
+                monitorAndSendErrors(); // Reintentar después de 30 minutos
+              });
+              return;
+            }
+          } catch (e) {
+            print('❌ Error al enviar el error a RioGas: $e');
+            timer.cancel(); // Cancelar el timer en caso de error
+            Future.delayed(Duration(minutes: 30), () {
+              monitorAndSendErrors(); // Reintentar después de 30 minutos
+            });
+            return;
+          }
+        }
+      }
+    });
+  }
 }

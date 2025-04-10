@@ -186,24 +186,33 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             TextButton(
               onPressed: () async {
-                if (newPasswordController.text ==
+                if (currentPasswordController.text.isEmpty ||
+                    newPasswordController.text.isEmpty ||
+                    confirmPasswordController.text.isEmpty) {
+                  Navigator.of(context).pop();
+                  _showMessage('Error: Todos los campos son obligatorios.');
+                  return;
+                }
+
+                if (newPasswordController.text !=
                     confirmPasswordController.text) {
-                  var box = await Hive.openBox('sessionBox');
-                  String? nombreUsuario = box.get('username');
-                  if (nombreUsuario != null) {
-                    await RioGasService.cambioPassword(
-                      nombreUsuario,
-                      currentPasswordController.text,
-                      newPasswordController.text,
-                    );
-                    Navigator.of(context).pop();
-                  } else {
-                    Navigator.of(context).pop();
-                    _showMessage('Error: NombreUsuario no encontrado.');
-                  }
-                } else {
                   Navigator.of(context).pop();
                   _showMessage('Error: Las contraseñas no coinciden.');
+                  return;
+                }
+
+                var box = await Hive.openBox('sessionBox');
+                String? nombreUsuario = box.get('username');
+                if (nombreUsuario != null) {
+                  await RioGasService.cambioPassword(
+                    nombreUsuario,
+                    currentPasswordController.text,
+                    newPasswordController.text,
+                  );
+                  Navigator.of(context).pop();
+                } else {
+                  Navigator.of(context).pop();
+                  _showMessage('Error: NombreUsuario no encontrado.');
                 }
               },
               child: Text('Aceptar'),

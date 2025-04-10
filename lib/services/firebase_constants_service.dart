@@ -22,9 +22,8 @@ class ConstantsService {
 
     print("🔍 Escenario obtenido de sessionBox: $escenario");
 
-    QuerySnapshot querySnapshot = await FirebaseFirestore.instance
-        .collection('Constantes-$escenario')
-        .get();
+    QuerySnapshot querySnapshot =
+        await FirebaseFirestore.instance.collection('Constantes-1000').get();
     var constantBox = await Hive.openBox('constantBox');
 
     print(

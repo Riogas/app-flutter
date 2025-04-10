@@ -206,10 +206,11 @@ Future<void> _checkBatteryAndBackgroundSettings() async {
     String? batteryOptimizationMessage = await getConstantValue(
       '140',
     ); // Fetch message from constant
-    _showMessage(
-      batteryOptimizationMessage ??
-          'La aplicación está optimizada para batería. Esto puede afectar su rendimiento.',
-    );
+    if (batteryOptimizationMessage != null) {
+      _showMessage(
+        batteryOptimizationMessage,
+      );
+    }
   }
 
   // Verificar si la aplicación está en la lista de aplicaciones en segundo plano

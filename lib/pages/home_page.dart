@@ -21,6 +21,7 @@ import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivi
 import '../services/counter_service.dart'; // Import the new CounterService
 import '../utils/connection_check.dart';
 import '../utils/screenBlock.dart'; // Import secureScreen
+import '../utils/constantes.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -110,6 +111,25 @@ class _HomePageState extends State<HomePage>
       (timer) => _checkInternetConnectivity(),
     );
 
+    // Obtener el valor de la constante 200
+    _initializeRetryInterval();
+  }
+
+  Future<void> _initializeRetryInterval() async {
+    final retryIntervalString = await getConstantValue('200');
+    final retryInterval = int.tryParse(retryIntervalString ?? '');
+
+    if (retryInterval != null) {
+      // Llamar periódicamente a monitorAndSendErrors solo si el valor es válido
+      Timer.periodic(Duration(seconds: retryInterval), (timer) async {
+        print("Monitor de errores activado.");
+        await RioGasService.monitorAndSendErrors();
+      });
+    } else {
+      print(
+          "❌ No se pudo iniciar el monitor de errores: valor de la constante 200 no válido.");
+    }
+
     _connectionCheck.startMonitoring();
     _connectionCheck.connectionStatusStream.listen((status) {
       _connectionStatusNotifier.value = status; // Update only the notifier
@@ -181,7 +201,7 @@ class _HomePageState extends State<HomePage>
         var box = await Hive.openBox('sessionBox');
         String escenario = box.get('escenario', defaultValue: '1000');
         QuerySnapshot querySnapshot = await FirebaseFirestore.instance
-            .collection('Constantes-$escenario')
+            .collection('Constantes-1000')
             .get();
         // print("📂 Documentos en 'Constantes-$escenario':");
         querySnapshot.docs.forEach((doc) => null);

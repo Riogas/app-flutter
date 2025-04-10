@@ -602,22 +602,37 @@ class _LoginPageState extends State<LoginPage> {
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        DropdownButton<String>(
-                          hint: Text('Seleccione un móvil'),
-                          value: selectedMovil,
-                          onChanged: (String? newValue) {
-                            setState(() {
-                              selectedMovil = newValue;
-                            });
-                          },
-                          items: _availableMoviles
-                              .map<DropdownMenuItem<String>>((movil) {
-                            return DropdownMenuItem<String>(
-                              value: movil['id'], // Use the ID as the value
-                              child: Text(movil['displayValue'] ??
-                                  'N/A'), // Show the display value or a default
-                            );
-                          }).toList(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.max,
+                          children: [
+                            Expanded(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: SizedBox(
+                                  width:
+                                      MediaQuery.of(context).size.width * 0.8,
+                                  child: DropdownButton<String>(
+                                    hint: Text('Seleccione móvil'),
+                                    value: selectedMovil,
+                                    onChanged: (String? newValue) {
+                                      setState(() {
+                                        selectedMovil = newValue;
+                                      });
+                                    },
+                                    items: _availableMoviles
+                                        .map<DropdownMenuItem<String>>((movil) {
+                                      return DropdownMenuItem<String>(
+                                        value: movil['id'],
+                                        child: Text(
+                                            movil['displayValue'] ?? 'N/A'),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         if (showLicensePlateField) ...[
                           SizedBox(height: 10),
@@ -661,21 +676,6 @@ class _LoginPageState extends State<LoginPage> {
                         Navigator.of(dialogContext).pop();
 
                         print("Continuar luego de seleccionado un movil");
-
-                        // Call registrarUltLog after confirming the mobile selection
-                        var sessionBox = await Hive.openBox('sessionBox');
-                        String? username = sessionBox.get('username');
-                        String? deviceId = sessionBox.get('deviceId');
-
-                        if (username != null && deviceId != null) {
-                          await RioGasService.registrarUltLog(
-                              int.parse(selectedMovil!), deviceId, username);
-                          print(
-                              '✅ Servicio registrarUltLog llamado exitosamente.');
-                        } else {
-                          print(
-                              '⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.');
-                        }
 
                         // 🔹 Continuar con el flujo después de la selección del móvil
                         await _proceedAfterMobileSelection(
@@ -725,6 +725,22 @@ class _LoginPageState extends State<LoginPage> {
     await box.put('firstLoginDone', true);
 
     var pedidosBox = await Hive.openBox('pedidosBox');
+
+    // Call registrarUltLog after confirming the mobile selection
+    var sessionBox = await Hive.openBox('sessionBox');
+    String? username = sessionBox.get('username');
+    String? deviceId = sessionBox.get('deviceId');
+
+    if (username != null && deviceId != null) {
+      await RioGasService.registrarUltLog(
+          int.parse(selectedMovil!), _deviceId, username);
+      print('✅ Servicio registrarUltLog llamado exitosamente.');
+    } else {
+      print(
+          '⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.');
+      print(
+          'username: $username, deviceId: $_deviceId, selectedMovil: $selectedMovil');
+    }
 
     // 🔹 Limpiar pedidosBox de claves cuyo valor sea 'Procesando'
     final keysToDelete = <dynamic>[];

@@ -347,7 +347,7 @@ class FirebaseService {
   Stream<List<DocumentSnapshot>> getConstantesStream() async* {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
-    String collectionName = 'Constantes-$escenarioId';
+    String collectionName = 'Constantes-1000';
 
     Stream<List<DocumentSnapshot>> constantesStream = _firestore
         .collection(collectionName)
