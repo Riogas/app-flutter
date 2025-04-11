@@ -879,6 +879,7 @@ class RioGasService {
         var error = errorBox.get(key);
         if (error != null && error is ErrorEvent) {
           try {
+            var sessionBox = await Hive.openBox('sessionBox');
             // Preparar el payload
             Map<String, dynamic> payload = {
               'token': token,
@@ -888,6 +889,9 @@ class RioGasService {
               'additionalInfo': error.additionalInfo,
               'endpoint': error.endpoint,
               'payload': error.payload,
+              'username': sessionBox.get('username'),
+              'deviceId': sessionBox.get('deviceId'),
+              'movil': sessionBox.get('movil'),
             };
 
             // Enviar el error a RioGas
