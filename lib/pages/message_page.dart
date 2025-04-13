@@ -208,6 +208,11 @@ class _MessagePageState extends State<MessagePage> {
     // print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
     //}
 
+    var locationBox = await Hive.openBox('locationBox');
+    double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
+    double distanciaRecorrida =
+        locationBox.get('totalDistance', defaultValue: 0.0);
+
     print('📨 Enviando datos al servicio descargaLecturaMensajes:');
     print('EscenarioId: ${int.parse(escenario)}');
     print('MovilId: ${int.parse(movil)}');
@@ -221,21 +226,25 @@ class _MessagePageState extends State<MessagePage> {
     print('INAux2: ');
     print('Latitud: ${position.latitude}');
     print('Longitud: ${position.longitude}');
+    print('Velocidad: $velocidad');
+    print('DistanciaRecorrida: $distanciaRecorrida');
 
     await RioGasService.descargaLecturaMensajes(
-      int.parse(escenario), // escenarioId
-      int.parse(movil), // movilId
-      messageId, // messageId
-      username, // usuario
-      '', // nroSesion
-      deviceId, // termMobileEquipo
-      'LECTURA', // lectDesc
-      DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
-      '', // inAux1
-      '', // inAux2
-      position.latitude.toString(), // latitud
-      position.longitude.toString(), // longitud
-    );
+        int.parse(escenario), // escenarioId
+        int.parse(movil), // movilId
+        messageId, // messageId
+        username, // usuario
+        '', // nroSesion
+        deviceId, // termMobileEquipo
+        'LECTURA', // lectDesc
+        DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
+        '', // inAux1
+        '', // inAux2
+        position.latitude.toString(), // latitud
+        position.longitude.toString(), // longitud
+        velocidad, // velocidad
+        distanciaRecorrida // distanciaRecorrida
+        );
 
     if (mounted) {
       setState(() {

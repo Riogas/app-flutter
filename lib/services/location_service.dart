@@ -262,11 +262,13 @@ class LocationService {
           newLocation.longitude,
         );
 
+        double speed = position.speed; // Get the current speed
         _totalDistance += distance;
         // print(
         //   '📏 Distancia recorrida: $distance mts | Total: $_totalDistance mts',
         // );
-        await _updateLocationAndDistanceInHive(newLocation, _totalDistance);
+        await _updateLocationAndDistanceInHive(
+            newLocation, _totalDistance, speed);
       }
 
       _lastPosition = newLocation;
@@ -303,6 +305,7 @@ class LocationService {
       await _updateLocationAndDistanceInHive(
         newLocation,
         _totalDistance,
+        position.speed, // Pass the speed
       ); // 🔹 Actualiza Hive
     } catch (e) {
       // print('❌ Error al obtener ubicación: $e');
@@ -313,6 +316,7 @@ class LocationService {
   Future<void> _updateLocationAndDistanceInHive(
     LatLng newLocation,
     double totalDistance,
+    double speed, // Added parameter for speed
   ) async {
     var box = await Hive.openBox('locationBox');
 
@@ -321,12 +325,16 @@ class LocationService {
       'longitude': newLocation.longitude,
     });
     await box.put('totalDistance', totalDistance);
+    await box.put('lastSpeed', speed); // Store the last speed in Hive
 
     // print(
     //   '📦 Última ubicación guardada en Hive: Lat ${newLocation.latitude}, Lng ${newLocation.longitude}',
     // );
     // print(
     //   '📦 Distancia total recorrida actualizada: ${totalDistance.toStringAsFixed(2)} mts',
+    // );
+    // print(
+    //   '📦 Última velocidad registrada: ${speed.toStringAsFixed(2)} m/s',
     // );
   }
 

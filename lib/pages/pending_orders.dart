@@ -175,8 +175,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
     var box = await Hive.openBox('sessionBox');
     String deviceId = box.get('deviceId');
+    String movilid = box.get('movil');
 
-    String inAux1 = deviceId;
+    String inAux1 = movilid;
     String inAux2 = '';
 
     Position position = await Geolocator.getCurrentPosition(
@@ -185,20 +186,28 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     String latitud = position.latitude.toString();
     String longitud = position.longitude.toString();
 
+    // Retrieve speed and distance from Hive
+    var locationBox = await Hive.openBox('locationBox');
+    double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
+    double distanciaRecorrida =
+        locationBox.get('totalDistance', defaultValue: 0.0);
+
     await RioGasService.descargaLecturaPedidos(
-      escenarioId,
-      pedidoId,
-      pedidoTpo,
-      username,
-      'NroSesion', // Replace with actual session number if available
-      deviceId,
-      lectDesc,
-      fechaHoraCmbEst,
-      inAux1,
-      inAux2,
-      latitud,
-      longitud,
-    );
+        escenarioId,
+        pedidoId,
+        pedidoTpo,
+        username,
+        'NroSesion', // Replace with actual session number if available
+        deviceId,
+        lectDesc,
+        fechaHoraCmbEst,
+        inAux1,
+        inAux2,
+        latitud,
+        longitud,
+        velocidad, // Pass speed from Hive
+        distanciaRecorrida // Pass distance from Hive
+        );
   }
 
   @override

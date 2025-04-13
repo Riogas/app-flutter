@@ -310,24 +310,33 @@ class _HomePageState extends State<HomePage>
           String deviceId = box.get('deviceId');
           Position? position = await _locationService
               .getCurrentLocation(); // Use LocationService's method
+
+          // Retrieve speed and distance from Hive
+          var locationBox = await Hive.openBox('locationBox');
+          double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
+          double distanciaRecorrida =
+              locationBox.get('totalDistance', defaultValue: 0.0);
+
           if (position != null) {
             // print('📨 Enviando datos al servicio descargaLecturaMensajes:');
             // print('Latitud: ${position.latitude}');
             // print('Longitud: ${position.longitude}');
             await RioGasService.descargaLecturaMensajes(
-              int.parse(escenario), // escenarioId
-              int.parse(movil), // movilId
-              messageId, // messageId
-              username, // usuario
-              '', // nroSesion
-              deviceId, // termMobileEquipo
-              'DESCARGA', // lectDesc
-              DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
-              '', // inAux1
-              '', // inAux2
-              position.latitude.toString(), // latitud
-              position.longitude.toString(), // longitud
-            );
+                int.parse(escenario), // escenarioId
+                int.parse(movil), // movilId
+                messageId, // messageId
+                username, // usuario
+                '', // nroSesion
+                deviceId, // termMobileEquipo
+                'DESCARGA', // lectDesc
+                DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
+                '', // inAux1
+                '', // inAux2
+                position.latitude.toString(), // latitud
+                position.longitude.toString(), // longitud
+                velocidad, // velocidad
+                distanciaRecorrida // distanciaRecorrida
+                );
           }
         } else if (messageData != null &&
             messageData['VisibleEnApp'] == 'N' &&
@@ -337,8 +346,7 @@ class _HomePageState extends State<HomePage>
         }
       }
 
-      if (newMessagesCount > 0 && !_isFirstLoad) {
-        // Suppress notifications on first load
+      if (newMessagesCount > 0) {
         _showNotification(
           'Nuevo Mensaje',
           'Tienes $newMessagesCount mensajes nuevos.',
@@ -351,14 +359,6 @@ class _HomePageState extends State<HomePage>
             .length; // Count only 'Descargado' messages
       });
     });
-
-    // Marcar todos los mensajes existentes como "Leido" si es la primera carga
-    if (_isFirstLoad) {
-      var allMessages = mensajesBox.keys;
-      for (var messageId in allMessages) {
-        await mensajesBox.put(messageId, 'Leido');
-      }
-    }
   }
 
   void _listenToPendingOrders() {
@@ -387,24 +387,14 @@ class _HomePageState extends State<HomePage>
             'Descargado',
           ); // Mark as "Descargado"
 
-          if (!_isFirstLoad) {
-            // Suppress notifications on first load
-            _showNotification(
-              'Nueva Visita',
-              'Tienes un nueva visita pendiente.',
-            );
-          }
+          // Suppress notifications on first load
+          _showNotification(
+            'Nueva Visita',
+            'Tienes un nueva visita pendiente.',
+          );
 
           // Call the download and read routine here
           await _callDescargaLecturaPedidos(pedido, pedidoId);
-        }
-      }
-
-      // Marcar todos los pedidos existentes como "Procesando" si es la primera carga
-      if (_isFirstLoad) {
-        var allPedidos = pedidosBox.keys;
-        for (var pedidoId in allPedidos) {
-          await pedidosBox.put(pedidoId, 'Procesando');
         }
       }
     });
@@ -447,20 +437,28 @@ class _HomePageState extends State<HomePage>
     String deviceId = box.get('deviceId');
     String inAux1 = deviceId;
 
+    // Retrieve speed and distance from Hive
+    var locationBox = await Hive.openBox('locationBox');
+    double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
+    double distanciaRecorrida =
+        locationBox.get('totalDistance', defaultValue: 0.0);
+
     await RioGasService.descargaLecturaPedidos(
-      escenarioId,
-      pedidoId,
-      pedidoTpo,
-      username,
-      'NroSesion', // Replace with actual session number if available
-      deviceId,
-      lectDesc,
-      fechaHoraCmbEst,
-      inAux1,
-      inAux2,
-      latitud,
-      longitud,
-    );
+        escenarioId,
+        pedidoId,
+        pedidoTpo,
+        username,
+        'NroSesion', // Replace with actual session number if available
+        deviceId,
+        lectDesc,
+        fechaHoraCmbEst,
+        inAux1,
+        inAux2,
+        latitud,
+        longitud,
+        velocidad, // velocidad
+        distanciaRecorrida // distanciaRecorrida
+        );
   }
 
   void _listenToFirestoreChanges() {
@@ -540,7 +538,17 @@ class _HomePageState extends State<HomePage>
       actions: [
         TextButton(
           onPressed: () async {
-            await Hive.openBox('sessionBox').then((box) => box.clear());
+            var box = await Hive.openBox('sessionBox');
+            String? deviceId = box.get('deviceId');
+            String? idUsuario = box.get('username');
+            await RioGasService.registrarCierre(
+              int.tryParse(movil ?? '0') ?? 0,
+              deviceId ?? '',
+              idUsuario ?? '',
+              DateTime.now().toIso8601String(),
+              'DeslogueoForzado',
+            );
+            await box.clear();
             await Hive.openBox(
               'mensajesBox',
             ).then((box) => box.clear()); // Clear mensajesBox
@@ -997,27 +1005,35 @@ class _HomePageState extends State<HomePage>
 
                       await _firebaseService.updateMovilEstado(newEstadoNro);
                       // Call the actualizarMoviles service
+                      var locationBox = await Hive.openBox('locationBox');
+                      double velocidad =
+                          locationBox.get('lastSpeed', defaultValue: 0.0);
+                      double distanciaRecorrida =
+                          locationBox.get('totalDistance', defaultValue: 0.0);
+
                       var result = await RioGasService.actualizarMoviles(
-                        int.parse(
+                          int.parse(
+                            await Hive.box(
+                              'sessionBox',
+                            ).get('escenario', defaultValue: '0'),
+                          ),
+                          int.parse(movilId),
                           await Hive.box(
                             'sessionBox',
-                          ).get('escenario', defaultValue: '0'),
-                        ),
-                        int.parse(movilId),
-                        await Hive.box(
-                          'sessionBox',
-                        ).get('username', defaultValue: ''),
-                        '', // NroSesion (if available, replace with actual value)
-                        await Hive.box(
-                          'sessionBox',
-                        ).get('deviceId', defaultValue: ''),
-                        newEstadoNro.toString(),
-                        '', // Latitude (if available, replace with actual value)
-                        '', // Longitude (if available, replace with actual value)
-                        DateTime.now().toUtc().toIso8601String(),
-                        '', // inAux1
-                        '', // inAux2
-                      );
+                          ).get('username', defaultValue: ''),
+                          '', // NroSesion (if available, replace with actual value)
+                          await Hive.box(
+                            'sessionBox',
+                          ).get('deviceId', defaultValue: ''),
+                          newEstadoNro.toString(),
+                          '', // Latitude (if available, replace with actual value)
+                          '', // Longitude (if available, replace with actual value)
+                          DateTime.now().toUtc().toIso8601String(),
+                          '', // inAux1
+                          '', // inAux2
+                          velocidad, // Pass speed from Hive
+                          distanciaRecorrida // Pass distance from Hive
+                          );
 
                       if (result != null) {
                         // print('✅ Estado del móvil actualizado correctamente.');

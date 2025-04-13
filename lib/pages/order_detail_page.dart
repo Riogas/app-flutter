@@ -372,23 +372,30 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
         String deviceId = box.get('deviceId');
 
+        var locationBox = await Hive.openBox('locationBox');
+        double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
+        double distanciaRecorrida =
+            locationBox.get('totalDistance', defaultValue: 0.0);
+
         var response = await RioGasService.finalizarPedido(
-          int.parse(escenario), // Convert escenario to int
-          pedidoId,
-          pedidoTpo,
-          usuario,
-          '',
-          deviceId,
-          2,
-          int.parse(_selectedSubEstado!),
-          '',
-          _observaciones ?? '',
-          DateTime.now().toUtc().toIso8601String(),
-          '',
-          '',
-          currentLocation.latitude.toString(),
-          currentLocation.longitude.toString(),
-        );
+            int.parse(escenario), // Convert escenario to int
+            pedidoId,
+            pedidoTpo,
+            usuario,
+            '',
+            deviceId,
+            2,
+            int.parse(_selectedSubEstado!),
+            '',
+            _observaciones ?? '',
+            DateTime.now().toUtc().toIso8601String(),
+            '',
+            '',
+            currentLocation.latitude.toString(),
+            currentLocation.longitude.toString(),
+            velocidad, // Pass speed from Hive
+            distanciaRecorrida // Pass distance from Hive
+            );
 
         if (response != null) {
           var pedidosBox = await Hive.openBox('pedidosBox');

@@ -92,6 +92,14 @@ class _SettingsPageState extends State<SettingsPage> {
       var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
       sessionBox.put('firstLoginDone', true);
 
+      // Llamar al servicio RegistrarCierre antes de cerrar sesión
+      await RioGasService.registrarCierre(
+          int.tryParse(movil ?? '0') ?? 0,
+          deviceId ?? '',
+          idUsuario ?? '',
+          DateTime.now().toIso8601String(),
+          'Controlado');
+
       // Eliminar los datos de sesión de Hive
       await sessionBox.deleteFromDisk();
       await constantBox.deleteFromDisk();
