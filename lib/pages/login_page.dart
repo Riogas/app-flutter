@@ -791,7 +791,9 @@ class _LoginPageState extends State<LoginPage> {
       await _saveSession(currentLocation);
 
       // 🔹 Cerrar el diálogo de carga y navegar a HomePage
-      Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+      }
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => HomePage()),

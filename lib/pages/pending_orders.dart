@@ -23,8 +23,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   late Box pedidosBox;
   late String username = '';
   late String deviceId = '';
+  late Box sesionBox; // Declare the sesionBox variable
   late int movilId = 0;
-  late int escenarioId = 0;
   Timer? _hiveStateChecker; // Make it nullable
 
   @override
@@ -37,7 +37,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         username = constantBox.get('username', defaultValue: '');
         deviceId = constantBox.get('DeviceID', defaultValue: '');
         movilId = constantBox.get('MovilID', defaultValue: 0);
-        escenarioId = constantBox.get('EscenarioID', defaultValue: 0);
       });
     });
 
@@ -63,6 +62,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   Future<void> _initializeHive() async {
     constantBox = await Hive.openBox('constantBox');
     pedidosBox = await Hive.openBox('pedidosBox');
+    sesionBox = await Hive.openBox('sessionBox');
   }
 
   Map<String, Color> colorMap = {
@@ -176,6 +176,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     var box = await Hive.openBox('sessionBox');
     String deviceId = box.get('deviceId');
     String movilid = box.get('movil');
+    int escenarioId = int.tryParse(box.get('escenario').toString()) ?? 0;
+    String username = box.get('username');
 
     String inAux1 = movilid;
     String inAux2 = '';
@@ -201,7 +203,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         deviceId,
         lectDesc,
         fechaHoraCmbEst,
-        inAux1,
+        movilid,
         inAux2,
         latitud,
         longitud,

@@ -53,6 +53,9 @@ class _HomePageState extends State<HomePage>
   bool showPopup = false; // Add a flag for showing the popup
   late Box pedidosBox;
   bool _isFirstLoad = true; // Flag to suppress notifications on first load
+  late StreamSubscription<bool> _gpsSubscription;
+  final StreamController<bool> _gpsStreamController =
+      StreamController<bool>.broadcast();
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -113,6 +116,8 @@ class _HomePageState extends State<HomePage>
 
     // Obtener el valor de la constante 200
     _initializeRetryInterval();
+
+    _initGpsListener();
   }
 
   Future<void> _initializeRetryInterval() async {
@@ -154,6 +159,8 @@ class _HomePageState extends State<HomePage>
     _connectivityCheckTimer.cancel(); // Cancel the timer when disposing
     _connectionCheck.stopMonitoring();
     _connectionStatusNotifier.dispose(); // Dispose the notifier
+    _gpsSubscription.cancel();
+    _gpsStreamController.close();
     super.dispose();
   }
 
@@ -179,11 +186,20 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _initializeLocationService() async {
-    await _locationService.initializeLocationUpdates(context);
-    _locationSubscription = _locationService.locationStream.listen((location) {
-      // print('📍 Nueva ubicación recibida en HomePage: $location');
-    });
-    _locationServiceCompleter.complete();
+    try {
+      await _locationService.initializeLocationUpdates(context);
+      _locationSubscription =
+          _locationService.locationStream.listen((location) {
+        // print('📍 Nueva ubicación recibida en HomePage: $location');
+      });
+      _locationServiceCompleter.complete();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error al inicializar el servicio de ubicación: $e')),
+      );
+      _locationServiceCompleter.completeError(e);
+    }
   }
 
   Future<void> _loadSessionData() async {
@@ -276,6 +292,14 @@ class _HomePageState extends State<HomePage>
             .where((estado) => estado == 'Descargado')
             .length; // Count only 'Descargado' messages
       });
+    });
+  }
+
+  void _initGpsListener() {
+    _gpsSubscription = _gpsSubscription = Geolocator.getServiceStatusStream()
+        .map((ServiceStatus status) => status == ServiceStatus.enabled)
+        .listen((bool isEnabled) {
+      _gpsStreamController.add(isEnabled);
     });
   }
 
@@ -410,8 +434,16 @@ class _HomePageState extends State<HomePage>
 
     String inAux2 = '';
 
-    Position? position = await _locationService
-        .getCurrentLocation(); // Use LocationService's method
+    Position? position;
+    try {
+      position = await _locationService
+          .getCurrentLocation(); // Use LocationService's method
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al obtener la ubicación: $e')),
+      );
+    }
+
     if (position == null) {
       // print('⚠️ No se pudo obtener la ubicación. Usando valores por defecto.');
       position = Position(
@@ -427,6 +459,7 @@ class _HomePageState extends State<HomePage>
         speedAccuracy: 0.0,
       );
     }
+
     String latitud = position.latitude.toString();
     String longitud = position.longitude.toString();
 
@@ -435,7 +468,7 @@ class _HomePageState extends State<HomePage>
     String movil = box.get('movil');
     String username = box.get('username');
     String deviceId = box.get('deviceId');
-    String inAux1 = deviceId;
+    String inAux1 = movil;
 
     // Retrieve speed and distance from Hive
     var locationBox = await Hive.openBox('locationBox');

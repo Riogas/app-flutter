@@ -4,19 +4,50 @@ import 'package:geolocator/geolocator.dart'; // Import Geolocator package
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'order_detail_page.dart'; // Importa la nueva página de detalles
 import '../utils/constantes.dart'; // Importa la función getConstantValue
+import 'dart:async'; // Importa para usar StreamController
+import 'package:flutter/scheduler.dart';
 
-class CompletedOrdersPage extends StatelessWidget {
+class CompletedOrdersPage extends StatefulWidget {
+  @override
+  _CompletedOrdersPageState createState() => _CompletedOrdersPageState();
+}
+
+class _CompletedOrdersPageState extends State<CompletedOrdersPage> {
   final FirebaseService _firebaseService = FirebaseService();
+  final StreamController<bool> _gpsStreamController =
+      StreamController<bool>.broadcast();
+
+  @override
+  void initState() {
+    super.initState();
+    _startGpsListener();
+  }
+
+  void _startGpsListener() {
+    Geolocator.getServiceStatusStream().listen((ServiceStatus status) {
+      _gpsStreamController.add(status == ServiceStatus.enabled);
+    });
+  }
+
+  Stream<bool> get gpsStream => _gpsStreamController.stream;
 
   Future<bool> _isGpsEnabled(BuildContext context) async {
-    bool isLocationServiceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!isLocationServiceEnabled) {
+    try {
+      bool isLocationServiceEnabled =
+          await Geolocator.isLocationServiceEnabled();
+      if (!isLocationServiceEnabled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Por favor, active el GPS para continuar.')),
+        );
+        return false;
+      }
+      return true;
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Por favor, active el GPS para continuar.')),
+        SnackBar(content: Text('Error al verificar el estado del GPS: $e')),
       );
-      return false; // Explicitly return false if GPS is not enabled
+      return false;
     }
-    return true; // Return true if GPS is enabled
   }
 
   Future<String> _getConstantValue(String key) async {
@@ -25,33 +56,58 @@ class CompletedOrdersPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _isGpsEnabled(context),
-      builder: (context, gpsSnapshot) {
-        if (!gpsSnapshot.hasData || !gpsSnapshot.data!) {
+    return StreamBuilder<bool>(
+      stream: gpsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasData && !snapshot.data!) {
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('El GPS está desactivado. Por favor, actívelo.'),
+              ),
+            );
+          });
           return _buildBlockedView();
         }
-        return FutureBuilder<String>(
-          future: _getConstantValue('150'),
-          builder: (context, constant150Snapshot) {
-            if (!constant150Snapshot.hasData) {
-              return Center(child: CircularProgressIndicator());
+
+        return FutureBuilder<bool>(
+          future: _isGpsEnabled(context),
+          builder: (context, gpsSnapshot) {
+            if (!gpsSnapshot.hasData || !gpsSnapshot.data!) {
+              return _buildBlockedView();
             }
-            String constant150 = constant150Snapshot.data!;
+
             return FutureBuilder<String>(
-              future: _getConstantValue('151'),
-              builder: (context, constant151Snapshot) {
-                if (!constant151Snapshot.hasData) {
+              future: _getConstantValue('150'),
+              builder: (context, constant150Snapshot) {
+                if (!constant150Snapshot.hasData) {
                   return Center(child: CircularProgressIndicator());
                 }
-                String constant151 = constant151Snapshot.data!;
-                return _buildMainView(context, constant150, constant151);
+
+                String constant150 = constant150Snapshot.data!;
+                return FutureBuilder<String>(
+                  future: _getConstantValue('151'),
+                  builder: (context, constant151Snapshot) {
+                    if (!constant151Snapshot.hasData) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    String constant151 = constant151Snapshot.data!;
+                    return _buildMainView(context, constant150, constant151);
+                  },
+                );
               },
             );
           },
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _gpsStreamController.close();
+    super.dispose();
   }
 
   Widget _buildBlockedView() {

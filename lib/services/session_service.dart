@@ -32,7 +32,7 @@ class SessionService {
     String idSesion = _uuid.v4();
     String idTerminal = box.get('deviceId') ?? 'UnknownDevice';
     String infoDispositivo = await _getDeviceInfo();
-    String nombreUsuario = (box.get('NombreUsuario') ?? 'Sin Nombre').trim();
+    String nombreUsuario = (box.get('username') ?? 'Sin Nombre').trim();
     String versionAndroid = await _getAndroidVersion();
     int nivelBateria = await _getBatteryLevel();
     bool gpsActivado = await _isGpsEnabled();
@@ -62,6 +62,8 @@ class SessionService {
     );
     DocumentReference sessionDocRef = movilCollectionRef.doc(horaActual);
     DocumentReference ultimaDocRef = movilCollectionRef.doc('activo');
+    DocumentReference usuarioNivelDocRef =
+        fechaDocRef.collection('Usuario-$idUsuario').doc('activo');
 
     Map<String, dynamic> sessionData = {
       'distanciaRecorridaMts': distanciaRecorridaMts,
@@ -100,10 +102,6 @@ class SessionService {
         'Documento padre (fecha) asegurado en Firestore con FchHoraCreacion.',
       );
 
-      /*// ✅ Guardar la sesión actual
-      await sessionDocRef.set(sessionData);
-      print('Sesión guardada correctamente en Firestore.');
-      */
       // ✅ Verificar si existe un documento "activo"
       DocumentSnapshot activeDocSnapshot = await ultimaDocRef.get();
       if (activeDocSnapshot.exists) {
@@ -129,6 +127,13 @@ class SessionService {
         // 🔹 Eliminar el documento "activo" actual
         await ultimaDocRef.delete();
         print('Documento "activo" borrado correctamente.');
+
+        // 🔹 Eliminar el documento "activo" correspondiente en Usuario-$idUsuario
+        if (activeData['idUsuario'] == idUsuario) {
+          await usuarioNivelDocRef.delete();
+          print(
+              'Documento "activo" en Usuario-$idUsuario borrado correctamente.');
+        }
 
         final dir = await getApplicationDocumentsDirectory();
         final hiveDir = Directory(
@@ -156,6 +161,10 @@ class SessionService {
         // ✅ Crear el nuevo documento "activo"
         await ultimaDocRef.set(sessionData);
         print('Documento "activo" creado correctamente.');
+
+        // ✅ Crear el nuevo documento "activo" correspondiente en Usuario-$idUsuario
+        await usuarioNivelDocRef.set(sessionData);
+        print('Documento "activo" en Usuario-$idUsuario creado correctamente.');
       }
     } catch (e) {
       print('❌ Error al guardar la sesión en Firestore: $e');

@@ -258,6 +258,14 @@ class _SettingsPageState extends State<SettingsPage> {
         String escenarioId = box.get('escenario', defaultValue: '0');
         String movil = box.get('movil');
 
+        // Log the data being sent to the console
+        print('Datos enviados a downloadAndOpenPDF:');
+        print('Año: $year, Mes: $month, Día: $day');
+        print('Hora: $hour, Minutos: $minutes, Segundos: $seconds');
+        print('Usuario: $idUsuario, Equipo: $deviceId');
+        print(
+            'Agencia ID: 0, Escenario ID: ${int.tryParse(escenarioId) ?? 0}, Móvil ID: ${int.tryParse(movil) ?? 0}');
+
         // Call the function to download and open the PDF
         await RioGasService.downloadAndOpenPDF(
           year: year,
@@ -268,7 +276,7 @@ class _SettingsPageState extends State<SettingsPage> {
           seconds: seconds,
           usuMobileLogin: idUsuario ?? '',
           termMobileEquipo: deviceId ?? '',
-          agenciaId: 80,
+          agenciaId: 0,
           escenarioId: int.tryParse(escenarioId) ?? 0,
           movilId: int.tryParse(movil) ?? 0,
         );
