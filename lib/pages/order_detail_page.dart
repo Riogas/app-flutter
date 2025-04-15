@@ -376,6 +376,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
         double distanciaRecorrida =
             locationBox.get('totalDistance', defaultValue: 0.0);
+        String movil = box.get('movil').toString(); // Get movil from sessionBox
 
         var response = await RioGasService.finalizarPedido(
             int.parse(escenario), // Convert escenario to int
@@ -389,7 +390,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             '',
             _observaciones ?? '',
             DateTime.now().toUtc().toIso8601String(),
-            '',
+            movil,
             '',
             currentLocation.latitude.toString(),
             currentLocation.longitude.toString(),

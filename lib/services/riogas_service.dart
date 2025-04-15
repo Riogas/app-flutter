@@ -211,25 +211,61 @@ class RioGasService {
       }
 
       if (endpoint == 'RegistrarCoordenadas') {
-        print('📦 Processing RegistrarCoordenadas...');
-        print('📦 RegistrarCoordenadas Body: $body');
+        /*print('📦 Processing RegistrarCoordenadas...');
+        print('📦 RegistrarCoordenadas Body: $body');*/
       }
 
       if (endpoint == 'RegistrarCoordenadasBatch') {
         // Ensure Latitud, longitud, and FechaHora are inside "data"
+        var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
+        // Filter pending requests for 'RegistrarCoordenadas'
+        List<Map<String, dynamic>> pendingRequests = failedRequestsBox.values
+            .where((request) => request['endpoint'] == 'RegistrarCoordenadas')
+            .map((request) => Map<String, dynamic>.from(request['payload']))
+            .toList();
+
+        // Sort by FechaHora to ensure chronological order
+        pendingRequests
+            .sort((a, b) => a['FechaHora'].compareTo(b['FechaHora']));
+
+        // Keep only the last 30 requests
+        if (pendingRequests.length > 30) {
+          pendingRequests =
+              pendingRequests.sublist(pendingRequests.length - 30);
+        }
+
+        // Add the current request to the batch
+        pendingRequests.add({
+          'Latitud': body['Latitud'],
+          'longitud': body['longitud'],
+          'FechaHora': body['FechaHora'],
+        });
+
+        // Ensure the batch size is still 30
+        if (pendingRequests.length > 30) {
+          pendingRequests.removeAt(0); // Remove the oldest entry
+        }
+
+        // Update the body with the batch data
         body = {
           ...body,
-          'data': jsonEncode([
-            {
-              'Latitud': body['Latitud'],
-              'longitud': body['longitud'],
-              'FechaHora': body['FechaHora'],
-            }
-          ])
+          'data': jsonEncode(pendingRequests),
         };
         body.remove('Latitud');
         body.remove('longitud');
         body.remove('FechaHora');
+
+        // Remove all 'RegistrarCoordenadas' entries from the failedRequestsBox
+        final keysToRemove = failedRequestsBox.keys.where((key) {
+          var request = failedRequestsBox.get(key);
+          return request != null &&
+              request['endpoint'] == 'RegistrarCoordenadas';
+        }).toList();
+
+        for (var key in keysToRemove) {
+          await failedRequestsBox.delete(key);
+        }
       }
 
       print('🌐 Sending request to endpoint: $endpoint with payload: $body');
@@ -457,6 +493,8 @@ class RioGasService {
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
       ) {
+    velocidad = double.parse(velocidad.toStringAsFixed(2));
+    distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
     return _post('DescargaLecturaMensajes', {
       'EscenarioId': escenarioId,
       'MovilId': movilId,
@@ -491,6 +529,8 @@ class RioGasService {
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
       ) {
+    velocidad = double.parse(velocidad.toStringAsFixed(2));
+    distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
     return _post('DescargaLecturaPedidos', {
       'EscenarioId': escenarioId,
       'PedidoId': pedidoId,
@@ -528,6 +568,8 @@ class RioGasService {
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
       ) {
+    velocidad = double.parse(velocidad.toStringAsFixed(2));
+    distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
     return _post('FinalizarPedido', {
       'EscenarioId': escenarioId,
       'PedidoId': pedidoId,
@@ -564,6 +606,8 @@ class RioGasService {
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
       ) {
+    velocidad = double.parse(velocidad.toStringAsFixed(2));
+    distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
     return _post('ActualizarMoviles', {
       'EscenarioId': escenarioId,
       'MovilId': movilId,
@@ -641,7 +685,17 @@ class RioGasService {
       double distanciaRecorrida, // Add distance parameter
       double velocidad // Add speed parameter
       ) async {
+    velocidad = double.parse(velocidad.toStringAsFixed(2));
+    distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
     try {
+      var box = await Hive.openBox('sessionBox');
+      String? escenarioId = box.get('escenario');
+      String? username = box.get('username');
+      int? escenarioIdInt =
+          escenarioId != null ? int.tryParse(escenarioId) : null;
+      if (escenarioIdInt == null) {
+        throw Exception('Invalid escenarioId: $escenarioId');
+      }
       // Use the specified structure for the REST service request
       return await _post('RegistrarCoordenadas', {
         'token': token,
@@ -651,7 +705,9 @@ class RioGasService {
         'DeviceId': deviceId,
         'FechaHora': fechaHora,
         'DistanciaRecorrida': distanciaRecorrida, // Pass distance to service
-        'Velocidad': velocidad // Pass speed to service
+        'Velocidad': velocidad, // Pass speed to service
+        'EscenarioId': escenarioIdInt,
+        'usuario': username
       });
     } catch (e) {
       // Save the failed request in the specified Hive structure

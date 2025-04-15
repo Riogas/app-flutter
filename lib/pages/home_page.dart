@@ -339,7 +339,9 @@ class _HomePageState extends State<HomePage>
 
           // Retrieve speed and distance from Hive
           var locationBox = await Hive.openBox('locationBox');
-          double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
+          double velocidad = double.parse(locationBox
+              .get('lastSpeed', defaultValue: 0.0)
+              .toStringAsFixed(2));
           double distanciaRecorrida =
               locationBox.get('totalDistance', defaultValue: 0.0);
 
@@ -430,7 +432,7 @@ class _HomePageState extends State<HomePage>
     Map<String, dynamic> pedido,
     int pedidoId,
   ) async {
-    String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? '1' : '2';
+    String pedidoTpo = pedido['Tipo'] == 'PEDIDOS' ? 'PEDIDOS' : 'SERVICES';
     String lectDesc = 'DESCARGA';
     String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
@@ -474,7 +476,8 @@ class _HomePageState extends State<HomePage>
 
     // Retrieve speed and distance from Hive
     var locationBox = await Hive.openBox('locationBox');
-    double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
+    double velocidad = double.parse(
+        locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2));
     double distanciaRecorrida =
         locationBox.get('totalDistance', defaultValue: 0.0);
 
@@ -1041,8 +1044,9 @@ class _HomePageState extends State<HomePage>
                       await _firebaseService.updateMovilEstado(newEstadoNro);
                       // Call the actualizarMoviles service
                       var locationBox = await Hive.openBox('locationBox');
-                      double velocidad =
-                          locationBox.get('lastSpeed', defaultValue: 0.0);
+                      double velocidad = double.parse(locationBox
+                          .get('lastSpeed', defaultValue: 0.0)
+                          .toStringAsFixed(2));
                       double distanciaRecorrida =
                           locationBox.get('totalDistance', defaultValue: 0.0);
 

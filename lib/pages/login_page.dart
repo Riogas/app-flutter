@@ -860,21 +860,31 @@ class _LoginPageState extends State<LoginPage> {
         .toIso8601String()
         .split('T')[0]
         .replaceAll('-', '');
-    String path = 'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
+    String pathMovil =
+        'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
+    String pathUsuario =
+        'Sesiones-$escenario / $hoy / Usuario-$idUsuario / activo';
 
-    print('📄 Consultando documento Firestore: $path');
+    print('📄 Consultando documento Firestore: $pathMovil');
 
-    DocumentReference ultimaDocRef = FirebaseFirestore.instance
+    DocumentReference ultimaDocRefMovil = FirebaseFirestore.instance
         .collection('Sesiones-$escenario')
         .doc(hoy)
         .collection('Movil-$selectedMovil')
         .doc('activo');
 
-    DocumentSnapshot activeDocSnapshot;
+    DocumentReference ultimaDocRefUsuario = FirebaseFirestore.instance
+        .collection('Sesiones-$escenario')
+        .doc(hoy)
+        .collection('Usuario-$idUsuario')
+        .doc('activo');
+
+    DocumentSnapshot activeDocSnapshotMovil;
+    DocumentSnapshot activeDocSnapshotUsuario;
 
     try {
-      activeDocSnapshot = await ultimaDocRef.get();
-      print('✅ Documento Firestore obtenido correctamente.');
+      activeDocSnapshotMovil = await ultimaDocRefMovil.get();
+      print('✅ Documento Firestore de Movil obtenido correctamente.');
     } catch (e) {
       if (e is FirebaseException && e.code == 'permission-denied') {
         print('❌ Error de permisos al acceder a Firestore: ${e.message}');
@@ -891,8 +901,27 @@ class _LoginPageState extends State<LoginPage> {
       }
     }
 
-    if (activeDocSnapshot.exists) {
-      var data = activeDocSnapshot.data() as Map<String, dynamic>;
+    try {
+      activeDocSnapshotUsuario = await ultimaDocRefUsuario.get();
+      print('✅ Documento Firestore de Usuario obtenido correctamente.');
+    } catch (e) {
+      if (e is FirebaseException && e.code == 'permission-denied') {
+        print('❌ Error de permisos al acceder a Firestore: ${e.message}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de permisos al acceder a Firestore.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return false;
+      } else {
+        print('❌ Error inesperado al acceder a Firestore: $e');
+        rethrow;
+      }
+    }
+
+    if (activeDocSnapshotMovil.exists) {
+      var data = activeDocSnapshotMovil.data() as Map<String, dynamic>;
       if (data['idUsuario'] != idUsuario || data['idTerminal'] != idTerminal) {
         _wasActiveSessionForAnotherUser = true;
         bool shouldProceed = await _showActiveSessionDialog(
@@ -902,6 +931,17 @@ class _LoginPageState extends State<LoginPage> {
         return shouldProceed;
       }
     }
+
+    if (activeDocSnapshotUsuario.exists) {
+      var data = activeDocSnapshotUsuario.data() as Map<String, dynamic>;
+      _wasActiveSessionForAnotherUser = true;
+      bool shouldProceed = await _showActiveSessionDialog(
+        selectedMovil!,
+        data['nomUsuario'],
+      );
+      return shouldProceed;
+    }
+
     return true;
   }
 

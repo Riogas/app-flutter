@@ -209,7 +209,8 @@ class _MessagePageState extends State<MessagePage> {
     //}
 
     var locationBox = await Hive.openBox('locationBox');
-    double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
+    double velocidad = double.parse(
+        locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2));
     double distanciaRecorrida =
         locationBox.get('totalDistance', defaultValue: 0.0);
 

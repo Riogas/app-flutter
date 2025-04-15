@@ -465,7 +465,8 @@ class LocationService {
 
         String fechaHora = DateTime.now().toUtc().toIso8601String();
 
-        double velocidad = 0.0; // Placeholder for speed calculation
+        double velocidad = double.parse(
+            position.speed.toStringAsFixed(2)); // Ensure speed is rounded
         double distanciaRecorrida =
             _totalDistance; // Use total distance tracked
 
@@ -479,7 +480,7 @@ class LocationService {
             deviceId,
             fechaHora,
             distanciaRecorrida, // Pass total distance
-            velocidad // Pass speed (currently 0.0)
+            velocidad // Pass speed (rounded to 2 decimal places)
             );
       });
     }
