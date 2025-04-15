@@ -124,7 +124,9 @@ class _HomePageState extends State<HomePage>
     final retryIntervalString = await getConstantValue('200');
     final retryInterval = int.tryParse(retryIntervalString ?? '');
 
-    if (retryInterval != null) {
+    print("valor de la constante 200: $retryIntervalString");
+
+    if (retryInterval != null && retryInterval > 0) {
       // Llamar periódicamente a monitorAndSendErrors solo si el valor es válido
       Timer.periodic(Duration(seconds: retryInterval), (timer) async {
         print("Monitor de errores activado.");

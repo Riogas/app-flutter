@@ -145,6 +145,13 @@ class RioGasService {
 
       try {
         String endpoint = request['endpoint'];
+
+        // Skip processing for the 'RegistrarErrores' endpoint
+        if (endpoint == 'RegistrarErrores') {
+          print('⚠️ Skipping request to endpoint: $endpoint');
+          continue;
+        }
+
         Map<String, dynamic> payload = Map<String, dynamic>.from(
           request['payload'] as Map,
         );
@@ -786,6 +793,10 @@ class RioGasService {
   static Future<void> registrarErrores() async {
     var errorBox = await Hive.openBox('errorBox');
 
+    String? constantValue = await getConstantValue('200');
+    if (constantValue != null) {
+      return;
+    }
     // Check if there are errors without the "enviadoARioGas" mark
     List<dynamic> errorsToSend = errorBox.keys.where((key) {
       var error = errorBox.get(key);
@@ -801,6 +812,12 @@ class RioGasService {
       var error = errorBox.get(key);
       if (error != null && error is Map) {
         try {
+          // Clean additionalInfo by removing quotes
+          if (error['additionalInfo'] != null) {
+            error['additionalInfo'] =
+                error['additionalInfo'].replaceAll('"', '').replaceAll("'", '');
+          }
+
           // Prepare the payload
           Map<String, dynamic> payload = {
             'token': token,
@@ -829,14 +846,19 @@ class RioGasService {
 
     // Listen for new errors being added to the box
     errorBox.watch().listen((event) async {
-      var newErrorsToSend = errorBox.keys.where((key) {
-        var error = errorBox.get(key);
-        return error != null && error is Map && error['enviadoARioGas'] != true;
-      }).toList();
+      String? constantValue = await getConstantValue('200');
+      if (constantValue != null) {
+        var newErrorsToSend = errorBox.keys.where((key) {
+          var error = errorBox.get(key);
+          return error != null &&
+              error is Map &&
+              error['enviadoARioGas'] != true;
+        }).toList();
 
-      if (newErrorsToSend.isNotEmpty) {
-        print('📦 New errors detected. Sending to RioGas.');
-        await registrarErrores();
+        if (newErrorsToSend.isNotEmpty) {
+          print('📦 New errors detected. Sending to RioGas.');
+          await registrarErrores();
+        }
       }
     });
   }
@@ -906,7 +928,7 @@ class RioGasService {
               'endpoint': error.endpoint,
               'payload': error.payload,
               'username': sessionBox.get('username'),
-              'deviceId': sessionBox.get('deviceId'),
+              'DeviceId': sessionBox.get('deviceId'),
               'movil': sessionBox.get('movil'),
             };
 
