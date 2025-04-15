@@ -927,6 +927,7 @@ class _LoginPageState extends State<LoginPage> {
         bool shouldProceed = await _showActiveSessionDialog(
           selectedMovil!,
           data['nomUsuario'],
+          'Usted se está intentando conectar al móvil $selectedMovil, en el cual está logueado el usuario ${data['nomUsuario']}. ¿Desea continuar?',
         );
         return shouldProceed;
       }
@@ -938,6 +939,7 @@ class _LoginPageState extends State<LoginPage> {
       bool shouldProceed = await _showActiveSessionDialog(
         selectedMovil!,
         data['nomUsuario'],
+        'Su usuario ya está logueado en el movil ${data['movil']}. ¿Desea continuar?',
       );
       return shouldProceed;
     }
@@ -948,6 +950,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<bool> _showActiveSessionDialog(
     String selectedMovil,
     String activeUser,
+    String contentText,
   ) async {
     bool shouldProceed = false;
     await showDialog(
@@ -955,9 +958,7 @@ class _LoginPageState extends State<LoginPage> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Sesión Activa Encontrada'),
-          content: Text(
-            'Usted se está intentando conectar al móvil $selectedMovil, en el cual está logueado el usuario $activeUser. ¿Desea continuar?',
-          ),
+          content: Text(contentText),
           actions: <Widget>[
             TextButton(
               onPressed: () {

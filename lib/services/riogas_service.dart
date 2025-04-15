@@ -275,6 +275,8 @@ class RioGasService {
         body: jsonEncode({...body, 'token': token}),
       );
 
+      print('📦 Response endpoint: $endpoint | $response.body ');
+
       if (response.statusCode == 200) {
         _lastErrorTime = null; // Reset error tracking on success
         await _updateConnectionStatus(true); // Update connection status

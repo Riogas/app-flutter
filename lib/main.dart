@@ -24,6 +24,7 @@ import 'package:dio/dio.dart'; // Importa dio para la descarga
 import 'package:open_file/open_file.dart'; // Importa open_file para abrir el archivo descargado
 import 'package:path_provider/path_provider.dart'; // Importa path_provider para obtener directorios
 import 'package:permission_handler/permission_handler.dart'; // Importa permission_handler para manejar permisos
+import 'package:flutter/services.dart'; // Importa SystemNavigator
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -191,7 +192,9 @@ Future<void> _validateAppVersion() async {
     if (response['OK'] == 1) {
       _showMessage(response['message']);
     } else if (response['OK'] == 2) {
-      _showUpdateDialog(response['message'], response['link']);
+      bool isRequired =
+          response['Requerida'] ?? false; // Obtiene el valor de 'Requerida'
+      _showUpdateDialog(response['message'], response['link'], isRequired);
     }
   }
 }
@@ -357,7 +360,7 @@ void _showMessage(String message) {
   });
 }
 
-void _showUpdateDialog(String message, String link) {
+void _showUpdateDialog(String message, String link, bool isRequired) {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     showDialog(
       context: navigatorKey.currentContext!,
@@ -369,6 +372,10 @@ void _showUpdateDialog(String message, String link) {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
+                if (isRequired) {
+                  // Cierra completamente la aplicación si es requerido
+                  SystemNavigator.pop();
+                }
               },
               child: Text('Cancelar'),
             ),

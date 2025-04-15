@@ -311,8 +311,8 @@ class FirebaseService {
     Stream<List<DocumentSnapshot>> pedidosCumplidosStream =
         pedidosCumplidosQuery
             .orderBy(
-              'FchHoraPara',
-              descending: false,
+              'FchHoraMaxEntComp',
+              descending: true,
             )
             .snapshots()
             .handleError((error) async {
@@ -398,7 +398,7 @@ class FirebaseService {
             .collection(collectionName)
             .where('Movil', isEqualTo: movil)
             .where('VisibleEnApp', isEqualTo: 'S')
-            .where('FchMsj', isEqualTo: fechaActual)
+            //.where('FchMsj', isEqualTo: fechaActual)
             .snapshots()
             .handleError((error) async {
           // print('❌ Error in Firestore stream: $error');
