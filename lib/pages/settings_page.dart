@@ -92,6 +92,9 @@ class _SettingsPageState extends State<SettingsPage> {
       var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
       sessionBox.put('firstLoginDone', true);
 
+      // Establecer bandera para logout controlado
+      sessionBox.put('logoutControlled', true);
+
       // Llamar al servicio RegistrarCierre antes de cerrar sesión
       await RioGasService.registrarCierre(
           int.tryParse(movil ?? '0') ?? 0,
@@ -100,10 +103,65 @@ class _SettingsPageState extends State<SettingsPage> {
           DateTime.now().toIso8601String(),
           'Controlado');
 
-      // Eliminar los datos de sesión de Hive
-      await sessionBox.deleteFromDisk();
-      await constantBox.deleteFromDisk();
-      await mensajesBox.deleteFromDisk();
+      // Buscar y manejar el documento activo para el móvil y el usuario
+      String escenarioId = sessionBox.get('escenario', defaultValue: '0');
+      String movilId = sessionBox.get('movil', defaultValue: '0');
+      String fechaActualStr = DateTime.now()
+          .toUtc()
+          .subtract(Duration(hours: 3))
+          .toIso8601String()
+          .split('T')[0]
+          .replaceAll('-', '');
+
+      DocumentReference fechaDocRef = FirebaseFirestore.instance
+          .collection('Sesiones-$escenarioId')
+          .doc(fechaActualStr);
+      DocumentReference movilActivoDocRef =
+          fechaDocRef.collection('Movil-$movilId').doc('activo');
+      DocumentReference usuarioActivoDocRef =
+          fechaDocRef.collection('Usuario-$idUsuario').doc('activo');
+
+      try {
+        // Manejar el documento activo del móvil
+        DocumentSnapshot activeDocSnapshot = await movilActivoDocRef.get();
+        if (activeDocSnapshot.exists) {
+          var activeData = activeDocSnapshot.data() as Map<String, dynamic>;
+
+          // Agregar el campo "logout" con el valor "Controlado"
+          activeData['logout'] = 'Controlado';
+
+          // Crear una copia del documento "activo" con el nombre basado en la hora actual
+          String horaActual =
+              DateTime.now().toIso8601String().split('T')[1].split('.')[0];
+          DocumentReference backupDocRef =
+              fechaDocRef.collection('Movil-$movilId').doc(horaActual);
+          await backupDocRef.set(activeData);
+
+          // Eliminar el documento "activo"
+          await movilActivoDocRef.delete();
+        }
+
+        // Manejar el documento activo del usuario
+        DocumentSnapshot usuarioDocSnapshot = await usuarioActivoDocRef.get();
+        if (usuarioDocSnapshot.exists) {
+          var usuarioData = usuarioDocSnapshot.data() as Map<String, dynamic>;
+
+          // Agregar el campo "logout" con el valor "Controlado"
+          usuarioData['logout'] = 'Controlado';
+
+          // Crear una copia del documento "activo" con el nombre basado en la hora actual
+          String horaActual =
+              DateTime.now().toIso8601String().split('T')[1].split('.')[0];
+          DocumentReference usuarioBackupDocRef =
+              fechaDocRef.collection('Usuario-$idUsuario').doc(horaActual);
+          await usuarioBackupDocRef.set(usuarioData);
+
+          // Eliminar el documento "activo"
+          await usuarioActivoDocRef.delete();
+        }
+      } catch (e) {
+        print('Error al manejar los documentos activos: $e');
+      }
 
       // Llamar a SessionService para eliminar el documento activo y crear una copia
       SessionService sessionService = SessionService();
@@ -117,6 +175,11 @@ class _SettingsPageState extends State<SettingsPage> {
         versionApp: '1.0.0', // Reemplaza con la versión real de la app
         tipoDeCierreDeSesion: 'logoutUser',
       );
+
+      // Eliminar los datos de sesión de Hive
+      await sessionBox.deleteFromDisk();
+      await constantBox.deleteFromDisk();
+      await mensajesBox.deleteFromDisk();
 
       // Navegar a la pantalla de inicio de sesión
       Future.microtask(() {

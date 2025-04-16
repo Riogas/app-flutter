@@ -59,7 +59,7 @@ class _HomePageState extends State<HomePage>
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
-    CompletedOrdersPage(),
+    /*CompletedOrdersPage(),*/
     MapPage(),
     MessagePage(),
     SettingsPage(),
@@ -576,20 +576,22 @@ class _HomePageState extends State<HomePage>
       actions: [
         TextButton(
           onPressed: () async {
-            var box = await Hive.openBox('sessionBox');
-            String? deviceId = box.get('deviceId');
-            String? idUsuario = box.get('username');
-            await RioGasService.registrarCierre(
-              int.tryParse(movil ?? '0') ?? 0,
-              deviceId ?? '',
-              idUsuario ?? '',
-              DateTime.now().toIso8601String(),
-              'DeslogueoForzado',
-            );
-            await box.clear();
-            await Hive.openBox(
-              'mensajesBox',
-            ).then((box) => box.clear()); // Clear mensajesBox
+            if (Hive.isBoxOpen('sessionBox')) {
+              var box = Hive.box('sessionBox');
+              String? deviceId = box.get('deviceId');
+              String? idUsuario = box.get('username');
+              await RioGasService.registrarCierre(
+                int.tryParse(movil ?? '0') ?? 0,
+                deviceId ?? '',
+                idUsuario ?? '',
+                DateTime.now().toIso8601String(),
+                'DeslogueoForzado',
+              );
+              await box.clear();
+              await Hive.openBox(
+                'mensajesBox',
+              ).then((box) => box.clear()); // Clear mensajesBox
+            }
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => LoginPage()),
               (Route<dynamic> route) => false,
@@ -882,11 +884,18 @@ class _HomePageState extends State<HomePage>
                       // );
                     }
                   } else {
-                    return _showForcedLogoutDialog(
-                      context,
-                      'Desconocido',
-                      'Desconocido',
-                    );
+                    if (Hive.isBoxOpen('sessionBox')) {
+                      var box = Hive.box('sessionBox');
+                      bool logoutControlled =
+                          box.get('logoutControlled', defaultValue: false);
+                      if (!logoutControlled) {
+                        return _showForcedLogoutDialog(
+                          context,
+                          'Desconocido',
+                          'Desconocido',
+                        );
+                      }
+                    }
                   }
 
                   return _widgetOptions.elementAt(_selectedIndex);
@@ -901,7 +910,7 @@ class _HomePageState extends State<HomePage>
       bottomNavigationBar: BottomNavigationBar(
         items: [
           _buildBottomNavigationBarItem(Icons.list, 'Pendientes', _newOrders),
-          _buildBottomNavigationBarItem(Icons.check_circle, 'Finalizados', 0),
+          //_buildBottomNavigationBarItem(Icons.check_circle, 'Finalizados', 0),
           _buildBottomNavigationBarItem(Icons.map, 'Mapa', 0),
           _buildBottomNavigationBarItem(
             Icons.message,

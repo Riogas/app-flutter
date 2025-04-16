@@ -274,7 +274,7 @@ class FirebaseService {
     yield* pedidosStream;
   }
 
-  Stream<List<DocumentSnapshot>> getPedidosCumplidosStream() async* {
+  /*Stream<List<DocumentSnapshot>> getPedidosCumplidosStream() async* {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String usuario = box.get('username', defaultValue: '0').toString();
@@ -342,7 +342,7 @@ class FirebaseService {
       'PedidosCumplidosStream',
     ); // Monitorea el stream
     yield* pedidosCumplidosStream;
-  }
+  }*/
 
   Stream<List<DocumentSnapshot>> getConstantesStream() async* {
     var box = await Hive.openBox('sessionBox');
