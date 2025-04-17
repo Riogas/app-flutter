@@ -26,6 +26,8 @@ class _MessagePageState extends State<MessagePage> {
       FirebaseMessaging.instance; // Add FirebaseMessaging instance
   List<String> _readMessageIds = [];
   StreamSubscription<List<DocumentSnapshot>>? _messageSubscription;
+  StreamSubscription<ServiceStatus>?
+      _gpsStatusSubscription; // Subscription to listen to GPS status changes
   bool _isLocationServiceEnabled = true;
 
   @override
@@ -35,11 +37,13 @@ class _MessagePageState extends State<MessagePage> {
     _initializeNotifications();
     _listenToMessages();
     _setupFCM(); // Initialize FCM for background notifications
+    _listenToGPSChanges(); // Listen to GPS status changes
   }
 
   @override
   void dispose() {
     _messageSubscription?.cancel();
+    _gpsStatusSubscription?.cancel(); // Cancel GPS status subscription
     super.dispose();
   }
 
@@ -291,6 +295,15 @@ class _MessagePageState extends State<MessagePage> {
         _readMessageIds.clear();
       });
     }
+  }
+
+  void _listenToGPSChanges() {
+    _gpsStatusSubscription =
+        Geolocator.getServiceStatusStream().listen((ServiceStatus status) {
+      setState(() {
+        _isLocationServiceEnabled = status == ServiceStatus.enabled;
+      });
+    });
   }
 
   @override

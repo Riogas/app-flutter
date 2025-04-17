@@ -176,10 +176,14 @@ class _SettingsPageState extends State<SettingsPage> {
         tipoDeCierreDeSesion: 'logoutUser',
       );
 
+      var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
       // Eliminar los datos de sesión de Hive
       await sessionBox.deleteFromDisk();
       await constantBox.deleteFromDisk();
       await mensajesBox.deleteFromDisk();
+      await failedRequestsBox
+          .deleteFromDisk(); //Cambiar por el momento se matiene asi para no tener que hacer cambios en el resto de la app
 
       // Navegar a la pantalla de inicio de sesión
       Future.microtask(() {

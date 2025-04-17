@@ -156,6 +156,13 @@ class RioGasService {
           request['payload'] as Map,
         );
 
+        // Add a defensive flag to prevent repeated processing
+        if (request['processed'] == true) {
+          print(
+              '⚠️ Request with key $key already marked as processed. Skipping.');
+          continue;
+        }
+
         print(
             '🌐 Sending request to endpoint: $endpoint with payload: $payload');
         var response = await _post(endpoint, payload);
@@ -164,6 +171,15 @@ class RioGasService {
 
         if (response != null) {
           print('✅ Request to $endpoint processed successfully.');
+
+          // Mark the request as processed before attempting deletion
+          await failedRequestsBox.put(key, {...request, 'processed': true});
+          print('📝 Marked request with key $key as processed.');
+
+          // Attempt to delete the request
+          await failedRequestsBox.delete(key);
+          print('🗑️ Deleted successfully processed request with key: $key.');
+
           if (endpoint == 'FinalizarPedido' &&
               payload.containsKey('PedidoId')) {
             var pedidosBox = await Hive.openBox('pedidosBox');
@@ -173,8 +189,6 @@ class RioGasService {
               print('📦 Updated pedidoId $pedidoId to "Procesando".');
             }
           }
-          await failedRequestsBox.delete(key);
-          print('🗑️ Deleted successfully processed request with key: $key.');
         } else {
           try {
             print('⚠️ Request to $endpoint failed.');
@@ -818,7 +832,7 @@ class RioGasService {
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
     // Check if the box contains more than 500 records
-    if (failedRequestsBox.length > 500) {
+    if (failedRequestsBox.length > 50) {
       // print('⚠️ More than 500 records found. Clearing the box.');
       await failedRequestsBox.clear(); // Clear all records
       // print('✅ All records cleared from failedRequestsBox.');

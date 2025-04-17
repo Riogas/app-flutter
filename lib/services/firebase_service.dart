@@ -135,6 +135,40 @@ class FirebaseService {
     );
   }
 
+  void monitorStreamWithReconnect<T>(
+      Stream<T> stream, String streamName, Function reconnectCallback) {
+    stream.listen(
+      (event) async {
+        // ...existing code...
+        var conexionBox = await Hive.openBox('conexionBox');
+        DateTime now = DateTime.now();
+        conexionBox.put('ConexionFirestore', true);
+        conexionBox.put('lastSuccessfulConnection', now.toIso8601String());
+      },
+      onError: (error) async {
+        // ...existing code...
+        var conexionBox = await Hive.openBox('conexionBox');
+        conexionBox.put('ConexionFirestore', false);
+        if (error is FirebaseException && error.code == 'permission-denied') {
+          await _logFirestorePermissionError(
+              error.message ?? 'Permission denied');
+        } else {
+          await _logError('Stream Error', error.toString());
+        }
+        // Attempt to reconnect
+        reconnectCallback();
+      },
+      onDone: () async {
+        // ...existing code...
+        var conexionBox = await Hive.openBox('conexionBox');
+        conexionBox.put('ConexionFirestore', false);
+        // Attempt to reconnect
+        reconnectCallback();
+      },
+      cancelOnError: true,
+    );
+  }
+
   Stream<Map<String, dynamic>?> getSesionesStream() async* {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
