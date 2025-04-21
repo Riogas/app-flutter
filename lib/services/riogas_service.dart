@@ -146,8 +146,9 @@ class RioGasService {
       try {
         String endpoint = request['endpoint'];
 
-        // Skip processing for the 'RegistrarErrores' endpoint
-        if (endpoint == 'RegistrarErrores') {
+        // Skip processing for the 'RegistrarErrores' and 'RegistrarCoordenadas' endpoints
+        if (endpoint == 'RegistrarErrores' ||
+            endpoint == 'RegistrarCoordenadas') {
           print('⚠️ Skipping request to endpoint: $endpoint');
           continue;
         }
@@ -192,13 +193,14 @@ class RioGasService {
         } else {
           try {
             print('⚠️ Request to $endpoint failed.');
-            // ...existing code for handling failed requests...
+            print('📦 Failed request details: Key: $key, Payload: $payload');
           } catch (e) {
             print('❌ Error while handling failed request: $e');
           }
         }
       } catch (e) {
         print('❌ Error processing request with key $key: $e');
+        print('📦 Failed request details: $request');
         if (request['endpoint'] == 'FinalizarPedido' &&
             request['payload'].containsKey('PedidoId')) {
           var pedidosBox = await Hive.openBox('pedidosBox');
@@ -212,6 +214,11 @@ class RioGasService {
     }
 
     print('🔄 Finished processing pending requests.');
+    print(
+        '📦 Remaining requests in failedRequestsBox: ${failedRequestsBox.length}');
+    failedRequestsBox.toMap().forEach((key, value) {
+      print('📦 Remaining request key: $key, value: $value');
+    });
   }
 
   static Future<Map<String, dynamic>?> _post(
@@ -282,30 +289,41 @@ class RioGasService {
         }
       }
 
-      print('🌐 Sending request to endpoint: $endpoint with payload: $body');
-      final response = await http.post(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: headers,
-        body: jsonEncode({...body, 'token': token}),
-      );
-
-      print('📦 Response endpoint: $endpoint | $response.body ');
-
-      if (response.statusCode == 200) {
-        _lastErrorTime = null; // Reset error tracking on success
-        await _updateConnectionStatus(true); // Update connection status
-        return jsonDecode(response.body);
-      } else {
-        if (endpoint != 'RegistrarCoordenadasBatch') {
-          await _saveFailedRequest(endpoint, body); // Save failed request
-        }
-        await _logError(
-          'HTTP Error',
-          'Código de respuesta: ${response.statusCode}',
-          response.body,
-          endpoint,
-          jsonEncode({...body, 'token': token}),
+      try {
+        print('🌐 Sending request to endpoint: $endpoint with payload: $body');
+        final response = await http.post(
+          Uri.parse('$baseUrl$endpoint'),
+          headers: headers,
+          body: jsonEncode({...body, 'token': token}),
         );
+
+        print('📦 Response endpoint: $endpoint | $response.body ');
+
+        if (response.statusCode == 200) {
+          print('? Response endpoint: $endpoint | ${response.body}');
+          _lastErrorTime = null; // Reset error tracking on success
+          await _updateConnectionStatus(true); // Update connection status
+          return jsonDecode(response.body);
+        } else {
+          print(
+              '? Error response endpoint: $endpoint | Status Code: ${response.statusCode} | Body: ${response.body}');
+          if (endpoint != 'RegistrarCoordenadasBatch') {
+            await _saveFailedRequest(endpoint, body); // Save failed request
+          }
+          await _logError(
+            'HTTP Error',
+            'Código de respuesta: ${response.statusCode}',
+            response.body,
+            endpoint,
+            jsonEncode({...body}),
+          );
+          print(
+              '? Error response endpoint: $endpoint | Status Code: ${response.statusCode} | Body: ${response.body}');
+        }
+      } catch (e) {
+        print('? Exception occurred while sending request to $endpoint: $e');
+        await _saveFailedRequest(endpoint, body);
+        await _updateConnectionStatus(false);
       }
       return null;
     } catch (e) {
