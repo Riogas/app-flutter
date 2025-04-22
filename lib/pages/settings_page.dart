@@ -995,8 +995,8 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             _buildInfoRowWithButton(
               Icons.check_circle,
-              'Pedidos Finalizados',
-              '$subCompletedOrdersCount/$completedOrdersCount',
+              'Reporte de visitas',
+              '',
               Icons.description,
               _generateReport,
             ),

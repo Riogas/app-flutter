@@ -380,7 +380,7 @@ class FirebaseService {
     yield* pedidosCumplidosStream;
   }*/
 
-  Stream<List<DocumentSnapshot>> getConstantesStream() async* {
+  /*Stream<List<DocumentSnapshot>> getConstantesStream() async* {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'Constantes-1000';
@@ -412,7 +412,7 @@ class FirebaseService {
 
     monitorStream(constantesStream, 'ConstantesStream'); // Monitorea el stream
     yield* constantesStream;
-  }
+  }*/
 
   Stream<List<DocumentSnapshot>> getMensajesStream() async* {
     try {

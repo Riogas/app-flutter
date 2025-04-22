@@ -10,6 +10,7 @@ import '../utils/constantes.dart';
 import 'package:url_launcher/url_launcher.dart'; // Add this import for opening URLs
 import 'package:path_provider/path_provider.dart'; // Add this import for file handling
 import 'package:open_file/open_file.dart'; // Ensure this import is present
+import '../services/auth_service.dart';
 
 class RioGasService {
   static const String baseUrl = 'https://www.riogas.uy/ica_geos_/appservices/';
@@ -956,12 +957,15 @@ class RioGasService {
   static Future<void> registrarUltLog(
       int movil, String deviceId, String usuario) async {
     try {
+      String appVersion = await AuthService.getAppVersion();
+
       // Prepare the payload
       Map<String, dynamic> payload = {
         'token': token,
         'movil': movil,
         'DeviceId': deviceId,
         'usuario': usuario,
+        'version': appVersion,
       };
 
       // Send the request to RioGas
@@ -1064,6 +1068,7 @@ class RioGasService {
       String usuario,
       String fechaHora,
       String tipoCierre) async {
+    String appVersion = await AuthService.getAppVersion();
     return _post('RegistrarCierre', {
       'token': token,
       'movil': movil,
@@ -1071,6 +1076,7 @@ class RioGasService {
       'usuario': usuario,
       'TipoCierre': tipoCierre,
       'FechaHora': fechaHora,
+      'version': appVersion,
     });
   }
 }
