@@ -50,13 +50,17 @@ class _MessagePageState extends State<MessagePage> {
   Future<void> _checkLocationService() async {
     bool isEnabled = await Geolocator.isLocationServiceEnabled();
     if (!isEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Por favor, active el GPS para continuar.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Por favor, active el GPS para continuar.')),
+        );
+      }
     }
-    setState(() {
-      _isLocationServiceEnabled = isEnabled;
-    });
+    if (mounted) {
+      setState(() {
+        _isLocationServiceEnabled = isEnabled;
+      });
+    }
   }
 
   void _initializeNotifications() {
@@ -74,8 +78,12 @@ class _MessagePageState extends State<MessagePage> {
     ) {
       if (mounted) {
         setState(() {
-          _readMessageIds =
-              mensajesBox.keys.cast<String>().toList(); // Use Hive data
+          _readMessageIds = mensajesBox.keys
+              .cast<String>()
+              .where((key) =>
+                  mensajesBox.get(key) !=
+                  'Borrado') // Exclude messages marked as "Borrado"
+              .toList(); // Use Hive data
         });
       }
     });
@@ -129,7 +137,7 @@ class _MessagePageState extends State<MessagePage> {
   void _checkForNewMessages(List<DocumentSnapshot> messages) {
     for (var message in messages) {
       if (!_readMessageIds.contains(message.id)) {
-        _showNotification(message);
+        //_showNotification(message);
         _readMessageIds.add(message.id);
       }
     }
@@ -203,7 +211,7 @@ class _MessagePageState extends State<MessagePage> {
     }
 
     // print('📨 Marcando mensaje como leído: $messageId');
-    await _firebaseService.markMessageAsRead(message.id);
+    //await _firebaseService.markMessageAsRead(message.id);
 
     // Open mensajesBox and update the message state to "Leido"
     var mensajesBox = await Hive.openBox('mensajesBox');
@@ -259,14 +267,14 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   void _deleteMessage(DocumentSnapshot message) async {
-    await _firebaseService.updateMessageField(message.id, {
+    /*await _firebaseService.updateMessageField(message.id, {
       'VisibleEnApp': 'N',
-    });
+    });*/
 
     // Open mensajesBox and update the message state to "Leido"
     var mensajesBox = await Hive.openBox('mensajesBox');
     if (mensajesBox.containsKey(message.id)) {
-      await mensajesBox.put(message.id, 'Leido');
+      await mensajesBox.put(message.id, 'Borrado');
       // print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
     }
 
@@ -279,14 +287,14 @@ class _MessagePageState extends State<MessagePage> {
 
   void _deleteAllMessages(List<DocumentSnapshot> messages) async {
     for (var message in messages) {
-      await _firebaseService.updateMessageField(message.id, {
+      /*await _firebaseService.updateMessageField(message.id, {
         'VisibleEnApp': 'N',
-      });
+      });*/
 
       // Open mensajesBox and update the message state to "Leido"
       var mensajesBox = await Hive.openBox('mensajesBox');
       if (mensajesBox.containsKey(message.id)) {
-        await mensajesBox.put(message.id, 'Leido');
+        await mensajesBox.put(message.id, 'Borrado');
         // print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
       }
     }
@@ -381,7 +389,16 @@ class _MessagePageState extends State<MessagePage> {
                     itemBuilder: (context, index) {
                       var mensaje =
                           messages[index].data() as Map<String, dynamic>;
-                      bool isRead = mensaje.containsKey('FchHoraLeido');
+                      var mensajesBox = Hive.box('mensajesBox');
+                      bool isRead =
+                          mensajesBox.get(messages[index].id) == 'Leido';
+                      bool isDeleted =
+                          mensajesBox.get(messages[index].id) == 'Borrado';
+
+                      if (isDeleted) {
+                        return SizedBox.shrink(); // Skip rendering this card
+                      }
+
                       String formattedDate = mensaje['FchHoraCreado'] != null
                           ? DateFormat('dd/MM/yyyy HH:mm').format(
                               (mensaje['FchHoraCreado'] as Timestamp).toDate(),

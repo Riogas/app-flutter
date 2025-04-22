@@ -99,7 +99,8 @@ class FirebaseService {
   void monitorStream<T>(Stream<T> stream, String streamName) {
     stream.listen(
       (event) async {
-        // print('✅ Stream "$streamName" received data: $event');
+        print(
+            '✅ Stream "$streamName" received data: $event'); // Log data received
         var conexionBox = await Hive.openBox('conexionBox');
         DateTime now = DateTime.now();
         conexionBox.put(
@@ -109,7 +110,8 @@ class FirebaseService {
         conexionBox.put('lastSuccessfulConnection', now.toIso8601String());
       },
       onError: (error) async {
-        // print('❌ Stream "$streamName" encountered an error: $error');
+        print(
+            '❌ Stream "$streamName" encountered an error: $error'); // Log error
         var conexionBox = await Hive.openBox('conexionBox');
         conexionBox.put(
           'ConexionFirestore',
@@ -124,7 +126,7 @@ class FirebaseService {
         }
       },
       onDone: () async {
-        // print('⚠ Stream "$streamName" has been closed.');
+        print('⚠ Stream "$streamName" has been closed.'); // Log stream closed
         var conexionBox = await Hive.openBox('conexionBox');
         conexionBox.put(
           'ConexionFirestore',

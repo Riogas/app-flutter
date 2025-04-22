@@ -18,6 +18,7 @@ import 'package:MoveIT/pages/login_page.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase_messaging
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Importa flutter_local_notifications
 import 'package:connectivity_plus/connectivity_plus.dart'; // Importa connectivity_plus
+import 'package:internet_connection_checker/internet_connection_checker.dart'; // Importa internet_connection_checker
 import '../services/counter_service.dart'; // Import the new CounterService
 import '../utils/connection_check.dart';
 import '../utils/screenBlock.dart'; // Import secureScreen
@@ -56,6 +57,8 @@ class _HomePageState extends State<HomePage>
   late StreamSubscription<bool> _gpsSubscription;
   final StreamController<bool> _gpsStreamController =
       StreamController<bool>.broadcast();
+  bool _isDialogVisible =
+      false; // Flag to track if the dialog is already visible
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(),
@@ -139,7 +142,7 @@ class _HomePageState extends State<HomePage>
 
     _connectionCheck.startMonitoring();
     _connectionCheck.connectionStatusStream.listen((status) {
-      _connectionStatusNotifier.value = status; // Update only the notifier
+      _updateConnectionStatus(status); // Update only the notifier
       if (status['showPopup'] == true) {
         _showRioGasConnectivityModal();
       }
@@ -289,10 +292,11 @@ class _HomePageState extends State<HomePage>
   void _initMensajesBoxListener() async {
     var mensajesBox = await Hive.openBox('mensajesBox');
     mensajesBox.watch().listen((event) {
+      int unreadCount = mensajesBox.values
+          .where((estado) => estado == 'Descargado')
+          .length; // Count only 'Descargado' messages
       setState(() {
-        _unreadMessages = mensajesBox.values
-            .where((estado) => estado == 'Descargado')
-            .length; // Count only 'Descargado' messages
+        _unreadMessages = unreadCount; // Update _unreadMessages only once
       });
     });
   }
@@ -591,6 +595,13 @@ class _HomePageState extends State<HomePage>
               await Hive.openBox(
                 'mensajesBox',
               ).then((box) => box.clear()); // Clear mensajesBox
+
+              // Cancel all active streams and listeners
+              _ordersSubscription.cancel();
+              _locationSubscription.cancel();
+              _gpsSubscription.cancel();
+              _connectivitySubscription.cancel();
+              _connectivityCheckTimer.cancel();
             }
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => LoginPage()),
@@ -605,25 +616,28 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _checkInternetConnectivity() async {
     // print('🔍 Verificando conectividad a Internet...');
-    var connectivityResult = await Connectivity().checkConnectivity();
-    // print('🔍 Resultado de conectividad: $connectivityResult');
+    var conexionBox = await Hive.openBox('conexionBox');
+    var connectivityResult =
+        await InternetConnectionChecker.createInstance().hasConnection;
 
-    if (connectivityResult == ConnectivityResult.none ||
-        (connectivityResult is List &&
-            connectivityResult.contains(ConnectivityResult.none))) {
+    if (!connectivityResult) {
       // print('❌ No hay conexión a Internet.');
+      await conexionBox.put('network', false);
       if (!showPopup) _showNoInternetDialog(); // entra a modo "bloqueo"
-      //_showNoInternetDialog(); // entra a modo "bloqueo"
     } else {
       // print('✅ Conexión a Internet disponible.');
+      await conexionBox.put('network', true);
       showPopup = false;
-      // Podés continuar con la app aquí si querés.
     }
   }
 
   void _showNoInternetDialog() {
-    // print('⚠️ Mostrando diálogo de "Sin Conexión a Internet".');
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (_isDialogVisible) return; // Prevent showing multiple dialogs
+
+    _isDialogVisible = true; // Set the flag to true
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final sinConexString = await getConstantValue('220');
       showDialog(
         context: navigatorKey.currentContext!,
         barrierDismissible: false, // No puede cerrarse tocando fuera del dialog
@@ -631,13 +645,14 @@ class _HomePageState extends State<HomePage>
           return AlertDialog(
             title: Text('Sin Conexión a Internet'),
             content: Text(
-              'No tienes conexión a Internet. Por favor, verifica tu conexión.',
+              sinConexString ??
+                  'No tienes conexión a Internet. Por favor, verifica tu conexión.',
             ),
             actions: <Widget>[
               TextButton(
                 onPressed: () async {
-                  // print('🔄 Reintentando conectividad a Internet...');
                   Navigator.of(context).pop(); // Cierra el diálogo actual
+                  _isDialogVisible = false; // Reset the flag
                   showPopup = true;
                 },
                 child: Text('Confirmar'),
@@ -703,6 +718,34 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  Color _getAntennaColor(Map<String, dynamic> connectionStatus) {
+    if (!connectionStatus['network']) {
+      return Colors.grey;
+    }
+    if (!connectionStatus['firestore'] && !connectionStatus['riogas']) {
+      return Colors.red;
+    }
+    if (!connectionStatus['firestore'] || !connectionStatus['riogas']) {
+      return Colors.yellow;
+    }
+    return Colors.green;
+  }
+
+  void _updateConnectionStatus(Map<String, dynamic> status) {
+    // Log the incoming status for debugging
+    print('🔄 Actualizando estado de conexión: $status');
+
+    // Only update the notifier if the status has changed
+    if (_connectionStatusNotifier.value['network'] != status['network'] ||
+        _connectionStatusNotifier.value['firestore'] != status['firestore'] ||
+        _connectionStatusNotifier.value['riogas'] != status['riogas']) {
+      print('🔔 Cambio detectado en el estado de conexión. Actualizando...');
+      _connectionStatusNotifier.value = status;
+    } else {
+      print('✅ No hay cambios en el estado de conexión.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -722,7 +765,9 @@ class _HomePageState extends State<HomePage>
                 valueListenable: _connectionStatusNotifier,
                 builder: (context, connectionStatus, child) {
                   Color antennaColor = _getAntennaColor(connectionStatus);
-                  bool shouldBlink = antennaColor != Colors.green;
+                  bool shouldBlink = !connectionStatus['network'] ||
+                      !connectionStatus['firestore'] ||
+                      !connectionStatus['riogas'];
                   return Stack(
                     children: [
                       AnimatedBuilder(
@@ -1196,16 +1241,5 @@ class _HomePageState extends State<HomePage>
     } catch (e) {
       return 'N/A'; // Return 'N/A' if parsing fails
     }
-  }
-
-  Color _getAntennaColor(Map<String, dynamic> connectionStatus) {
-    if (!connectionStatus['network']) return Colors.grey;
-    if (!connectionStatus['firestore'] && !connectionStatus['riogas']) {
-      return Colors.red;
-    }
-    if (!connectionStatus['firestore'] || !connectionStatus['riogas']) {
-      return Colors.yellow;
-    }
-    return Colors.green;
   }
 }

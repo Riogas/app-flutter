@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive/hive.dart';
 import 'package:flutter/material.dart'; // Import for showing modal
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 import '../services/firebase_service.dart';
 import '../services/riogas_service.dart';
 import '../utils/error_event.dart';
@@ -21,8 +22,11 @@ class ConnectionCheck {
   Stream<Map<String, dynamic>> get connectionStatusStream =>
       _connectionStatusController.stream;
 
+  StreamSubscription<InternetConnectionStatus>? listener;
+
   void startMonitoring() {
     _initializeMaxCounter(); // Fetch the constant value
+    iniciarEscucha();
     _timer = Timer.periodic(checkInterval, (_) async {
       await _checkConnectivity();
     });
@@ -30,6 +34,7 @@ class ConnectionCheck {
 
   void stopMonitoring() {
     _timer.cancel();
+    detenerEscucha();
     _connectionStatusController.close();
   }
 
@@ -53,34 +58,19 @@ class ConnectionCheck {
     };
 
     try {
-      // Check network connectivity
-      var connectivityResult = await Connectivity().checkConnectivity();
+      // Check Firestore connectivity
+      status['firestore'] = await _firebaseService.checkFirestoreConnectivity();
 
-      if (connectivityResult == ConnectivityResult.none ||
-          (connectivityResult is List &&
-              connectivityResult.contains(ConnectivityResult.none))) {
+      // Check RioGas connectivity
+      status['riogas'] = await _checkRioGasConnectivity();
+
+      // Check Internet connectivity and type
+      var connectivityResult = await Connectivity().checkConnectivity();
+      if (connectivityResult == ConnectivityResult.none) {
         status['network'] = false;
       } else {
-        status['network'] = true;
-      }
-      if (!status['network']) {
-        // Log no network connectivity
-        // print('❌ No network connectivity detected.');
-        // If no network, set all connections to false
-        status['conexionFirestore'] = false;
-        status['conexionRioGas'] = false;
-      } else {
-        // Log network connectivity
-        // print('✅ Network connectivity detected.');
-
-        // Check Firestore connectivity
-        status['firestore'] =
-            await _firebaseService.checkFirestoreConnectivity();
-        // print('Firestore connectivity: ${status['firestore']}');
-
-        // Check RioGas connectivity
-        status['riogas'] = await _checkRioGasConnectivity();
-        // print('RioGas connectivity: ${status['riogas']}');
+        status['network'] =
+            await InternetConnectionChecker.createInstance().hasConnection;
       }
 
       // Update Hive box
@@ -105,7 +95,6 @@ class ConnectionCheck {
       // Emit popup flag if counter exceeds max
       status['showPopup'] = _counter >= _maxCounter;
     } catch (e) {
-      // print('❌ Error during connectivity check: $e');
       await _logError('Connection Check Error', e.toString());
     }
 
@@ -152,5 +141,35 @@ class ConnectionCheck {
       timestamp: DateTime.now(),
     );
     await errorBox.add(errorEvent);
+  }
+
+  void iniciarEscucha() {
+    listener = InternetConnectionChecker.createInstance()
+        .onStatusChange
+        .listen((status) async {
+      final conexionBox = await Hive.openBox('conexionBox');
+      switch (status) {
+        case InternetConnectionStatus.connected:
+          print('✅ Conexión a Internet');
+          await conexionBox.put('network', true);
+          break;
+        case InternetConnectionStatus.disconnected:
+          print('❌ Desconectado');
+          await conexionBox.put('network', false);
+          break;
+        case InternetConnectionStatus.slow:
+          print('⚠️ Conexión lenta');
+          await conexionBox.put('network', false); // Treat as disconnected
+          break;
+        default:
+          print('⚠️ Estado desconocido');
+          await conexionBox.put('network', false); // Treat as disconnected
+          break;
+      }
+    });
+  }
+
+  void detenerEscucha() {
+    listener?.cancel();
   }
 }
