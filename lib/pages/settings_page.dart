@@ -1004,8 +1004,6 @@ class _SettingsPageState extends State<SettingsPage> {
               Icons.verified,
               'Versión de la App',
               appVersion,
-              Icons.update,
-              _checkForUpdate,
             ),
             FutureBuilder<bool>(
               future: _shouldShowDistance(),
@@ -1052,10 +1050,10 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildInfoRowWithButton(
     IconData icon,
     String title,
-    String value,
-    IconData buttonIcon,
-    VoidCallback onPressed,
-  ) {
+    String value, [
+    IconData? buttonIcon,
+    VoidCallback? onPressed,
+  ]) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -1074,10 +1072,11 @@ class _SettingsPageState extends State<SettingsPage> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          IconButton(
-            icon: Icon(buttonIcon, color: Colors.blueAccent),
-            onPressed: onPressed,
-          ),
+          if (buttonIcon != null && onPressed != null)
+            IconButton(
+              icon: Icon(buttonIcon, color: Colors.blueAccent),
+              onPressed: onPressed,
+            ),
         ],
       ),
     );

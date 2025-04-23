@@ -623,7 +623,10 @@ class _HomePageState extends State<HomePage>
     if (!connectivityResult) {
       // print('❌ No hay conexión a Internet.');
       await conexionBox.put('network', false);
-      if (!showPopup) _showNoInternetDialog(); // entra a modo "bloqueo"
+      final mostrarDesconexion = await getConstantValue('230');
+      if (mostrarDesconexion != null && mostrarDesconexion == 'S') {
+        if (!showPopup) _showNoInternetDialog(); // entra a modo "bloqueo"
+      }
     } else {
       // print('✅ Conexión a Internet disponible.');
       await conexionBox.put('network', true);
@@ -671,7 +674,10 @@ class _HomePageState extends State<HomePage>
         (connectivityResult is List &&
             connectivityResult.contains(ConnectivityResult.none))) {
       // print('🚫 Aún sin conexión. Mostrando diálogo nuevamente.');
-      _showNoInternetDialog(); // vuelve a mostrar el diálogo si sigue sin internet
+      final mostrarDesconexion = await getConstantValue('230');
+      if (mostrarDesconexion != null && mostrarDesconexion == 'S') {
+        _showNoInternetDialog(); // vuelve a mostrar el diálogo si sigue sin internet
+      }
     } else {
       // print('✅ Conexión restaurada.');
       // Aquí podés continuar con el flujo normal de tu app

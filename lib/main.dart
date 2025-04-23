@@ -11,6 +11,7 @@ import 'pages/home_page.dart';
 import 'services/auth_service.dart';
 import 'services/notifications_service.dart';
 import 'services/riogas_service.dart';
+import 'services/session_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa url_launcher
 import 'utils/error_event.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -25,6 +26,7 @@ import 'package:open_file/open_file.dart'; // Importa open_file para abrir el ar
 import 'package:path_provider/path_provider.dart'; // Importa path_provider para obtener directorios
 import 'package:permission_handler/permission_handler.dart'; // Importa permission_handler para manejar permisos
 import 'package:flutter/services.dart'; // Importa SystemNavigator
+import 'dart:async';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -65,6 +67,16 @@ void main() async {
   if (!hasActiveSession) {
     isLoggedIn = false; // Redirect to login if no active session
   }
+
+  // 🔹 Configurar verificación de cambio de día
+  Timer.periodic(Duration(minutes: 1), (timer) async {
+    bool sessionActiveForToday =
+        await SessionService().isSessionActiveForToday();
+    if (!sessionActiveForToday) {
+      timer.cancel(); // Detener el temporizador
+      runApp(MyApp(isLoggedIn: false)); // Redirigir al login
+    }
+  });
 
   FlutterError.onError = (FlutterErrorDetails details) {
     // Podés registrar esto en logs o mostrar una pantalla de error
@@ -240,7 +252,10 @@ Future<void> _checkInternetConnectivity() async {
       (connectivityResult is List &&
           connectivityResult.contains(ConnectivityResult.none))) {
     // print('❌ No hay conexión a Internet.');
-    _showNoInternetDialog(); // entra a modo "bloqueo"
+    final mostrarDesconexion = await getConstantValue('230');
+    if (mostrarDesconexion != null && mostrarDesconexion == 'S') {
+      _showNoInternetDialog(); // entra a modo "bloqueo"
+    }
   } else {
     // print('✅ Conexión a Internet disponible. Verificando acceso a datos...');
     bool hasDataAccess = await _checkDataAccess();
@@ -331,7 +346,11 @@ Future<void> _retryInternetConnectivity() async {
       (connectivityResult is List &&
           connectivityResult.contains(ConnectivityResult.none))) {
     // print('🚫 Aún sin conexión. Mostrando diálogo nuevamente.');
-    _showNoInternetDialog(); // vuelve a mostrar el diálogo si sigue sin internet
+
+    final mostrarDesconexion = await getConstantValue('230');
+    if (mostrarDesconexion != null && mostrarDesconexion == 'S') {
+      _showNoInternetDialog(); // vuelve a mostrar el diálogo si sigue sin internet
+    }
   } else {
     // print('✅ Conexión restaurada.');
     // Aquí podés continuar con el flujo normal de tu app

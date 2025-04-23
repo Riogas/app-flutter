@@ -32,7 +32,7 @@ class SessionService {
     String idSesion = _uuid.v4();
     String idTerminal = box.get('deviceId') ?? 'UnknownDevice';
     String infoDispositivo = await _getDeviceInfo();
-    String nombreUsuario = (box.get('username') ?? 'Sin Nombre').trim();
+    String nombreUsuario = (box.get('NombreUsuario') ?? 'Sin Nombre').trim();
     String versionAndroid = await _getAndroidVersion();
     int nivelBateria = await _getBatteryLevel();
     bool gpsActivado = await _isGpsEnabled();
@@ -168,6 +168,34 @@ class SessionService {
       }
     } catch (e) {
       print('❌ Error al guardar la sesión en Firestore: $e');
+    }
+  }
+
+  Future<bool> isSessionActiveForToday() async {
+    var box = await Hive.openBox('sessionBox');
+    String movil = box.get('movil') ?? 'Desconocido';
+    String escenarioId = box.get('escenario') ?? '0';
+
+    if (escenarioId == '0') {
+      return false;
+    }
+
+    DateTime now = DateTime.now();
+    String fechaActual =
+        now.toIso8601String().split('T')[0].replaceAll('-', '');
+
+    DocumentReference fechaDocRef =
+        _firestore.collection('Sesiones-$escenarioId').doc(fechaActual);
+    CollectionReference movilCollectionRef =
+        fechaDocRef.collection('Movil-$movil');
+    DocumentReference ultimaDocRef = movilCollectionRef.doc('activo');
+
+    try {
+      DocumentSnapshot activeDocSnapshot = await ultimaDocRef.get();
+      return activeDocSnapshot.exists;
+    } catch (e) {
+      print('Error al verificar sesión activa para hoy: $e');
+      return false;
     }
   }
 
