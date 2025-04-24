@@ -14,6 +14,8 @@ import 'dart:io';
 import 'package:flutter_email_sender/flutter_email_sender.dart';
 import 'package:sms_autofill/sms_autofill.dart';
 import 'dart:math';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -185,11 +187,9 @@ class _SettingsPageState extends State<SettingsPage> {
       await failedRequestsBox
           .deleteFromDisk(); //Cambiar por el momento se matiene asi para no tener que hacer cambios en el resto de la app
 
-      // Navegar a la pantalla de inicio de sesión
+      // Cerrar la aplicación
       Future.microtask(() {
-        Navigator.of(
-          context,
-        ).pushReplacement(MaterialPageRoute(builder: (context) => LoginPage()));
+        exit(0);
       });
     }
   }
@@ -895,6 +895,28 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Widget _buildPermissionsButton() {
+    return Center(
+      child: ElevatedButton.icon(
+        onPressed: () async {
+          final intent = AndroidIntent(
+            action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
+            data: 'package:com.example.MoveIT',
+            flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+          );
+          await intent.launch();
+        },
+        icon: Icon(Icons.settings, color: Colors.blue),
+        label: Text('Permisos'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.blue,
+          side: BorderSide(color: Colors.blue),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -903,7 +925,6 @@ class _SettingsPageState extends State<SettingsPage> {
         backgroundColor: Colors.blueAccent,
       ),
       body: SingleChildScrollView(
-        // Wrap the body in a scrollable view
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -917,9 +938,11 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(height: 10),
               _buildChangePhoneNumberButton(),
               SizedBox(height: 10),
-              _buildSuggestionsButton(), // Ensure only one suggestions button
+              _buildSuggestionsButton(),
               SizedBox(height: 10),
               _buildViewErrorsButton(),
+              SizedBox(height: 10),
+              _buildPermissionsButton(), // Added Permissions button
               SizedBox(height: 10),
               _buildLogoutButton(),
               SizedBox(height: 10),

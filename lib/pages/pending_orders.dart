@@ -25,6 +25,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   late String deviceId = '';
   late Box sesionBox; // Declare the sesionBox variable
   late int movilId = 0;
+  late String textoPermisosGPS = '';
   Timer? _hiveStateChecker; // Make it nullable
 
   @override
@@ -328,6 +329,20 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                       future: Geolocator.isLocationServiceEnabled(),
                       builder: (context, snapshot) {
                         bool isLocationServiceEnabled = snapshot.data ?? false;
+                        if (isLocationServiceEnabled) {
+                          textoPermisosGPS = 'Bloqueado - Sin GPS Activado';
+                        }
+                        // Check for changes in sessionBox for _locationPermissionDenied
+                        if (sesionBox.isOpen) {
+                          bool locationPermissionDenied = sesionBox.get(
+                              '_locationPermissionDenied',
+                              defaultValue: true);
+                          if (locationPermissionDenied) {
+                            isLocationServiceEnabled = false;
+                            textoPermisosGPS =
+                                'Bloqueado - Sin Permisos de GPS activos.';
+                          }
+                        }
 
                         return Card(
                           color: !isLocationServiceEnabled
@@ -397,7 +412,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                 Row(
                                   children: [
                                     Text(
-                                      'Dirección: ${!isLocationServiceEnabled ? 'Bloqueado - Sin GPS Activado' : direccionCorta}',
+                                      'Dirección: ${!isLocationServiceEnabled ? textoPermisosGPS : direccionCorta}',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 12.0,
@@ -420,8 +435,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                   children: [
                                     Text(
                                       tipo == 'Pedidos'
-                                          ? 'Servicio: ${!isLocationServiceEnabled ? 'Bloqueado - Sin GPS Activado' : (pedido['ServicioNombre'] ?? 'Desconocido')}'
-                                          : 'Defecto: ${!isLocationServiceEnabled ? 'Bloqueado - Sin GPS Activado' : (pedido['Defecto'] ?? 'Desconocido')}',
+                                          ? 'Servicio: ${!isLocationServiceEnabled ? textoPermisosGPS : (pedido['ServicioNombre'] ?? 'Desconocido')}'
+                                          : 'Defecto: ${!isLocationServiceEnabled ? textoPermisosGPS : (pedido['Defecto'] ?? 'Desconocido')}',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 12.0,

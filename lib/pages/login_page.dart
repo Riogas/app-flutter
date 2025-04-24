@@ -668,6 +668,14 @@ class _LoginPageState extends State<LoginPage> {
                         // 🔹 Guardar móvil seleccionado y matrícula en Hive
                         var box = await Hive.openBox('sessionBox');
                         await box.put('movil', selectedMovil);
+
+                        String hoy = DateTime.now()
+                            .toUtc()
+                            .toIso8601String()
+                            .split('T')[0]
+                            .replaceAll('-', '');
+
+                        await box.put('fecha', hoy);
                         if (showLicensePlateField) {
                           await box.put(
                               'matricula', licensePlateController.text);
@@ -757,8 +765,6 @@ class _LoginPageState extends State<LoginPage> {
     for (var key in keysToDelete) {
       await pedidosBox.delete(key);
     }
-
-    await box.flush(); // ✅ Asegura que el valor se escriba inmediatamente
 
     // Obtener datos de la versión actual y guardar ReleaseNotes en Hive
     var versionData = await RioGasService.DatosVersionActual(

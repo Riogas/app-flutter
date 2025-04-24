@@ -23,6 +23,9 @@ import '../services/counter_service.dart'; // Import the new CounterService
 import '../utils/connection_check.dart';
 import '../utils/screenBlock.dart'; // Import secureScreen
 import '../utils/constantes.dart';
+import 'package:android_intent_plus/android_intent.dart'; // Import AndroidIntent
+import 'package:android_intent_plus/flag.dart'; // Import Flag for AndroidIntent
+import 'package:flutter/services.dart'; // Import SystemNavigator
 
 class HomePage extends StatefulWidget {
   @override
@@ -194,9 +197,7 @@ class _HomePageState extends State<HomePage>
     try {
       await _locationService.initializeLocationUpdates(context);
       _locationSubscription =
-          _locationService.locationStream.listen((location) {
-        // print('📍 Nueva ubicación recibida en HomePage: $location');
-      });
+          _locationService.locationStream.listen((location) {});
       _locationServiceCompleter.complete();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -575,7 +576,9 @@ class _HomePageState extends State<HomePage>
     return AlertDialog(
       title: Text('Deslogueo forzado'),
       content: Text(
-        'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.',
+        (nomUsuario == 'Desconocido' || movil == 'Desconocido')
+            ? 'Se ha terminado su tiempo de sesión, por favor ingrese nuevamente.'
+            : 'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.',
       ),
       actions: [
         TextButton(
@@ -603,10 +606,8 @@ class _HomePageState extends State<HomePage>
               _connectivitySubscription.cancel();
               _connectivityCheckTimer.cancel();
             }
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => LoginPage()),
-              (Route<dynamic> route) => false,
-            );
+            // Close the application completely
+            SystemNavigator.pop();
           },
           child: Text('Aceptar'),
         ),
@@ -806,78 +807,83 @@ class _HomePageState extends State<HomePage>
                   return Center(child: CircularProgressIndicator());
                 }
 
-                var movilDoc = movilSnapshot.data!;
-                var movilData = movilDoc.data() as Map<String, dynamic>;
-                int estadoNro = movilData['EstadoNro'];
-                // print('EstadoNro from Movil: $estadoNro'); // Log estadoNro
+                try {
+                  var movilDoc = movilSnapshot.data!;
+                  var movilData = movilDoc.data() as Map<String, dynamic>;
+                  int estadoNro = movilData['EstadoNro'];
+                  // print('EstadoNro from Movil: $estadoNro'); // Log estadoNro
 
-                return StreamBuilder<List<Map<String, dynamic>>>(
-                  // New stream for SubEstadoMoviles
-                  stream: _firebaseService.getSubEstadoMovilesStream(),
-                  builder: (context, subEstadoSnapshot) {
-                    if (!subEstadoSnapshot.hasData) {
-                      return Center(child: CircularProgressIndicator());
-                    }
+                  return StreamBuilder<List<Map<String, dynamic>>>(
+                    // New stream for SubEstadoMoviles
+                    stream: _firebaseService.getSubEstadoMovilesStream(),
+                    builder: (context, subEstadoSnapshot) {
+                      if (!subEstadoSnapshot.hasData) {
+                        return Center(child: CircularProgressIndicator());
+                      }
 
-                    var subEstados = subEstadoSnapshot.data!;
-                    // print('SubEstados fetched: $subEstados'); // Log subEstados
+                      var subEstados = subEstadoSnapshot.data!;
+                      // print('SubEstados fetched: $subEstados'); // Log subEstados
 
-                    var subEstado = subEstados.firstWhere(
-                      (element) =>
-                          int.tryParse(element['SubEstadoCod'].toString()) ==
+                      var subEstado = subEstados.firstWhere(
+                        (element) =>
+                            int.tryParse(element['SubEstadoCod'].toString()) ==
+                            estadoNro,
+                        orElse: () => {
+                          'DescCombo': 'Desconocido',
+                          'CodColor': '000000',
+                        },
+                      );
+
+                      // print(
+                      //   'Matched SubEstado: $subEstado',
+                      // ); // Log matched subEstado
+
+                      String estadoText = subEstado['DescCombo'];
+                      String codColor = subEstado['CodColor'];
+                      List<String> rgb = codColor.split(',');
+                      String hexColor = rgb.length == 3
+                          ? rgb
+                              .map(
+                                (c) => int.parse(
+                                  c,
+                                ).toRadixString(16).padLeft(2, '0'),
+                              )
+                              .join()
+                          : '000000';
+                      Color estadoColor = Color(int.parse('0xff$hexColor'));
+
+                      return GestureDetector(
+                        onTap: () => _showEstadoDropdown(
+                          context,
+                          _movil,
                           estadoNro,
-                      orElse: () => {
-                        'DescCombo': 'Desconocido',
-                        'CodColor': '000000',
-                      },
-                    );
-
-                    // print(
-                    //   'Matched SubEstado: $subEstado',
-                    // ); // Log matched subEstado
-
-                    String estadoText = subEstado['DescCombo'];
-                    String codColor = subEstado['CodColor'];
-                    List<String> rgb = codColor.split(',');
-                    String hexColor = rgb.length == 3
-                        ? rgb
-                            .map(
-                              (c) => int.parse(
-                                c,
-                              ).toRadixString(16).padLeft(2, '0'),
-                            )
-                            .join()
-                        : '000000';
-                    Color estadoColor = Color(int.parse('0xff$hexColor'));
-
-                    return GestureDetector(
-                      onTap: () => _showEstadoDropdown(
-                        context,
-                        _movil,
-                        estadoNro,
-                        subEstados,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
+                          subEstados,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: estadoColor,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Movil:$_movil - $estadoText',
+                                style: TextStyle(color: Colors.white),
+                              ),
                             ),
-                            decoration: BoxDecoration(
-                              color: estadoColor,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              'Movil:$_movil - $estadoText',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                } catch (e) {
+                  // print('Error parsing movil data: $e');
+                  return Text('Error al cargar el estado del móvil.');
+                }
               },
             ),
           ),
@@ -890,71 +896,75 @@ class _HomePageState extends State<HomePage>
             return Center(child: CircularProgressIndicator());
           }
 
-          var box = Hive.box('sessionBox');
-          bool firstLoginDone = box.get('firstLoginDone', defaultValue: false);
-          bool existeSession = Hive.isBoxOpen('sessionBox');
+          try {
+            var box = Hive.box('sessionBox');
+            bool firstLoginDone =
+                box.get('firstLoginDone', defaultValue: false);
+            bool existeSession = Hive.isBoxOpen('sessionBox');
 
-          // print('🔒 firstLoginDone home_page: $firstLoginDone');
-          // print('🔒 existeSession home_page: $existeSession');
+            // print('🔒 firstLoginDone home_page: $firstLoginDone');
+            // print('🔒 existeSession home_page: $existeSession');
 
-          // ✅ Si es el primer login manual, ignorar completamente el chequeo de sesión activa
-          if (firstLoginDone && existeSession) {
-            // print(
-            //   "🚀 Ignorando chequeo de logout forzado en el primer login manual...",
-            // );
-            return _widgetOptions.elementAt(_selectedIndex);
-          } else {
-            if (existeSession) {
-              // print("🔒 Chequeando logout forzado en Firestore...");
-              // ✅ Si no es el primer login, proceder con la validación en Firestore
-              return StreamBuilder<Map<String, dynamic>?>(
-                stream: _firebaseService.getSesionesStream(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
+            // ✅ Si es el primer login manual, ignorar completamente el chequeo de sesión activa
+            if (firstLoginDone && existeSession) {
+              // print(
+              //   "🚀 Ignorando chequeo de logout forzado en el primer login manual...",
+              // );
+              return _widgetOptions.elementAt(_selectedIndex);
+            } else {
+              if (existeSession) {
+                // print("🔒 Chequeando logout forzado en Firestore...");
+                // ✅ Si no es el primer login, proceder con la validación en Firestore
+                return StreamBuilder<Map<String, dynamic>?>(
+                  stream: _firebaseService.getSesionesStream(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Error: ${snapshot.error}'));
+                    }
 
-                  if (snapshot.hasData) {
-                    var data = snapshot.data;
-                    if (Hive.isBoxOpen('sessionBox')) {
-                      var box = Hive.box('sessionBox');
-                      if (data != null &&
-                          data['idTerminal'] != box.get('deviceId')) {
-                        return _showForcedLogoutDialog(
-                          context,
-                          data?['nomUsuario'] ?? 'Desconocido',
-                          data?['movil'] ?? 'Desconocido',
-                        );
+                    if (snapshot.hasData) {
+                      var data = snapshot.data;
+                      if (Hive.isBoxOpen('sessionBox')) {
+                        var box = Hive.box('sessionBox');
+                        if (data != null &&
+                            data['idTerminal'] != box.get('deviceId')) {
+                          return _showForcedLogoutDialog(
+                            context,
+                            data?['nomUsuario'] ?? 'Desconocido',
+                            data?['movil'] ?? 'Desconocido',
+                          );
+                        }
                       }
                     } else {
-                      // print(
-                      //   '⚠️ sessionBox is not open. Skipping forced logout check.',
-                      // );
-                    }
-                  } else {
-                    if (Hive.isBoxOpen('sessionBox')) {
-                      var box = Hive.box('sessionBox');
-                      bool logoutControlled =
-                          box.get('logoutControlled', defaultValue: false);
-                      if (!logoutControlled) {
-                        return _showForcedLogoutDialog(
-                          context,
-                          'Desconocido',
-                          'Desconocido',
-                        );
+                      // Si no hay datos en el snapshot, forzar logout
+                      if (Hive.isBoxOpen('sessionBox')) {
+                        var box = Hive.box('sessionBox');
+                        bool logoutControlled =
+                            box.get('logoutControlled', defaultValue: false);
+                        if (!logoutControlled) {
+                          return _showForcedLogoutDialog(
+                            context,
+                            'Desconocido',
+                            'Desconocido',
+                          );
+                        }
                       }
                     }
-                  }
 
-                  return _widgetOptions.elementAt(_selectedIndex);
-                },
-              );
-            } else {
-              return _widgetOptions.elementAt(_selectedIndex);
+                    return _widgetOptions.elementAt(_selectedIndex);
+                  },
+                );
+              } else {
+                return _widgetOptions.elementAt(_selectedIndex);
+              }
             }
+          } catch (e) {
+            // print("❌ Error al abrir la caja 'sessionBox': $e");
+            return _showForcedLogoutDialog(
+                context, 'Desconocido', 'Desconocido');
           }
         },
       ),
@@ -1247,5 +1257,34 @@ class _HomePageState extends State<HomePage>
     } catch (e) {
       return 'N/A'; // Return 'N/A' if parsing fails
     }
+  }
+
+  Future<bool> _showGpsPermissionDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Text('Permiso de GPS requerido'),
+              content: Text(
+                'La aplicación requiere que habilites los permisos de ubicación TODO EL TIEMPO para funcionar correctamente. Por favor, habilítalos.',
+              ),
+              actions: <Widget>[
+                TextButton(
+                  child: Text('Cancelar'),
+                  onPressed: () {
+                    Navigator.of(context).pop(false);
+                  },
+                ),
+                TextButton(
+                  child: Text('Continuar'),
+                  onPressed: () {
+                    Navigator.of(context).pop(true);
+                  },
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
   }
 }

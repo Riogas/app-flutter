@@ -10,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/riogas_service.dart';
 import 'package:flutter/material.dart';
 import '../utils/constantes.dart'; // Import constantes.dart
+import 'package:permission_handler/permission_handler.dart';
 
 class LocationService {
   static final LocationService _instance = LocationService._internal();
@@ -34,7 +35,7 @@ class LocationService {
   /// 🔹 Inicializa el servicio de ubicación y sincronización
   Future<void> initializeLocationUpdates(BuildContext context) async {
     await _requestIgnoreBatteryOptimizations();
-    await _getLocationPermission();
+    await _getLocationPermission(context);
     await ensureCorrectLocationPermission(
       context,
     ); // 🔹 Verifica y solicita permiso en background
@@ -106,7 +107,7 @@ class LocationService {
   }
 
   /// 🔹 Manejo de permisos para primer y segundo plano
-  Future<void> _getLocationPermission() async {
+  Future<void> _getLocationPermission(BuildContext context) async {
     LocationPermission permission = await Geolocator.checkPermission();
 
     if (permission == LocationPermission.denied) {
@@ -114,19 +115,51 @@ class LocationService {
     }
 
     if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+        permission == LocationPermission.deniedForever ||
+        permission == LocationPermission.whileInUse) {
       _locationPermissionDenied = true;
-      // print('❌ Permisos de ubicación denegados.');
-      return;
+      var sessionBox = await Hive.openBox('sessionBox');
+      await sessionBox.put(
+          '_locationPermissionDenied', _locationPermissionDenied);
+      print('❌ Permisos de ubicación denegados.');
+
+      // Start a timer to periodically check for location permissions
+      Timer.periodic(Duration(seconds: 10), (timer) async {
+        LocationPermission updatedPermission =
+            await Geolocator.checkPermission();
+        if (updatedPermission == LocationPermission.always) {
+          _locationPermissionDenied = false;
+          await sessionBox.put(
+              '_locationPermissionDenied', _locationPermissionDenied);
+          print(
+              '✅ Permisos de ubicación concedidos. Continuando con el flujo normal.');
+          timer.cancel(); // Stop the timer once permissions are granted
+          await initializeLocationUpdates(context); // Restart location updates
+        } else {
+          print('🔄 Verificando permisos de ubicación...');
+        }
+      });
+    } else if (permission == LocationPermission.always) {
+      _locationPermissionDenied = false;
+      var sessionBox = await Hive.openBox('sessionBox');
+      await sessionBox.put(
+          '_locationPermissionDenied', _locationPermissionDenied);
+      print('✅ Permisos de ubicación concedidos.');
     }
 
     // 🚀 Android 10+ requiere permiso especial para background
-    if (permission == LocationPermission.whileInUse) {
+    if (permission != LocationPermission.always) {
+      // 🔹 Solicitar nuevamente el permiso si no es "Permitir todo el tiempo"
       LocationPermission backgroundPermission =
           await Geolocator.requestPermission();
 
       if (backgroundPermission != LocationPermission.always) {
         // print('⚠️ Permiso de ubicación en background denegado.');
+        // 🔹 Mostrar diálogo y redirigir a configuración
+        bool shouldRedirect = await _showPermissionDialog(context);
+        if (shouldRedirect) {
+          await openAppSettings();
+        }
       }
     }
   }
@@ -180,12 +213,7 @@ class LocationService {
       // 🔹 Muestra un popup antes de redirigir a la configuración
       bool shouldRedirect = await _showPermissionDialog(context);
       if (shouldRedirect) {
-        final intent = AndroidIntent(
-          action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
-          data: 'package:com.example.MoveIT',
-          flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
-        );
-        await intent.launch();
+        await openAppSettings();
       }
     }
   }
@@ -298,7 +326,7 @@ class LocationService {
       _locationStreamController.add(newLocation); // 🔹 Notifica a los listeners
 
       print(
-        '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
+        '📍 Nueva ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}, Fecha y Hora: ${DateTime.now().toIso8601String()}',
       );
 
       await _updateCoordinatesInFirestore(position); // 🔹 Actualiza Firestore
@@ -422,7 +450,7 @@ class LocationService {
     }
 
     if (firestoreInterval == null || firestoreInterval == 0) {
-      // print('❌ No se pudo obtener los intervalos de las constantes.');
+      // print('❌ No se pudo obtener el intervalo de Firestore.');
     } else {
       // Timer para Firestore
       Timer.periodic(Duration(seconds: firestoreInterval), (
@@ -442,7 +470,7 @@ class LocationService {
     }
 
     if (rioGasInterval == null || rioGasInterval == 0) {
-      print('❌ No se pudo obtener los intervalos de las constantes.');
+      // print('❌ No se pudo obtener el intervalo de RioGas.');
     } else {
       // Timer para RioGas
       Timer.periodic(Duration(seconds: rioGasInterval), (rioGasTimer) async {

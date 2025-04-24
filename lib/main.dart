@@ -24,20 +24,77 @@ import 'utils/constantes.dart'; // Importa constantes para usar getConstantValue
 import 'package:dio/dio.dart'; // Importa dio para la descarga
 import 'package:open_file/open_file.dart'; // Importa open_file para abrir el archivo descargado
 import 'package:path_provider/path_provider.dart'; // Importa path_provider para obtener directorios
-import 'package:permission_handler/permission_handler.dart'; // Importa permission_handler para manejar permisos
+import 'package:permission_handler/permission_handler.dart'
+    as permission_handler; // Importa permission_handler para manejar permisos
 import 'package:flutter/services.dart'; // Importa SystemNavigator
 import 'dart:async';
+import 'package:geolocator/geolocator.dart';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
+import '../services/location_service.dart'; // 🔹 Importamos LocationService
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
+
+Future<void> _checkAndListenGpsPermissions() async {
+  print('Antes de los permisos de ubicación');
+  LocationPermission permission = await Geolocator.checkPermission();
+
+  if (permission != LocationPermission.always) {
+    print('🔄 Initial GPS Permission: $permission');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: navigatorKey.currentContext!,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Permiso de GPS requerido'),
+            content: Text(
+              'La aplicación requiere que habilites los permisos de ubicación TODO EL TIEMPO para funcionar correctamente. Por favor, habilítalos.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                child: Text('Cancelar'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+              TextButton(
+                child: Text('Ir a Ajustes'),
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  final intent = AndroidIntent(
+                    action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
+                    data: 'package:com.example.MoveIT',
+                    flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+                  );
+                  await intent.launch();
+                },
+              ),
+            ],
+          );
+        },
+      );
+    });
+  }
+}
+
+void _listenToLocationPermission() {
+  Geolocator.getServiceStatusStream().listen((ServiceStatus status) async {
+    try {
+      print('🔄 GPS Service Status: $status');
+      LocationPermission permission = await Geolocator.checkPermission();
+      print('🔄 Current GPS Permission: $permission');
+    } catch (e) {
+      print('❌ Error in Location Permission Listener: $e');
+    }
+  });
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // 🔹 Verificar conectividad a Internet
-  await _checkInternetConnectivity();
 
   // 🔹 Inicializa Hive antes de cualquier acceso a Hive.openBox()
   await Hive.initFlutter();
@@ -49,9 +106,18 @@ void main() async {
 
   bool isLoggedIn = await AuthService.checkIsLoggedIn();
 
-  // 🔹 Validar la versión de la aplicación
-  await _validateAppVersion();
+  if (isLoggedIn) {
+    // 🔹 Verificar y escuchar permisos de GPS
+    //await _checkAndListenGpsPermissions();
+  }
 
+  // 🔹 Verificar conectividad a Internet
+  await _checkInternetConnectivity();
+
+  // 🔹 Validar la versión de la aplicación
+  if (!isLoggedIn) {
+    await _validateAppVersion();
+  }
   // 🔹 Inicializar Firebase Messaging
   await _initializeFirebaseMessaging();
 
@@ -99,6 +165,9 @@ void main() async {
   }
 
   //WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
+
+  // 🔹 Start listening to location permissions
+  _listenToLocationPermission();
 }
 
 Future<void> _initializeFirebaseMessaging() async {
@@ -404,11 +473,13 @@ void _showUpdateDialog(String message, String link, bool isRequired) {
                     '🔄 Confirmación recibida. Iniciando proceso de actualización.');
 
                 // Solicitar permiso REQUEST_INSTALL_PACKAGES
-                if (await Permission.requestInstallPackages.isDenied) {
+                if (await permission_handler
+                    .Permission.requestInstallPackages.isDenied) {
                   print(
                       '⚠️ Permiso REQUEST_INSTALL_PACKAGES denegado. Solicitando permiso.');
-                  final status =
-                      await Permission.requestInstallPackages.request();
+                  final status = await permission_handler
+                      .Permission.requestInstallPackages
+                      .request();
                   if (!status.isGranted) {
                     print('❌ Permiso REQUEST_INSTALL_PACKAGES no concedido.');
                     _showMessage(
@@ -459,6 +530,9 @@ void _showUpdateDialog(String message, String link, bool isRequired) {
                   // Abre el archivo descargado para instalarlo
                   final result = await OpenFile.open(filePath);
 
+                  var box = await Hive.openBox('sessionBox');
+                  box.clear(); // Limpia la caja de sesión al cerrar la app
+
                   if (result.type == ResultType.done) {
                     print('✅ Archivo abierto exitosamente.');
                   } else {
@@ -494,29 +568,26 @@ Future<bool> _checkActiveSession(
   String? idUsuario = box.get('username');
   String? idTerminal = box.get('deviceId');
   String? nombreUsuario = box.get('NombreUsuario');
-
-  // print('🔍 Datos recuperados de Hive:');
-  // print('   ➤ Escenario: $escenario');
-  // print('   ➤ Usuario: $idUsuario');
-  // print('   ➤ Terminal: $idTerminal');
-  // print('   ➤ NombreUsuario: $nombreUsuario');
-
-  // Verificar si hay datos en sessionBox
-  if (escenario == null ||
-      idUsuario == null ||
-      idTerminal == null ||
-      nombreUsuario == null) {
-    // print(
-    //   '⚠️ Falta información en sessionBox. No se puede validar sesión activa.',
-    // );
-    return false;
-  }
+  String? fecha = box.get('fecha');
 
   String hoy = DateTime.now()
       .toUtc()
       .toIso8601String()
       .split('T')[0]
       .replaceAll('-', '');
+
+  // Verificar si hay datos en sessionBox
+  if (escenario == null ||
+      idUsuario == null ||
+      idTerminal == null ||
+      nombreUsuario == null ||
+      fecha != hoy) {
+    // print(
+    //   '⚠️ Falta información en sessionBox. No se puede validar sesión activa.',
+    // );
+    return false;
+  }
+
   String path = 'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
 
   // print('📄 Consultando documento Firestore: $path');

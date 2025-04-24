@@ -177,18 +177,13 @@ class FirebaseService {
     String movil = box.get('movil', defaultValue: '0');
     String collectionName = 'Sesiones-$escenarioId';
 
-    // Obtener la fecha actual en formato yyyymmdd
     DateTime now = DateTime.now();
     String fechaActual =
         now.toIso8601String().split('T')[0].replaceAll('-', '');
 
-    // Nombre de la colección del móvil
     String movilCollectionName = 'Movil-$movil';
-
-    // Nombre del documento "activo"
     String activoDocName = 'activo';
 
-    // Obtener la referencia del documento "activo"
     DocumentReference activoDocRef = FirebaseFirestore.instance
         .collection(collectionName)
         .doc(fechaActual)
@@ -196,57 +191,67 @@ class FirebaseService {
         .doc(activoDocName);
 
     try {
-      // 🌐 Hacer una consulta inicial FORZANDO datos desde el servidor (sin caché)
       DocumentSnapshot snapshot = await activoDocRef.get(
         const GetOptions(source: Source.server),
       );
 
       if (snapshot.exists) {
         var data = snapshot.data() as Map<String, dynamic>;
-        // print('✅ Sesión activa encontrada desde el servidor: $data');
+        print('✅ Documento inicial encontrado: $data');
         yield data;
       } else {
-        // print('⚠ No se encontró el documento "activo" en el servidor.');
+        print('⚠️ Documento inicial no encontrado. Eliminando Hive boxes.');
+        //await _deleteAllHiveBoxes();
         yield null;
       }
     } catch (error) {
-      // print('❌ Error al obtener sesión desde el servidor: $error');
+      print('❌ Error al obtener el documento inicial: $error');
       await _logError('Firestore Error', error.toString());
       yield null;
     }
 
-    // 📡 Ahora, escuchar cambios en Firestore en tiempo real
     Stream<Map<String, dynamic>?> sesionesStream = activoDocRef
         .snapshots(includeMetadataChanges: true)
         .handleError((error) async {
+      print('❌ Error en el stream de Firestore: $error');
       if (error is FirebaseException && error.code == 'permission-denied') {
         await _logFirestorePermissionError(
           error.message ?? 'Permission denied',
         );
       } else {
-        // print('❌ Error al escuchar cambios en Firestore: $error');
         await _logError('Firestore Error', error.toString());
       }
       bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
+        print('⚠️ Pérdida de conectividad con Firestore.');
       }
-    }).map((snapshot) {
+    }).asyncMap((snapshot) async {
       if (snapshot.exists) {
         var data = snapshot.data() as Map<String, dynamic>;
-        // print('🔄 Sesión activa actualizada en Firestore: $data');
+        print('🔄 Documento actualizado en Firestore: $data');
         return data;
       } else {
-        // print(
-        //   '⚠ Documento "activo" eliminado o no encontrado en Firestore.',
-        // );
+        print('⚠️ Documento eliminado en Firestore. Eliminando Hive boxes.');
+        //await _deleteAllHiveBoxes();
         return null;
       }
     });
 
-    monitorStream(sesionesStream, 'SesionesStream'); // Monitorea el stream
+    print('📡 Iniciando escucha de cambios en Firestore.');
+    monitorStream(sesionesStream, 'SesionesStream');
     yield* sesionesStream;
+  }
+
+  Future<void> _deleteAllHiveBoxes() async {
+    var box = await Hive.openBox('sessionBox');
+    var constantBox = await Hive.openBox('constantBox');
+    var mensajesBox = await Hive.openBox('mensajesBox');
+    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
+    await box.deleteFromDisk();
+    await constantBox.deleteFromDisk();
+    await mensajesBox.deleteFromDisk();
+    await failedRequestsBox.deleteFromDisk();
   }
 
   Stream<List<DocumentSnapshot>> getPedidosStream() async* {
