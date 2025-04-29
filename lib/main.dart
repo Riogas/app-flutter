@@ -116,8 +116,10 @@ void main() async {
 
   // 🔹 Validar la versión de la aplicación
   /*if (!isLoggedIn) {
-    await _validateAppVersion();
+    
   }*/
+  await _validateAppVersion();
+
   // 🔹 Inicializar Firebase Messaging
   await _initializeFirebaseMessaging();
 

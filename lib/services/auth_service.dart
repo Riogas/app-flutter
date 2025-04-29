@@ -50,7 +50,7 @@ class AuthService {
       var box = await Hive.openBox('sessionBox');
       await box.put('username', username);
       await box.put('movil', response['selectedMovil']);
-      await box.put('escenario', response['EscenarioId'] == 1000 ? 1000 : 2000);
+      await box.put('escenario', response['escenarioid'] == 1000 ? 1000 : 2000);
       await box.put('NombreUsuario', response['NombreUsuario'].trim());
 
       return true;

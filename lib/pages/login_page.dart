@@ -724,7 +724,7 @@ class _LoginPageState extends State<LoginPage> {
     await box.put('username', _usernameController.text);
     await box.put(
       'escenario',
-      response['EscenarioId'] == "1000" ? "1000" : "2000",
+      response['escenarioid'] == "1000" ? "1000" : "2000",
     );
     await box.put('NombreUsuario', response['NombreUsuario'].trim());
     await box.put('deviceId', _deviceId);
@@ -1036,18 +1036,30 @@ class _LoginPageState extends State<LoginPage> {
 
   List<Map<String, String>> _extractAvailableMoviles(
       Map<String, dynamic> response) {
+    print('📥 Iniciando extracción de móviles disponibles...');
+
+    // Verificar si 'ListaMoviles' está presente en la respuesta
     List<dynamic> listaMoviles = response['ListaMoviles'] != null
         ? jsonDecode(response['ListaMoviles'])
         : [];
-    return listaMoviles.map((movil) {
-      String displayValue = response['EscenarioId'] == "1000"
+    print('🔍 Lista de móviles obtenida: $listaMoviles');
+    print('🔍 Cantidad de móviles: ${response['escenarioid']}');
+
+    // Mapear la lista de móviles a una lista de mapas con 'id' y 'displayValue'
+    List<Map<String, String>> mappedMoviles = listaMoviles.map((movil) {
+      String displayValue = response['escenarioid'] == "1000"
           ? movil['SDT_Mov_MovMat'].toString()
           : movil['DV_P_M_MOVDESCRIPCION'].toString();
+      print(
+          '🛠️ Procesando móvil: ID=${movil['SDT_Mov_MovId']}, DisplayValue=$displayValue');
       return {
         'id': movil['SDT_Mov_MovId'].toString(),
         'displayValue': displayValue
       };
     }).toList();
+
+    print('✅ Mapeo de móviles completado: $mappedMoviles');
+    return mappedMoviles;
   }
 
   @override

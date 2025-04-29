@@ -457,7 +457,7 @@ class RioGasService {
       'usuario': usuario,
       'password': password,
       'DeviceId': deviceId,
-      'token': token,
+      'tokenFCM': token,
     });
   }
 
@@ -535,7 +535,7 @@ class RioGasService {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
     return _post('DescargaLecturaMensajes', {
-      'EscenarioId': escenarioId,
+      'escenarioid': escenarioId,
       'MovilId': movilId,
       'MessageId': messageId,
       'usuario': usuario,
@@ -571,7 +571,7 @@ class RioGasService {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
     return _post('DescargaLecturaPedidos', {
-      'EscenarioId': escenarioId,
+      'escenarioid': escenarioId,
       'PedidoId': pedidoId,
       'PedidoTpo': pedidoTpo,
       'usuario': usuario,
@@ -610,7 +610,7 @@ class RioGasService {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
     return _post('FinalizarPedido', {
-      'EscenarioId': escenarioId,
+      'escenarioid': escenarioId,
       'PedidoId': pedidoId,
       'PedidoTpo': pedidoTpo,
       'usuario': usuario,
@@ -648,7 +648,7 @@ class RioGasService {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
     return _post('ActualizarMoviles', {
-      'EscenarioId': escenarioId,
+      'escenarioid': escenarioId,
       'MovilId': movilId,
       'usuario': usuario,
       'NroSesion': nroSesion,
@@ -688,7 +688,7 @@ class RioGasService {
     String fechaHoraCmbEst = now.toIso8601String();
 
     return _post('ActualizarMoviles', {
-      'EscenarioId': int.parse(escenarioId),
+      'escenarioid': int.parse(escenarioId),
       'MovilId': movilId,
       'usuario': usuario,
       'NroSesion': '',
@@ -745,7 +745,7 @@ class RioGasService {
         'FechaHora': fechaHora,
         'DistanciaRecorrida': distanciaRecorrida, // Pass distance to service
         'Velocidad': velocidad, // Pass speed to service
-        'EscenarioId': escenarioIdInt,
+        'escenarioid': escenarioIdInt,
         'usuario': username
       });
     } catch (e) {
