@@ -26,6 +26,10 @@ args
 3.3
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/args-2.6.0/
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/args-2.6.0/lib/
+asn1lib
+3.7
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/asn1lib-1.6.4/
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/asn1lib-1.6.4/lib/
 async
 3.4
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/async-2.12.0/
@@ -130,6 +134,10 @@ crypto
 3.4
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/crypto-3.0.6/
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/crypto-3.0.6/lib/
+crypto_keys
+2.12
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/crypto_keys-0.3.0+1/
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/crypto_keys-0.3.0+1/lib/
 csslib
 3.1
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/csslib-1.0.2/
@@ -394,6 +402,10 @@ io
 3.4
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/io-1.0.5/
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/io-1.0.5/lib/
+jose
+3.0
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/jose-0.3.4/
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/jose-0.3.4/lib/
 js
 3.1
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/js-0.7.1/
@@ -570,6 +582,10 @@ plugin_platform_interface
 3.0
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/plugin_platform_interface-2.1.8/
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/plugin_platform_interface-2.1.8/lib/
+pointycastle
+3.2
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/pointycastle-3.9.1/
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/pointycastle-3.9.1/lib/
 polylabel
 2.13
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/polylabel-1.0.1/
@@ -598,6 +614,10 @@ pubspec_parse
 3.6
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/pubspec_parse-1.5.0/
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/pubspec_parse-1.5.0/lib/
+quiver
+2.17
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/quiver-3.2.2/
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/quiver-3.2.2/lib/
 sanitize_html
 2.12
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/sanitize_html-2.1.0/
@@ -770,6 +790,10 @@ wkt_parser
 2.12
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/wkt_parser-2.0.0/
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/wkt_parser-2.0.0/lib/
+x509
+3.0
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/x509-0.2.4+3/
+file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/x509-0.2.4+3/lib/
 xdg_directories
 3.3
 file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/xdg_directories-1.1.0/

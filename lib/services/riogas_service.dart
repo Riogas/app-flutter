@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart'; // Add this import for opening 
 import 'package:path_provider/path_provider.dart'; // Add this import for file handling
 import 'package:open_file/open_file.dart'; // Ensure this import is present
 import '../services/auth_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // Import FirebaseMessaging
 
 class RioGasService {
   static const String baseUrl = 'https://www.riogas.uy/ica_geos_/appservices/';
@@ -449,11 +450,14 @@ class RioGasService {
     String usuario,
     String password,
     String deviceId,
-  ) {
+  ) async {
+    String? token = await FirebaseMessaging.instance.getToken();
+    print('🪙 Token: $token');
     return _post('ValidarUsuario', {
       'usuario': usuario,
       'password': password,
       'DeviceId': deviceId,
+      'token': token,
     });
   }
 
@@ -469,7 +473,7 @@ class RioGasService {
     String marca,
     String modelo,
     String info,
-  ) {
+  ) async {
     return _post('RegistrarDispositivo', {
       'DeviceId': deviceId,
       'Documento': documento,

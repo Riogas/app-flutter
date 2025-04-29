@@ -46,6 +46,8 @@ dependencies:
   dio: ^5.0.0
   permission_handler: ^12.0.0
   internet_connection_checker: ^3.0.1
+  crypto: ^3.0.3
+  jose: ^0.3.2
   #install_plugin: ^2.1.0 # Add the install_plugin package
   #flutter_windowmanager: ^0.2.0
   

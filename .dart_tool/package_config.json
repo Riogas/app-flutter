@@ -50,6 +50,12 @@
       "languageVersion": "3.3"
     },
     {
+      "name": "asn1lib",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/asn1lib-1.6.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
+    },
+    {
       "name": "async",
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/async-2.12.0",
       "packageUri": "lib/",
@@ -204,6 +210,12 @@
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/crypto-3.0.6",
       "packageUri": "lib/",
       "languageVersion": "3.4"
+    },
+    {
+      "name": "crypto_keys",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/crypto_keys-0.3.0+1",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
     },
     {
       "name": "csslib",
@@ -620,6 +632,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "jose",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/jose-0.3.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "js",
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/js-0.7.1",
       "packageUri": "lib/",
@@ -884,6 +902,12 @@
       "languageVersion": "3.0"
     },
     {
+      "name": "pointycastle",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/pointycastle-3.9.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
       "name": "polylabel",
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/polylabel-1.0.1",
       "packageUri": "lib/",
@@ -924,6 +948,12 @@
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/pubspec_parse-1.5.0",
       "packageUri": "lib/",
       "languageVersion": "3.6"
+    },
+    {
+      "name": "quiver",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/quiver-3.2.2",
+      "packageUri": "lib/",
+      "languageVersion": "2.17"
     },
     {
       "name": "sanitize_html",
@@ -1190,6 +1220,12 @@
       "languageVersion": "2.12"
     },
     {
+      "name": "x509",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/x509-0.2.4+3",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "xdg_directories",
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/xdg_directories-1.1.0",
       "packageUri": "lib/",
@@ -1214,7 +1250,7 @@
       "languageVersion": "3.6"
     }
   ],
-  "generated": "2025-04-21T20:27:42.980310Z",
+  "generated": "2025-04-28T18:18:50.356278Z",
   "generator": "pub",
   "generatorVersion": "3.8.0-70.0.dev",
   "flutterRoot": "file:///C:/flutter",

@@ -379,12 +379,12 @@ class _HomePageState extends State<HomePage>
         }
       }
 
-      if (newMessagesCount > 0) {
+      /*if (newMessagesCount > 0) {
         _showNotification(
           'Nuevo Mensaje',
           'Tienes $newMessagesCount mensajes nuevos.',
         );
-      }
+      }*/
 
       setState(() {
         _unreadMessages = mensajesBox.values
@@ -421,10 +421,10 @@ class _HomePageState extends State<HomePage>
           ); // Mark as "Descargado"
 
           // Suppress notifications on first load
-          _showNotification(
+          /*_showNotification(
             'Nueva Visita',
             'Tienes un nueva visita pendiente.',
-          );
+          );*/
 
           // Call the download and read routine here
           await _callDescargaLecturaPedidos(pedido, pedidoId);
@@ -738,10 +738,12 @@ class _HomePageState extends State<HomePage>
     return Colors.green;
   }
 
-  void _updateConnectionStatus(Map<String, dynamic> status) {
+  Future<void> _updateConnectionStatus(Map<String, dynamic> status) async {
     // Log the incoming status for debugging
     print('🔄 Actualizando estado de conexión: $status');
 
+    String? token = await FirebaseMessaging.instance.getToken();
+    print('token: $token');
     // Only update the notifier if the status has changed
     if (_connectionStatusNotifier.value['network'] != status['network'] ||
         _connectionStatusNotifier.value['firestore'] != status['firestore'] ||

@@ -115,9 +115,9 @@ void main() async {
   await _checkInternetConnectivity();
 
   // 🔹 Validar la versión de la aplicación
-  if (!isLoggedIn) {
+  /*if (!isLoggedIn) {
     await _validateAppVersion();
-  }
+  }*/
   // 🔹 Inicializar Firebase Messaging
   await _initializeFirebaseMessaging();
 

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
 import 'dart:async'; // Import the dart:async package for StreamSubscription
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../services/riogas_service.dart'; // Import the RioGasService
 import 'package:intl/intl.dart'; // Import the intl package for date formatting
 import '../services/location_service.dart'; // Import the LocationService
@@ -20,8 +19,6 @@ class MessagePage extends StatefulWidget {
 
 class _MessagePageState extends State<MessagePage> {
   final FirebaseService _firebaseService = FirebaseService();
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
   final FirebaseMessaging _firebaseMessaging =
       FirebaseMessaging.instance; // Add FirebaseMessaging instance
   List<String> _readMessageIds = [];
@@ -34,7 +31,6 @@ class _MessagePageState extends State<MessagePage> {
   void initState() {
     super.initState();
     _checkLocationService();
-    _initializeNotifications();
     _listenToMessages();
     _setupFCM(); // Initialize FCM for background notifications
     _listenToGPSChanges(); // Listen to GPS status changes
@@ -61,14 +57,6 @@ class _MessagePageState extends State<MessagePage> {
         _isLocationServiceEnabled = isEnabled;
       });
     }
-  }
-
-  void _initializeNotifications() {
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    final InitializationSettings initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
-    flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 
   void _listenToMessages() async {
@@ -107,7 +95,7 @@ class _MessagePageState extends State<MessagePage> {
   Future<void> _showForegroundNotification(
     RemoteNotification notification,
   ) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+    /*const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       'messages_channel_id',
       'Messages Notifications',
@@ -124,7 +112,7 @@ class _MessagePageState extends State<MessagePage> {
       notification.title,
       notification.body,
       platformChannelSpecifics,
-    );
+    );*/
   }
 
   static Future<void> _firebaseMessagingBackgroundHandler(
@@ -143,7 +131,7 @@ class _MessagePageState extends State<MessagePage> {
     }
   }
 
-  Future<void> _showNotification(DocumentSnapshot message) async {
+  /*Future<void> _showNotification(DocumentSnapshot message) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       'your_channel_id',
@@ -163,7 +151,7 @@ class _MessagePageState extends State<MessagePage> {
       platformChannelSpecifics,
       payload: 'item x',
     );
-  }
+  }*/
 
   Future<void> _markMessageAsRead(DocumentSnapshot message) async {
     var box = await Hive.openBox('sessionBox');
