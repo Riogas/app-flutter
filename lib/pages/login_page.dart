@@ -16,6 +16,7 @@ import 'package:sms_autofill/sms_autofill.dart'; // Import SmsAutoFill package
 import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth package
 import '../utils/config.dart'; // Import Config class
 import '../utils/constantes.dart'; // Import Constants class
+import 'package:local_auth/local_auth.dart'; // Import local_auth package
 
 class LoginPage extends StatefulWidget {
   @override
@@ -82,6 +83,36 @@ class _LoginPageState extends State<LoginPage> {
       // Save the last logged-in username in Hive
       var usuarioBox = await Hive.openBox('usuarioBox');
       await usuarioBox.put('lastUsername', _usernameController.text);
+      print(
+          '✅ Se guardó el último nombre de usuario: ${_usernameController.text}');
+
+      // Verificar si el campo "huella" no está configurado
+      final LocalAuthentication auth = LocalAuthentication();
+      bool isBiometricAvailable = await auth.isDeviceSupported();
+      if (usuarioBox.get('huella') == null && isBiometricAvailable) {
+        print(
+            "🔐 Huella no configurada. Mostrando diálogo para habilitar huella.");
+        bool shouldEnableFingerprint = await _showEnableFingerprintDialog();
+        if (shouldEnableFingerprint) {
+          print("🔐 Usuario aceptó habilitar huella.");
+          await _configureFingerprintAuthentication();
+
+          // Verificar nuevamente si la huella fue configurada correctamente
+          if (usuarioBox.get('huella') != true) {
+            print('❌ Configuración de huella fallida. Deteniendo flujo.');
+            return; // Detener el flujo si la configuración falla
+          }
+        }
+      }
+
+      // Si el campo "huella" está configurado en true, solicitar autenticación con huella
+      if (usuarioBox.get('huella') == true) {
+        bool isAuthenticated = await _authenticateWithFingerprint();
+        if (!isAuthenticated) {
+          print("❌ Autenticación con huella fallida.");
+          return; // Detener el flujo de inicio de sesión
+        }
+      }
 
       // 🔹 Validar dispositivo antes de mostrar selección de móviles
       bool isDeviceValid = await _validateDevice();
@@ -612,22 +643,47 @@ class _LoginPageState extends State<LoginPage> {
                                 child: SizedBox(
                                   width:
                                       MediaQuery.of(context).size.width * 0.8,
-                                  child: DropdownButton<String>(
-                                    hint: Text('Seleccione móvil'),
-                                    value: selectedMovil,
-                                    onChanged: (String? newValue) {
-                                      setState(() {
-                                        selectedMovil = newValue;
-                                      });
-                                    },
-                                    items: _availableMoviles
-                                        .map<DropdownMenuItem<String>>((movil) {
-                                      return DropdownMenuItem<String>(
-                                        value: movil['id'],
-                                        child: Text(
-                                            movil['displayValue'] ?? 'N/A'),
+                                  child: FutureBuilder(
+                                    future: Hive.openBox('usuarioBox')
+                                        .then((box) => box.get('movil')),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState ==
+                                          ConnectionState.waiting) {
+                                        return CircularProgressIndicator();
+                                      }
+
+                                      String? defaultMovil =
+                                          snapshot.data as String?;
+                                      if (!_availableMoviles.any((movil) =>
+                                          movil['id'] == defaultMovil)) {
+                                        defaultMovil = null;
+                                      }
+
+                                      // Inicializar selectedMovil con el valor predeterminado si no está inicializado
+                                      if (selectedMovil == null &&
+                                          defaultMovil != null) {
+                                        selectedMovil = defaultMovil;
+                                      }
+
+                                      return DropdownButton<String>(
+                                        hint: Text('Seleccione móvil'),
+                                        value: selectedMovil,
+                                        onChanged: (String? newValue) {
+                                          setState(() {
+                                            selectedMovil = newValue;
+                                          });
+                                        },
+                                        items: _availableMoviles
+                                            .map<DropdownMenuItem<String>>(
+                                                (movil) {
+                                          return DropdownMenuItem<String>(
+                                            value: movil['id'],
+                                            child: Text(
+                                                movil['displayValue'] ?? 'N/A'),
+                                          );
+                                        }).toList(),
                                       );
-                                    }).toList(),
+                                    },
                                   ),
                                 ),
                               ),
@@ -666,8 +722,10 @@ class _LoginPageState extends State<LoginPage> {
                         });
 
                         // 🔹 Guardar móvil seleccionado y matrícula en Hive
+                        var userbox = await Hive.openBox('usuarioBox');
                         var box = await Hive.openBox('sessionBox');
                         await box.put('movil', selectedMovil);
+                        await userbox.put('movil', selectedMovil);
 
                         String hoy = DateTime.now()
                             .toUtc()
@@ -678,6 +736,8 @@ class _LoginPageState extends State<LoginPage> {
                         await box.put('fecha', hoy);
                         if (showLicensePlateField) {
                           await box.put(
+                              'matricula', licensePlateController.text);
+                          await userbox.put(
                               'matricula', licensePlateController.text);
                         }
 
@@ -722,6 +782,7 @@ class _LoginPageState extends State<LoginPage> {
     // 🔹 Guardar en Hive los datos del usuario, pero SOLO EL MÓVIL SELECCIONADO
     var box = await Hive.openBox('sessionBox');
     await box.put('username', _usernameController.text);
+    await box.put('password', _passwordController.text);
     await box.put(
       'escenario',
       response['escenarioid'] == "1000" ? "1000" : "2000",
@@ -968,7 +1029,7 @@ class _LoginPageState extends State<LoginPage> {
           actions: <Widget>[
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(); //SERVICIO DE LIMPIEZA DE SESION
               },
               child: Text('Cancelar'),
             ),
@@ -1060,6 +1121,131 @@ class _LoginPageState extends State<LoginPage> {
 
     print('✅ Mapeo de móviles completado: $mappedMoviles');
     return mappedMoviles;
+  }
+
+  Future<bool> _showEnableFingerprintDialog() async {
+    bool shouldEnable = false;
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Habilitar Autenticación con Huella'),
+          content: Text(
+              '¿Desea habilitar la autenticación con huella dactilar para futuros inicios de sesión?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('No'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                shouldEnable = true;
+                Navigator.of(context).pop();
+              },
+              child: Text('Sí'),
+            ),
+          ],
+        );
+      },
+    );
+    return shouldEnable;
+  }
+
+  Future<void> _configureFingerprintAuthentication() async {
+    final LocalAuthentication auth = LocalAuthentication();
+    var usuarioBox = await Hive.openBox('usuarioBox');
+
+    print('📦 Abriendo caja Hive: usuarioBox...');
+
+    try {
+      // Verificar si el dispositivo soporta autenticación biométrica
+      print(
+          '🔍 Verificando si el dispositivo soporta autenticación biométrica...');
+      bool canCheckBiometrics = await auth.canCheckBiometrics;
+      print('✅ Soporte de biometría: $canCheckBiometrics');
+
+      if (!canCheckBiometrics) {
+        print('❌ El dispositivo no soporta autenticación biométrica.');
+        return;
+      }
+
+      // Verificar si hay biometría disponible
+      print('🔍 Verificando si hay biometría disponible en el dispositivo...');
+      bool isBiometricAvailable = await auth.isDeviceSupported();
+      print('✅ Biometría disponible: $isBiometricAvailable');
+
+      if (!isBiometricAvailable) {
+        print(
+            '❌ La autenticación biométrica no está disponible en este dispositivo.');
+        return;
+      }
+
+      // Intentar autenticar para configurar la huella digital
+      print('🔐 Intentando autenticar para configurar la huella digital...');
+      bool authenticated = await auth.authenticate(
+        localizedReason:
+            'Por favor autentíquese para configurar la huella digital',
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+        ),
+      );
+
+      print('🔍 Resultado de la autenticación: $authenticated');
+
+      if (authenticated) {
+        print('✅ Autenticación exitosa. Guardando configuración en Hive...');
+        await usuarioBox.put('huella', true);
+        print('✅ Autenticación con huella habilitada en Hive.');
+      } else {
+        print('❌ Configuración de huella cancelada por el usuario.');
+      }
+    } catch (e) {
+      print('❌ Error durante la configuración de huella: $e');
+    }
+  }
+
+  Future<bool> _authenticateWithFingerprint() async {
+    final LocalAuthentication auth = LocalAuthentication();
+
+    try {
+      // Verificar si el dispositivo soporta autenticación biométrica
+      bool canCheckBiometrics = await auth.canCheckBiometrics;
+      if (!canCheckBiometrics) {
+        print('❌ El dispositivo no soporta autenticación biométrica.');
+        return false;
+      }
+
+      // Verificar si hay biometría disponible
+      bool isBiometricAvailable = await auth.isDeviceSupported();
+      if (!isBiometricAvailable) {
+        print(
+            '❌ La autenticación biométrica no está disponible en este dispositivo.');
+        return false;
+      }
+
+      // Intentar autenticar con huella dactilar
+      bool authenticated = await auth.authenticate(
+        localizedReason: 'Por favor autentíquese para continuar',
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+        ),
+      );
+
+      if (authenticated) {
+        print('✅ Autenticación con huella completada.');
+        return true;
+      } else {
+        print('❌ Autenticación con huella fallida.');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error durante la autenticación con huella: $e');
+      return false;
+    }
   }
 
   @override

@@ -1081,6 +1081,9 @@ class RioGasService {
       'TipoCierre': tipoCierre,
       'FechaHora': fechaHora,
       'version': appVersion,
+      'origen': 'MoveIT',
+      'usuarioCierre': usuario,
+      'aplicaFirestore': false,
     });
   }
 }

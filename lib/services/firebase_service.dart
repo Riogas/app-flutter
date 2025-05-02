@@ -600,6 +600,8 @@ class FirebaseService {
   Stream<List<Map<String, dynamic>>> getSubEstadoMovilesStream() async* {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
+    print('Escenario ID: $escenarioId');
+    print('Movil ID: ${box.get('movil')}');
     String collectionName = 'SubEstadoMoviles-$escenarioId';
 
     Stream<List<Map<String, dynamic>>> subEstadoMovilesStream = _firestore
