@@ -1086,4 +1086,18 @@ class RioGasService {
       'aplicaFirestore': false,
     });
   }
+
+  static Future<Map<String, dynamic>?> limpiarSesiones(
+    int movil,
+    int escenarioId,
+    String device,
+    String usuario,
+  ) {
+    return _post('LimpiarSesiones', {
+      'movil': movil,
+      'escenarioid': escenarioId,
+      'device': device,
+      'usuario': usuario,
+    });
+  }
 }

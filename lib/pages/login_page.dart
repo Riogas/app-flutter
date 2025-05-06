@@ -795,22 +795,6 @@ class _LoginPageState extends State<LoginPage> {
 
     var pedidosBox = await Hive.openBox('pedidosBox');
 
-    // Call registrarUltLog after confirming the mobile selection
-    var sessionBox = await Hive.openBox('sessionBox');
-    String? username = sessionBox.get('username');
-    String? deviceId = sessionBox.get('deviceId');
-
-    if (username != null && deviceId != null) {
-      await RioGasService.registrarUltLog(
-          int.parse(selectedMovil!), _deviceId, username);
-      print('✅ Servicio registrarUltLog llamado exitosamente.');
-    } else {
-      print(
-          '⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.');
-      print(
-          'username: $username, deviceId: $_deviceId, selectedMovil: $selectedMovil');
-    }
-
     // 🔹 Limpiar pedidosBox de claves cuyo valor sea 'Procesando'
     final keysToDelete = <dynamic>[];
 
@@ -856,6 +840,22 @@ class _LoginPageState extends State<LoginPage> {
 
       // 🔹 Guardar sesión en Firestore
       await _saveSession(currentLocation);
+
+      // Call registrarUltLog after confirming the mobile selection
+      var sessionBox = await Hive.openBox('sessionBox');
+      String? username = sessionBox.get('username');
+      String? deviceId = sessionBox.get('deviceId');
+
+      if (username != null && deviceId != null) {
+        await RioGasService.registrarUltLog(
+            int.parse(selectedMovil!), _deviceId, username);
+        print('✅ Servicio registrarUltLog llamado exitosamente.');
+      } else {
+        print(
+            '⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.');
+        print(
+            'username: $username, deviceId: $_deviceId, selectedMovil: $selectedMovil');
+      }
 
       // 🔹 Cerrar el diálogo de carga y navegar a HomePage
       if (mounted) {
@@ -1028,7 +1028,20 @@ class _LoginPageState extends State<LoginPage> {
           content: Text(contentText),
           actions: <Widget>[
             TextButton(
-              onPressed: () {
+              onPressed: () async {
+                var sessionBox = await Hive.openBox('sessionBox');
+                int movil = sessionBox.get('movil', defaultValue: 0);
+                int escenarioid =
+                    sessionBox.get('escenarioid', defaultValue: 0);
+                String device = sessionBox.get('deviceId', defaultValue: '');
+                String usuario = sessionBox.get('username', defaultValue: '');
+
+                await RioGasService.limpiarSesiones(
+                  movil,
+                  escenarioid,
+                  device,
+                  usuario,
+                );
                 Navigator.of(context).pop(); //SERVICIO DE LIMPIEZA DE SESION
               },
               child: Text('Cancelar'),
