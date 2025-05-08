@@ -529,6 +529,8 @@ class RioGasService {
       String inAux2,
       String latitud,
       String longitud,
+      String utmX,
+      String utmY,
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
       ) {
@@ -547,6 +549,8 @@ class RioGasService {
       'INAux2': inAux2,
       'Latitud': latitud,
       'longitud': longitud,
+      'utmX': utmX,
+      'utmY': utmY,
       'Velocidad': velocidad, // Added to body
       'DistanciaRecorrida': distanciaRecorrida // Added to body
     });
@@ -565,6 +569,8 @@ class RioGasService {
       String inAux2,
       String latitud,
       String longitud,
+      String utmX,
+      String utmY,
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
       ) {
@@ -583,6 +589,8 @@ class RioGasService {
       'INAux2': inAux2,
       'Latitud': latitud,
       'longitud': longitud,
+      'utmX': utmX,
+      'utmY': utmY,
       'Velocidad': velocidad, // Added to body
       'DistanciaRecorrida': distanciaRecorrida // Added to body
     });
@@ -604,6 +612,8 @@ class RioGasService {
       String inAux2,
       String latitud,
       String longitud,
+      String utmX,
+      String utmY,
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
       ) {
@@ -625,6 +635,8 @@ class RioGasService {
       'INAux2': inAux2,
       'Latitud': latitud,
       'longitud': longitud,
+      'utmX': utmX,
+      'utmY': utmY,
       'Velocidad': velocidad, // Added to body
       'DistanciaRecorrida': distanciaRecorrida // Added to body
     });
@@ -639,6 +651,8 @@ class RioGasService {
       String estadoStr,
       String latitud,
       String longitud,
+      String utmX,
+      String utmY,
       String fechaHoraCmbEst,
       String inAux1,
       String inAux2,
@@ -656,6 +670,8 @@ class RioGasService {
       'EstadoStr': estadoStr,
       'Latitud': latitud,
       'longitud': longitud,
+      'utmX': utmX,
+      'utmY': utmY,
       'FechaHoraCmbEst': fechaHoraCmbEst,
       'INAux1': inAux1,
       'INAux2': inAux2,
@@ -678,28 +694,38 @@ class RioGasService {
       return null;
     }
 
-    Position? position = await LocationService().getCurrentLocation();
-    if (position == null) {
-      // print('❌ No se pudo obtener la ubicación actual.');
+    var locationData = await LocationService().getCurrentLocation();
+    if (locationData != null) {
+      double latitude = locationData['latitude'];
+      double longitude = locationData['longitude'];
+      double utmX = locationData['utmX'];
+      double utmY = locationData['utmY'];
+
+      print('Latitud: $latitude, Longitud: $longitude');
+      print('UTM Este (X): $utmX, UTM Norte (Y): $utmY');
+
+      DateTime now = DateTime.now();
+      String fechaHoraCmbEst = now.toIso8601String();
+
+      return _post('ActualizarMoviles', {
+        'escenarioid': int.parse(escenarioId),
+        'MovilId': movilId,
+        'usuario': usuario,
+        'NroSesion': '',
+        'TermMobileEquipo': deviceId,
+        'EstadoStr': 'ACTIVO',
+        'Latitud': latitude.toString(),
+        'longitud': longitude.toString(),
+        'utmX': utmX.toString(),
+        'utmY': utmY.toString(),
+        'FechaHoraCmbEst': fechaHoraCmbEst,
+        'INAux1': '',
+        'INAux2': '',
+      });
+    } else {
+      print('❌ No se pudo obtener la ubicación actual.');
       return null;
     }
-
-    DateTime now = DateTime.now();
-    String fechaHoraCmbEst = now.toIso8601String();
-
-    return _post('ActualizarMoviles', {
-      'escenarioid': int.parse(escenarioId),
-      'MovilId': movilId,
-      'usuario': usuario,
-      'NroSesion': '',
-      'TermMobileEquipo': deviceId,
-      'EstadoStr': 'ACTIVO',
-      'Latitud': position.latitude.toString(),
-      'longitud': position.longitude.toString(),
-      'FechaHoraCmbEst': fechaHoraCmbEst,
-      'INAux1': '',
-      'INAux2': '',
-    });
   }
 
   static Future<Map<String, dynamic>?> enviarOTP(
@@ -719,6 +745,8 @@ class RioGasService {
       int movil,
       String latitud,
       String longitud,
+      String utmX,
+      String utmY,
       String deviceId,
       String fechaHora,
       double distanciaRecorrida, // Add distance parameter
@@ -741,6 +769,8 @@ class RioGasService {
         'movil': movil,
         'Latitud': latitud,
         'longitud': longitud,
+        'utmX': utmX,
+        'utmY': utmY,
         'DeviceId': deviceId,
         'FechaHora': fechaHora,
         'DistanciaRecorrida': distanciaRecorrida, // Pass distance to service

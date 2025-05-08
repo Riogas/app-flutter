@@ -26,6 +26,8 @@ class _MessagePageState extends State<MessagePage> {
   StreamSubscription<ServiceStatus>?
       _gpsStatusSubscription; // Subscription to listen to GPS status changes
   bool _isLocationServiceEnabled = true;
+  final LocationService locationService =
+      LocationService(); // Initialize locationService
 
   @override
   void initState() {
@@ -174,10 +176,25 @@ class _MessagePageState extends State<MessagePage> {
       return;
     }
 
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-      forceAndroidLocationManager: true,
-    );
+    String latitude = '0.0';
+    String longitude = '0.0';
+    String utmX = '0.0';
+    String utmY = '0.0';
+
+    // Invoca el método para obtener la ubicación
+    final locationData = await locationService.getCurrentLocation();
+
+    if (locationData != null) {
+      latitude = locationData['latitude'].toString();
+      longitude = locationData['longitude'].toString();
+      utmX = locationData['utmX'].toString();
+      utmY = locationData['utmY'].toString();
+
+      print('Latitud: $latitude, Longitud: $longitude');
+      print('UTMX: $utmX, UTMY: $utmY');
+    } else {
+      print('No se pudo obtener la ubicación.');
+    }
 
     // print(
     //   '📍 Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
@@ -225,8 +242,8 @@ class _MessagePageState extends State<MessagePage> {
     print('FechaHoraCmbEst: ${DateTime.now().toUtc().toIso8601String()}');
     print('INAux1: ');
     print('INAux2: ');
-    print('Latitud: ${position.latitude}');
-    print('Longitud: ${position.longitude}');
+    print('Latitud: ${latitude}');
+    print('Longitud: ${longitude}');
     print('Velocidad: $velocidad');
     print('DistanciaRecorrida: $distanciaRecorrida');
 
@@ -241,8 +258,10 @@ class _MessagePageState extends State<MessagePage> {
         DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
         '', // inAux1
         '', // inAux2
-        position.latitude.toString(), // latitud
-        position.longitude.toString(), // longitud
+        latitude, // latitud
+        longitude, // longitud
+        utmX, // utmX
+        utmY, // utmY
         velocidad, // velocidad
         distanciaRecorrida // distanciaRecorrida
         );

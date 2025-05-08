@@ -49,6 +49,8 @@ dependencies:
   crypto: ^3.0.3
   jose: ^0.3.2
   local_auth: ^2.1.6
+  #workmanager: ^0.5.2
+  proj4dart: ^2.1.0
   #install_plugin: ^2.1.0 # Add the install_plugin package
   #flutter_windowmanager: ^0.2.0
   

@@ -7,6 +7,7 @@ import 'order_detail_page.dart'; // Importa la nueva página de detalles
 import 'dart:async';
 import '../services/riogas_service.dart'; // Import the RioGasService
 import 'package:geolocator/geolocator.dart'; // Import Geolocator for getting current location
+import '../services/location_service.dart'; // Import your location service
 
 class PendingOrdersPage extends StatefulWidget {
   @override
@@ -26,6 +27,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   late Box sesionBox; // Declare the sesionBox variable
   late int movilId = 0;
   late String textoPermisosGPS = '';
+  final LocationService locationService =
+      LocationService(); // Initialize locationService
   Timer? _hiveStateChecker; // Make it nullable
 
   @override
@@ -170,7 +173,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     Map<String, dynamic> pedido,
     int pedidoId,
   ) async {
-    String pedidoTpo = pedido['Tipo'] == 'PEDIDOS' ? 'PEDIDOS' : 'SERVICES';
+    String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
     String lectDesc = 'LECTURA';
     String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
@@ -183,11 +186,20 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     String inAux1 = movilid;
     String inAux2 = '';
 
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-    String latitud = position.latitude.toString();
-    String longitud = position.longitude.toString();
+    String latitud = '0.0';
+    String longitud = '0.0';
+    String utmx = '0.0';
+    String utmy = '0.0';
+
+    // Invoca el método para obtener la ubicación
+    final locationData = await locationService.getCurrentLocation();
+
+    if (locationData != null) {
+      latitud = locationData['latitude'].toString();
+      longitud = locationData['longitude'].toString();
+      utmx = locationData['utmX'].toString();
+      utmy = locationData['utmY'].toString();
+    }
 
     // Retrieve speed and distance from Hive
     var locationBox = await Hive.openBox('locationBox');
@@ -209,6 +221,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         inAux2,
         latitud,
         longitud,
+        utmx,
+        utmy,
         velocidad, // Pass speed from Hive
         distanciaRecorrida // Pass distance from Hive
         );

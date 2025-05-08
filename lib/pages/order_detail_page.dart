@@ -357,6 +357,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         var pedidoId = widget.codPedido;
         var pedidoTpo = widget.pedidoTipo;
         var currentLocation = await LocationService().getCurrentLocation();
+        if (currentLocation != null) {
+          print(
+              'Latitud: ${currentLocation['latitude']}, Longitud: ${currentLocation['longitude']}');
+          print(
+              'UTM Este (X): ${currentLocation['utmX']}, UTM Norte (Y): ${currentLocation['utmY']}');
+        }
 
         if (currentLocation == null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -392,8 +398,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             DateTime.now().toUtc().toIso8601String(),
             movil,
             '',
-            currentLocation.latitude.toString(),
-            currentLocation.longitude.toString(),
+            currentLocation['latitude'].toString(),
+            currentLocation['longitude'].toString(),
+            currentLocation['utmX'].toString(),
+            currentLocation['utmY'].toString(),
             velocidad, // Pass speed from Hive
             distanciaRecorrida // Pass distance from Hive
             );

@@ -339,8 +339,27 @@ class _HomePageState extends State<HomePage>
           String movil = box.get('movil');
           String username = box.get('username');
           String deviceId = box.get('deviceId');
-          Position? position = await _locationService
-              .getCurrentLocation(); // Use LocationService's method
+          final locationService = LocationService();
+
+          String latitude = '0.0';
+          String longitude = '0.0';
+          String utmX = '0.0';
+          String utmY = '0.0';
+
+          // Invoca el método para obtener la ubicación
+          final locationData = await locationService.getCurrentLocation();
+
+          if (locationData != null) {
+            latitude = locationData['latitude'].toString();
+            longitude = locationData['longitude'].toString();
+            utmX = locationData['utmX'].toString();
+            utmY = locationData['utmY'].toString();
+
+            print('Latitud: $latitude, Longitud: $longitude');
+            print('UTMX: $utmX, UTMY: $utmY');
+          } else {
+            print('No se pudo obtener la ubicación.');
+          }
 
           // Retrieve speed and distance from Hive
           var locationBox = await Hive.openBox('locationBox');
@@ -350,27 +369,24 @@ class _HomePageState extends State<HomePage>
           double distanciaRecorrida =
               locationBox.get('totalDistance', defaultValue: 0.0);
 
-          if (position != null) {
-            // print('📨 Enviando datos al servicio descargaLecturaMensajes:');
-            // print('Latitud: ${position.latitude}');
-            // print('Longitud: ${position.longitude}');
-            await RioGasService.descargaLecturaMensajes(
-                int.parse(escenario), // escenarioId
-                int.parse(movil), // movilId
-                messageId, // messageId
-                username, // usuario
-                '', // nroSesion
-                deviceId, // termMobileEquipo
-                'DESCARGA', // lectDesc
-                DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
-                '', // inAux1
-                '', // inAux2
-                position.latitude.toString(), // latitud
-                position.longitude.toString(), // longitud
-                velocidad, // velocidad
-                distanciaRecorrida // distanciaRecorrida
-                );
-          }
+          await RioGasService.descargaLecturaMensajes(
+              int.parse(escenario), // escenarioId
+              int.parse(movil), // movilId
+              messageId, // messageId
+              username, // usuario
+              '', // nroSesion
+              deviceId, // termMobileEquipo
+              'DESCARGA', // lectDesc
+              DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
+              '', // inAux1
+              '', // inAux2
+              latitude, // latitud
+              longitude, // longitud
+              utmX, // utmX
+              utmY, // utmY
+              velocidad, // velocidad
+              distanciaRecorrida // distanciaRecorrida
+              );
         } else if (messageData != null &&
             messageData['VisibleEnApp'] == 'N' &&
             mensajesBox.containsKey(message.id)) {
@@ -437,40 +453,31 @@ class _HomePageState extends State<HomePage>
     Map<String, dynamic> pedido,
     int pedidoId,
   ) async {
-    String pedidoTpo = pedido['Tipo'] == 'PEDIDOS' ? 'PEDIDOS' : 'SERVICES';
+    String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
     String lectDesc = 'DESCARGA';
     String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
     String inAux2 = '';
 
-    Position? position;
-    try {
-      position = await _locationService
-          .getCurrentLocation(); // Use LocationService's method
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al obtener la ubicación: $e')),
-      );
+    final locationService = LocationService();
+
+    // Invoca el método para obtener la ubicación
+    final locationData = await locationService.getCurrentLocation();
+
+    if (locationData != null) {
+      final latitude = locationData['latitude'];
+      final longitude = locationData['longitude'];
+      final utmX = locationData['utmX'];
+      final utmY = locationData['utmY'];
+
+      print('Latitud: $latitude, Longitud: $longitude');
+      print('UTMX: $utmX, UTMY: $utmY');
+    } else {
+      print('No se pudo obtener la ubicación.');
     }
 
-    if (position == null) {
-      // print('⚠️ No se pudo obtener la ubicación. Usando valores por defecto.');
-      position = Position(
-        latitude: 0.0,
-        longitude: 0.0,
-        timestamp: DateTime.now(),
-        accuracy: 0.0,
-        altitude: 0.0,
-        altitudeAccuracy: 0.0, // Added required parameter
-        heading: 0.0,
-        headingAccuracy: 0.0, // Added required parameter
-        speed: 0.0,
-        speedAccuracy: 0.0,
-      );
-    }
-
-    String latitud = position.latitude.toString();
-    String longitud = position.longitude.toString();
+    String latitud = locationData?['latitude'].toString() ?? '';
+    String longitud = locationData?['longitude'].toString() ?? '';
 
     var box = await Hive.openBox('sessionBox');
     int escenarioId = int.tryParse(box.get('escenario').toString()) ?? 0;
@@ -499,6 +506,8 @@ class _HomePageState extends State<HomePage>
         inAux2,
         latitud,
         longitud,
+        locationData?['utmX'] ?? '',
+        locationData?['utmY'] ?? '',
         velocidad, // velocidad
         distanciaRecorrida // distanciaRecorrida
         );
@@ -855,12 +864,38 @@ class _HomePageState extends State<HomePage>
                       Color estadoColor = Color(int.parse('0xff$hexColor'));
 
                       return GestureDetector(
-                        onTap: () => _showEstadoDropdown(
-                          context,
-                          _movil,
-                          estadoNro,
-                          subEstados,
-                        ),
+                        onTap: () {
+                          String currentEstadoDesc = subEstados.firstWhere(
+                            (element) =>
+                                int.tryParse(
+                                    element['SubEstadoCod'].toString()) ==
+                                estadoNro,
+                            orElse: () => {'TipoEstado': 'NoActivo'},
+                          )['TipoEstado'];
+                          print(
+                            'Estado actual: $currentEstadoDesc',
+                          ); // Log current estado description
+                          if (currentEstadoDesc == "NoActivo") {
+                            _showEstadoDropdown(
+                              context,
+                              _movil,
+                              estadoNro,
+                              subEstados,
+                            );
+                          } else {
+                            SnackBar snackBar = SnackBar(
+                              content: Text(
+                                'No hay acciones disponibles para el estado actual.',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                ),
+                              ),
+                            );
+
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(snackBar);
+                          }
+                        },
                         child: Row(
                           children: [
                             Container(
@@ -1122,6 +1157,27 @@ class _HomePageState extends State<HomePage>
                       double distanciaRecorrida =
                           locationBox.get('totalDistance', defaultValue: 0.0);
 
+                      String latitude = '0.0';
+                      String longitude = '0.0';
+                      String utmX = '0.0';
+                      String utmY = '0.0';
+
+                      // Invoca el método para obtener la ubicación
+                      final locationData =
+                          await _locationService.getCurrentLocation();
+
+                      if (locationData != null) {
+                        latitude = locationData['latitude'];
+                        longitude = locationData['longitude'];
+                        utmX = locationData['utmX'];
+                        utmY = locationData['utmY'];
+
+                        print('Latitud: $latitude, Longitud: $longitude');
+                        print('UTMX: $utmX, UTMY: $utmY');
+                      } else {
+                        print('No se pudo obtener la ubicación.');
+                      }
+
                       var result = await RioGasService.actualizarMoviles(
                           int.parse(
                             await Hive.box(
@@ -1137,8 +1193,10 @@ class _HomePageState extends State<HomePage>
                             'sessionBox',
                           ).get('deviceId', defaultValue: ''),
                           newEstadoNro.toString(),
-                          '', // Latitude (if available, replace with actual value)
-                          '', // Longitude (if available, replace with actual value)
+                          latitude,
+                          longitude,
+                          utmX,
+                          utmY,
                           DateTime.now().toUtc().toIso8601String(),
                           '', // inAux1
                           '', // inAux2

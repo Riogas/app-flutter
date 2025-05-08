@@ -1028,6 +1028,35 @@ class _SettingsPageState extends State<SettingsPage> {
               'Versión de la App',
               appVersion,
             ),
+            FutureBuilder<String?>(
+              future: getConstantValue('240'), // Fetch constant value
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return SizedBox.shrink(); // Show nothing while loading
+                }
+                if (snapshot.hasData &&
+                    snapshot.data != null &&
+                    snapshot.data!.isNotEmpty) {
+                  return _buildInfoRowWithButton(
+                    Icons.menu_book,
+                    'Manual',
+                    '',
+                    Icons.open_in_new,
+                    () async {
+                      final Uri manualUri = Uri.parse(snapshot.data!);
+                      if (await canLaunchUrl(manualUri)) {
+                        await launchUrl(manualUri,
+                            mode: LaunchMode.externalApplication);
+                      } else {
+                        _showMessage('No se pudo abrir el enlace del manual.');
+                      }
+                    },
+                  );
+                }
+                return SizedBox
+                    .shrink(); // Show nothing if constant is null or empty
+              },
+            ),
             FutureBuilder<bool>(
               future: _shouldShowDistance(),
               builder: (context, snapshot) {

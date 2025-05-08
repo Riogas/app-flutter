@@ -11,6 +11,7 @@ import '../services/riogas_service.dart';
 import 'package:flutter/material.dart';
 import '../utils/constantes.dart'; // Import constantes.dart
 import 'package:permission_handler/permission_handler.dart';
+import 'package:proj4dart/proj4dart.dart';
 
 class LocationService {
   static final LocationService _instance = LocationService._internal();
@@ -366,7 +367,7 @@ class LocationService {
     // );
   }
 
-  Future<Position?> getCurrentLocation() async {
+  Future<Map<String, dynamic>?> getCurrentLocation() async {
     if (_locationPermissionDenied) return null;
 
     try {
@@ -374,11 +375,32 @@ class LocationService {
         desiredAccuracy: LocationAccuracy.high,
         forceAndroidLocationManager: true,
       );
-      print(
-          '📍 Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}');
-      return position;
+
+      // Define la proyección WGS84 (Lat, Lon)
+      final wgs84 = Projection.get('EPSG:4326');
+
+      // Define la proyección UTM 21S (EPSG:32721)
+      final utm21s = Projection.add('EPSG:32721',
+          '+proj=utm +zone=21 +south +datum=WGS84 +units=m +no_defs');
+
+      // Crear el punto con las coordenadas obtenidas
+      final point = Point(x: position.longitude, y: position.latitude);
+
+      // Convertir a UTM 21S
+      final result = wgs84?.transform(utm21s, point);
+      if (result == null) {
+        print('❌ Error: Transformation result is null.');
+        return null;
+      }
+
+      return {
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'utmX': result.x,
+        'utmY': result.y,
+      };
     } catch (e) {
-      print('❌ Error al obtener ubicación: $e');
+      print('Error al obtener la ubicación: $e');
       return null;
     }
   }
@@ -456,16 +478,27 @@ class LocationService {
       Timer.periodic(Duration(seconds: firestoreInterval), (
         firestoreTimer,
       ) async {
-        Position? position = await getCurrentLocation();
+        Map<String, dynamic>? position = await getCurrentLocation();
         if (position == null) {
           // print('❌ No se pudo obtener la ubicación actual para Firestore.');
           return;
         }
 
         // print(
-        //   '📍 Actualizando Firestore con coordenadas: Lat ${position.latitude}, Lng ${position.longitude}',
+        //   '📍 Actualizando Firestore con coordenadas: Lat ${position['latitude']}, Lng ${position['longitude']}',
         // );
-        await _updateCoordinatesInFirestore(position);
+        await _updateCoordinatesInFirestore(Position(
+          latitude: position['latitude'],
+          longitude: position['longitude'],
+          timestamp: DateTime.now(),
+          accuracy: 0.0,
+          altitude: 0.0,
+          heading: 0.0,
+          speed: 0.0,
+          speedAccuracy: 0.0,
+          altitudeAccuracy: 0.0, // Added required parameter
+          headingAccuracy: 0.0, // Added required parameter
+        ));
       });
     }
 
@@ -474,7 +507,7 @@ class LocationService {
     } else {
       // Timer para RioGas
       Timer.periodic(Duration(seconds: rioGasInterval), (rioGasTimer) async {
-        Position? position = await getCurrentLocation();
+        Map<String, dynamic>? position = await getCurrentLocation();
         if (position == null) {
           // print('❌ No se pudo obtener la ubicación actual para RioGas.');
           return;
@@ -493,18 +526,19 @@ class LocationService {
 
         String fechaHora = DateTime.now().toUtc().toIso8601String();
 
-        double velocidad = double.parse(
-            position.speed.toStringAsFixed(2)); // Ensure speed is rounded
+        double velocidad = 0.0; // Ensure speed is rounded
         double distanciaRecorrida =
             _totalDistance; // Use total distance tracked
 
         // print(
-        //   '📍 Enviando coordenadas a RioGas: Lat ${position.latitude}, Lng ${position.longitude}',
+        //   '📍 Enviando coordenadas a RioGas: Lat ${position['latitude']}, Lng ${position['longitude']}',
         // );
         await RioGasService.registrarCoordenadas(
             int.parse(movil),
-            position.latitude.toString(),
-            position.longitude.toString(),
+            position['latitude'].toString(),
+            position['longitude'].toString(),
+            position['utmX'].toString(),
+            position['utmY'].toString(),
             deviceId,
             fechaHora,
             distanciaRecorrida, // Pass total distance
