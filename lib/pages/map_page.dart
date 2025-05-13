@@ -17,6 +17,7 @@ class _MapPageState extends State<MapPage> {
   LatLng? _currentPosition;
   LatLng? _focusedPosition; // Track the map's focused position
   bool _locationPermissionDenied = false;
+  bool _isMapEnabled = false; // Estado inicial del mapa deshabilitado
   final FirebaseService _firebaseService = FirebaseService();
   List<Marker> _markers = [];
   late Box constantBox;
@@ -266,34 +267,48 @@ class _MapPageState extends State<MapPage> {
         actions: [
           IconButton(
             icon: Icon(Icons.my_location),
-            onPressed: _centerMapOnUser, // Center map on user's location
+            onPressed: _isMapEnabled
+                ? _centerMapOnUser
+                : null, // Solo habilitar si el mapa está activo
           ),
         ],
       ),
-      body: _currentPosition == null
+      body: !_isMapEnabled
           ? Center(
-              child: _locationPermissionDenied
-                  ? Text('Permiso de ubicación denegado')
-                  : CircularProgressIndicator(),
-            )
-          : FlutterMap(
-              mapController: _mapController, // 🟢 Asignar controlador al mapa
-              options: MapOptions(
-                initialCenter:
-                    _focusedPosition ?? _currentPosition ?? LatLng(0, 0),
-                initialZoom: 15.0,
-                minZoom: 5.0,
-                maxZoom: 18.0,
+              child: ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isMapEnabled = true; // Activar el mapa
+                  });
+                },
+                child: Text('Activar Mapa'),
               ),
-              children: [
-                TileLayer(
-                  urlTemplate:
-                      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                  subdomains: ['a', 'b', 'c'],
-                ),
-                MarkerLayer(markers: _markers),
-              ],
-            ),
+            )
+          : (_currentPosition == null
+              ? Center(
+                  child: _locationPermissionDenied
+                      ? Text('Permiso de ubicación denegado')
+                      : CircularProgressIndicator(),
+                )
+              : FlutterMap(
+                  mapController:
+                      _mapController, // 🟢 Asignar controlador al mapa
+                  options: MapOptions(
+                    initialCenter:
+                        _focusedPosition ?? _currentPosition ?? LatLng(0, 0),
+                    initialZoom: 15.0,
+                    minZoom: 5.0,
+                    maxZoom: 18.0,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                      subdomains: ['a', 'b', 'c'],
+                    ),
+                    MarkerLayer(markers: _markers),
+                  ],
+                )),
     );
   }
 }

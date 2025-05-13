@@ -50,7 +50,7 @@ class LocationService {
     if (Platform.isAndroid) {
       final intent = AndroidIntent(
         action: 'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-        data: 'package:com.example.MoveIT',
+        data: 'package:com.example.moveit',
         flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
       );
       await intent.launch();

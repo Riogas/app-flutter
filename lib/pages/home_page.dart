@@ -453,7 +453,7 @@ class _HomePageState extends State<HomePage>
     Map<String, dynamic> pedido,
     int pedidoId,
   ) async {
-    String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
+    String pedidoTpo = pedido['Tipo'] == 'PEDIDOS' ? 'PEDIDOS' : 'SERVICES';
     String lectDesc = 'DESCARGA';
     String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
@@ -506,8 +506,8 @@ class _HomePageState extends State<HomePage>
         inAux2,
         latitud,
         longitud,
-        locationData?['utmX'] ?? '',
-        locationData?['utmY'] ?? '',
+        locationData?['utmX']?.toString() ?? '',
+        locationData?['utmY']?.toString() ?? '',
         velocidad, // velocidad
         distanciaRecorrida // distanciaRecorrida
         );
@@ -751,8 +751,8 @@ class _HomePageState extends State<HomePage>
     // Log the incoming status for debugging
     print('🔄 Actualizando estado de conexión: $status');
 
-    String? token = await FirebaseMessaging.instance.getToken();
-    print('token: $token');
+    //String? token = await FirebaseMessaging.instance.getToken();
+    //print('token: $token');
     // Only update the notifier if the status has changed
     if (_connectionStatusNotifier.value['network'] != status['network'] ||
         _connectionStatusNotifier.value['firestore'] != status['firestore'] ||
@@ -1134,6 +1134,21 @@ class _HomePageState extends State<HomePage>
                 TextButton(
                   onPressed: () async {
                     if (selectedEstadoDesc != null) {
+                      // Mostrar loading
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => AlertDialog(
+                          content: Row(
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(width: 16),
+                              Text('Activando'),
+                            ],
+                          ),
+                        ),
+                      );
+
                       var selectedSubEstado = subEstados.firstWhere(
                         (subEstado) =>
                             subEstado['DescCombo'] == selectedEstadoDesc,
@@ -1144,9 +1159,6 @@ class _HomePageState extends State<HomePage>
                             selectedSubEstado['SubEstadoCod'].toString(),
                           ) ??
                           currentEstado;
-
-                      // print("✅ SubEstado seleccionado: $selectedSubEstado");
-                      // print("🔢 Nuevo EstadoNro: $newEstadoNro");
 
                       await _firebaseService.updateMovilEstado(newEstadoNro);
                       // Call the actualizarMoviles service
@@ -1167,10 +1179,10 @@ class _HomePageState extends State<HomePage>
                           await _locationService.getCurrentLocation();
 
                       if (locationData != null) {
-                        latitude = locationData['latitude'];
-                        longitude = locationData['longitude'];
-                        utmX = locationData['utmX'];
-                        utmY = locationData['utmY'];
+                        latitude = locationData['latitude'].toString();
+                        longitude = locationData['longitude'].toString();
+                        utmX = locationData['utmX'].toString();
+                        utmY = locationData['utmY'].toString();
 
                         print('Latitud: $latitude, Longitud: $longitude');
                         print('UTMX: $utmX, UTMY: $utmY');
@@ -1204,15 +1216,11 @@ class _HomePageState extends State<HomePage>
                           distanciaRecorrida // Pass distance from Hive
                           );
 
-                      if (result != null) {
-                        // print('✅ Estado del móvil actualizado correctamente.');
-                      } else {
-                        // print('❌ Error al actualizar el estado del móvil.');
-                      }
-
-                      Navigator.of(
-                        context,
-                      ).pop(); // Close dialog after confirmation
+                      // Cerrar el loading y el cuadro de diálogo principal
+                      Navigator.of(context, rootNavigator: true)
+                          .pop(); // Cierra el loading
+                      Navigator.of(context)
+                          .pop(); // Cierra el cuadro de diálogo principal
                     }
                   },
                   child: Text('Confirmar'),

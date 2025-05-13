@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
+import 'dart:convert'; // Para calcular el tamaño de los datos
 import '../utils/error_event.dart';
 import '../utils/config.dart'; // Importa el archivo de configuración
 import '../utils/constantes.dart'; // Importa la función getConstantValue
@@ -42,27 +43,23 @@ class FirebaseService {
     }
   }
 
-  Future<bool> checkFirestoreConnectivity() async {
-    // print('🔍 Checking Firestore connectivity via stream status...');
+  /*Future<bool> checkFirestoreConnectivity() async {
     try {
-      // Use an existing Firestore stream to check connectivity
-      var testStream = _firestore.collection('test').snapshots();
-      var subscription = testStream.listen((event) {
-        // If the stream receives data, Firestore is connected
-        // print('✅ Firestore stream is active.');
-      });
+      var snapshot = await _firestore
+          .collection('test')
+          .snapshots()
+          .first
+          .timeout(const Duration(seconds: 3));
 
-      // Wait briefly to ensure the stream is active
-      await Future.delayed(Duration(seconds: 2));
-      await subscription.cancel(); // Cancel the temporary subscription
-      await _updateConnectionErrorState(false); // Reset error state
+      print('✅ Firestore stream is active.'); // 👈 aquí va el print
+
+      await _updateConnectionErrorState(false);
       return true;
     } catch (e) {
-      // print('❌ Firestore stream connectivity issue: $e');
-      await _updateConnectionErrorState(true); // Set error state
+      await _updateConnectionErrorState(true);
       return false;
     }
-  }
+  }*/
 
   Future<void> _logFirestorePermissionError(String message) async {
     // print('Firestore permission error: $message');
@@ -171,6 +168,105 @@ class FirebaseService {
     );
   }
 
+  void monitorStreamWithUsage<T>(Stream<T> stream, String streamName) {
+    int totalBytes = 0;
+    DateTime startTime = DateTime.now();
+
+    stream.listen(
+      (event) async {
+        try {
+          String jsonData = '';
+
+          if (event is List<DocumentSnapshot>) {
+            List<Map<String, dynamic>> dataList = event.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              return _convertFirestoreData(data);
+            }).toList();
+            jsonData = jsonEncode(dataList);
+          } else if (event is DocumentSnapshot) {
+            final data = event.data();
+            if (data is Map<String, dynamic>) {
+              final cleaned = _convertFirestoreData(data);
+              jsonData = jsonEncode(cleaned);
+            } else {
+              jsonData = jsonEncode({'raw': data});
+            }
+          } else if (event is Map<String, dynamic>) {
+            final cleaned = _convertFirestoreData(event);
+            jsonData = jsonEncode(cleaned);
+          } else {
+            jsonData = jsonEncode(event);
+          }
+
+          int dataSize = utf8.encode(jsonData).length;
+          totalBytes += dataSize;
+
+          print('✅ Stream "$streamName" recibió datos');
+          print('📊 "$streamName" Tamaño del evento: $dataSize bytes');
+
+          if (DateTime.now().difference(startTime).inMinutes >= 1) {
+            print(
+                '📈 Consumo del stream "$streamName" en el último minuto: $totalBytes bytes');
+            totalBytes = 0;
+            startTime = DateTime.now();
+          }
+
+          var conexionBox = await Hive.openBox('conexionBox');
+          conexionBox.put('ConexionFirestore', true);
+          conexionBox.put(
+              'lastSuccessfulConnection', DateTime.now().toIso8601String());
+        } catch (e) {
+          print('❌ Error al procesar el evento del stream "$streamName": $e');
+        }
+      },
+      onError: (error) async {
+        print('❌ Stream "$streamName" encontró un error: $error');
+        var conexionBox = await Hive.openBox('conexionBox');
+        conexionBox.put('ConexionFirestore', false);
+        await _logError('Stream Error', error.toString());
+      },
+      onDone: () async {
+        print('⚠ Stream "$streamName" se ha cerrado.');
+        var conexionBox = await Hive.openBox('conexionBox');
+        conexionBox.put('ConexionFirestore', false);
+      },
+      cancelOnError: true,
+    );
+  }
+
+  /// Convierte todos los tipos especiales de Firestore (GeoPoint, Timestamp) a tipos válidos de JSON
+  Map<String, dynamic> _convertFirestoreData(Map<String, dynamic> data) {
+    final result = <String, dynamic>{};
+
+    data.forEach((key, value) {
+      if (value is GeoPoint) {
+        result[key] = {
+          'latitude': value.latitude,
+          'longitude': value.longitude
+        };
+      } else if (value is Timestamp) {
+        result[key] = value.toDate().toIso8601String();
+      } else if (value is Map) {
+        result[key] = _convertFirestoreData(value.cast<String, dynamic>());
+      } else if (value is List) {
+        result[key] = value.map((item) {
+          if (item is Map) {
+            return _convertFirestoreData(item.cast<String, dynamic>());
+          } else if (item is GeoPoint) {
+            return {'latitude': item.latitude, 'longitude': item.longitude};
+          } else if (item is Timestamp) {
+            return item.toDate().toIso8601String();
+          }
+          return item;
+        }).toList();
+      } else {
+        result[key] = value;
+      }
+    });
+
+    return result;
+  }
+
   Stream<Map<String, dynamic>?> getSesionesStream() async* {
     var box = await Hive.openBox('sessionBox');
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
@@ -211,7 +307,7 @@ class FirebaseService {
     }
 
     Stream<Map<String, dynamic>?> sesionesStream = activoDocRef
-        .snapshots(includeMetadataChanges: true)
+        .snapshots(includeMetadataChanges: false)
         .handleError((error) async {
       print('❌ Error en el stream de Firestore: $error');
       if (error is FirebaseException && error.code == 'permission-denied') {
@@ -221,14 +317,16 @@ class FirebaseService {
       } else {
         await _logError('Firestore Error', error.toString());
       }
-      bool isConnected = await checkFirestoreConnectivity();
+      /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         print('⚠️ Pérdida de conectividad con Firestore.');
-      }
+      }*/
     }).asyncMap((snapshot) async {
       if (snapshot.exists) {
         var data = snapshot.data() as Map<String, dynamic>;
-        print('🔄 Documento actualizado en Firestore: $data');
+        print(
+            '🔄 [${DateTime.now()}] Documento actualizado en Firestore: $data');
+        print('📋 Metadatos del documento: ${snapshot.metadata}');
         return data;
       } else {
         print('⚠️ Documento eliminado en Firestore. Eliminando Hive boxes.');
@@ -239,6 +337,7 @@ class FirebaseService {
 
     print('📡 Iniciando escucha de cambios en Firestore.');
     monitorStream(sesionesStream, 'SesionesStream');
+    monitorStreamWithUsage(sesionesStream, 'SesionesStream');
     yield* sesionesStream;
   }
 
@@ -298,11 +397,11 @@ class FirebaseService {
         // print('Error fetching pedidos: $error');
         await _logError('Firestore Error', error.toString());
       }
-      bool isConnected = await checkFirestoreConnectivity();
+      /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
         // print('⚠ Pérdida de conectividad con Firestore.');
-      }
+      }*/
     }).map((snapshot) {
       // print('Fetched ${snapshot.docs.length} pedidos');
       snapshot.docs.forEach((doc) {
@@ -312,6 +411,9 @@ class FirebaseService {
     });
 
     monitorStream(pedidosStream, 'PedidosStream'); // Monitorea el stream
+    print(
+        '📡 Iniciando escucha de cambios en Firestore de pedidos antes del tamaño.');
+    monitorStreamWithUsage(pedidosStream, 'pedidosStream');
     yield* pedidosStream;
   }
 
@@ -450,10 +552,10 @@ class FirebaseService {
           } else {
             await _logError('Firestore Error', error.toString());
           }
-          bool isConnected = await checkFirestoreConnectivity();
+          /*bool isConnected = await checkFirestoreConnectivity();
           if (!isConnected) {
             // print('⚠ Pérdida de conectividad con Firestore.');
-          }
+          }*/
         }).map((snapshot) {
           // print('Fetched ${snapshot.docs.length} mensajes');
           snapshot.docs.forEach((doc) {
@@ -463,6 +565,7 @@ class FirebaseService {
         });
 
         monitorStream(mensajesStream, 'MensajesStream'); // Monitorea el stream
+        monitorStreamWithUsage(mensajesStream, 'mensajesStream');
         yield* mensajesStream;
       } catch (e, stackTrace) {
         // print('❌ Error setting up Firestore stream: $e');
@@ -508,11 +611,11 @@ class FirebaseService {
             (error) async {
       // print('Error marking message as read: $error');
       await _logError('Firestore Error', error.toString());
-      bool isConnected = await checkFirestoreConnectivity();
+      /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
         // print('⚠ Pérdida de conectividad con Firestore.');
-      }
+      }*/
     });
   }
 
@@ -531,11 +634,11 @@ class FirebaseService {
         .catchError((error) async {
       // print('Error updating message field: $error');
       await _logError('Firestore Error', error.toString());
-      bool isConnected = await checkFirestoreConnectivity();
+      /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
         // print('⚠ Pérdida de conectividad con Firestore.');
-      }
+      }*/
     });
   }
 
@@ -559,17 +662,18 @@ class FirebaseService {
         // print('Error fetching movil: $error');
         await _logError('Firestore Error', error.toString());
       }
-      bool isConnected = await checkFirestoreConnectivity();
+      /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
         // print('⚠ Pérdida de conectividad con Firestore.');
-      }
+      }*/
     }).map((snapshot) {
       // print('Fetched movil: ${snapshot.data()}');
       return snapshot;
     });
 
     monitorStream(movilStream, 'MovilStream'); // Monitorea el stream
+    monitorStreamWithUsage(movilStream, 'movilStream');
     yield* movilStream;
   }
 
@@ -589,11 +693,11 @@ class FirebaseService {
         .update({'EstadoNro': estado}).catchError((error) async {
       // print('Error updating movil estado: $error');
       await _logError('Firestore Error', error.toString());
-      bool isConnected = await checkFirestoreConnectivity();
+      /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
         // print('⚠ Pérdida de conectividad con Firestore.');
-      }
+      }*/
     });
   }
 
@@ -616,11 +720,11 @@ class FirebaseService {
         // print('Error fetching subestado moviles: $error');
         await _logError('Firestore Error', error.toString());
       }
-      bool isConnected = await checkFirestoreConnectivity();
+      /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
         // print('⚠ Pérdida de conectividad con Firestore.');
-      }
+      }*/
     }).map((snapshot) {
       // print('Fetched ${snapshot.docs.length} subestado moviles');
       return snapshot.docs.map((doc) {
@@ -635,6 +739,8 @@ class FirebaseService {
       subEstadoMovilesStream,
       'SubEstadoMovilesStream',
     ); // Monitorea el stream
+    monitorStreamWithUsage(subEstadoMovilesStream, 'subEstadoMovilesStream');
+    // print('SubEstadoMovilesStream: $subEstadoMovilesStream');
     yield* subEstadoMovilesStream;
   }
 
@@ -658,11 +764,11 @@ class FirebaseService {
         // print('Error fetching subestado finalizacion pedidos: $error');
         await _logError('Firestore Error', error.toString());
       }
-      bool isConnected = await checkFirestoreConnectivity();
+      /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
         // print('⚠ Pérdida de conectividad con Firestore.');
-      }
+      }*/
     }).map((snapshot) {
       // print(
       //   'Fetched ${snapshot.docs.length} subestado finalizacion pedidos',
@@ -679,6 +785,10 @@ class FirebaseService {
       subEstadoFinalizacionPedidosStream,
       'SubEstadoFinalizacionPedidosStream',
     ); // Monitorea el stream
+    monitorStreamWithUsage(
+      subEstadoFinalizacionPedidosStream,
+      'subEstadoFinalizacionPedidosStream',
+    );
     yield* subEstadoFinalizacionPedidosStream;
   }
 
@@ -702,11 +812,11 @@ class FirebaseService {
         // print('Error fetching subestado finalizacion pedidos: $error');
         await _logError('Firestore Error', error.toString());
       }
-      bool isConnected = await checkFirestoreConnectivity();
+      /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
         // Notificar al usuario sobre la pérdida de conectividad
         // print('⚠ Pérdida de conectividad con Firestore.');
-      }
+      }*/
     }).map((snapshot) {
       // print(
       //   'Fetched ${snapshot.docs.length} subestado finalizacion pedidos',
@@ -723,6 +833,10 @@ class FirebaseService {
       SubEstadoFinalizacionServicesStream,
       'SubEstadoFinalizacionServicesStream',
     ); // Monitorea el stream
+    monitorStreamWithUsage(
+      SubEstadoFinalizacionServicesStream,
+      'subEstadoFinalizacionServicesStream',
+    );
     yield* SubEstadoFinalizacionServicesStream;
   }
 

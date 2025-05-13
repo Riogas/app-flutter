@@ -65,7 +65,7 @@ Future<void> _checkAndListenGpsPermissions() async {
                   Navigator.of(context).pop();
                   final intent = AndroidIntent(
                     action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
-                    data: 'package:com.example.MoveIT',
+                    data: 'package:com.example.moveit',
                     flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
                   );
                   await intent.launch();

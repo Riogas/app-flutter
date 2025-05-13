@@ -17,6 +17,7 @@ import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth packag
 import '../utils/config.dart'; // Import Config class
 import '../utils/constantes.dart'; // Import Constants class
 import 'package:local_auth/local_auth.dart'; // Import local_auth package
+import 'package:flutter/services.dart'; // Import for MethodChannel
 
 class LoginPage extends StatefulWidget {
   @override
@@ -856,6 +857,21 @@ class _LoginPageState extends State<LoginPage> {
 
       // 🔹 Guardar sesión en Firestore
       await _saveSession(currentLocation);
+
+      final sessionBox = await Hive.openBox('sessionBox');
+      final movil = sessionBox.get('movil') ?? "0";
+      final escenario = sessionBox.get('escenario') ?? "0";
+      final usuario = sessionBox.get('username') ?? "string";
+
+      final platform = MethodChannel("background_service");
+      await platform.invokeMethod("startLocationService", {
+        "interval": 1,
+        "movil": movil,
+        "escenario": escenario,
+        "usuario": usuario,
+      });
+      print(
+          "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
 
       // 🔹 Cerrar el diálogo de carga y navegar a HomePage
       if (mounted) {

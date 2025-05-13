@@ -59,7 +59,8 @@ class ConnectionCheck {
 
     try {
       // Check Firestore connectivity
-      status['firestore'] = await _firebaseService.checkFirestoreConnectivity();
+      status['firestore'] =
+          true; //await _firebaseService.checkFirestoreConnectivity();
 
       // Check RioGas connectivity
       status['riogas'] = await _checkRioGasConnectivity();
