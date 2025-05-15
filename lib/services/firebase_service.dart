@@ -13,16 +13,16 @@ class FirebaseService {
   User? _user;
 
   Future<void> initializeFirebase() async {
-    WidgetsFlutterBinding.ensureInitialized();
+    //WidgetsFlutterBinding.ensureInitialized();
 
-    try {
+    /*try {
       // Inicializar Firebase
       await Firebase.initializeApp();
       // print('Firebase initialized successfully');
     } catch (e) {
       // print('Error initializing Firebase: $e');
       await _logError('Firebase Initialization Error', e.toString());
-    }
+    }*/
 
     // Autenticar al usuario
     await signInWithEmailAndPassword();

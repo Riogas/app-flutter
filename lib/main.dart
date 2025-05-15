@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:hive_flutter/hive_flutter.dart'; // Importa HiveFlutter
 import 'package:firebase_messaging/firebase_messaging.dart'; // Importa firebase_messaging
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Importa flutter_local_notifications
@@ -54,10 +56,10 @@ Future<void> _checkAndListenGpsPermissions() async {
             ),
             actions: <Widget>[
               TextButton(
-                child: Text('Cancelar'),
                 onPressed: () {
-                  Navigator.of(context).pop();
+                  Navigator.of(context).pop(); // Only close the dialog
                 },
+                child: Text('Cancelar'),
               ),
               TextButton(
                 child: Text('Ir a Ajustes'),
@@ -95,6 +97,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // 🔴 DESACTIVAR ENVÍO DE DATOS A FIREBASE
+  await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
+  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
+
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
 
   // 🔹 Inicializa Hive antes de cualquier acceso a Hive.openBox()
   await Hive.initFlutter();
@@ -214,12 +222,17 @@ Future<void> _initializeFirebaseMessaging() async {
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
   // Configurar el manejo de mensajes en foreground
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+  // Configurar el manejo de mensajes en foreground
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+    print('📩 [FCM FG] Mensaje recibido en foreground');
+    print('📩 [FCM FG] Message ID: ${message.messageId}');
+    print('📩 [FCM FG] Data: ${message.data}');
+
     RemoteNotification? notification = message.notification;
     AndroidNotification? android = message.notification?.android;
 
     if (notification != null && android != null) {
-      flutterLocalNotificationsPlugin.show(
+      await flutterLocalNotificationsPlugin.show(
         notification.hashCode,
         notification.title,
         notification.body,
@@ -233,15 +246,29 @@ Future<void> _initializeFirebaseMessaging() async {
         ),
       );
     }
+
+    // ✅ Llamada al servicio RecepcionFCM
+    if (message.messageId != null) {
+      await RioGasService.recepcionFCM(
+        message.messageId!, // Identificador de la notificación
+        "Recibido FG", // Estado
+      );
+      print('📬 Notificación reportada a RecepcionFCM');
+    }
   });
 
   // Configurar el manejo de mensajes en background
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 }
 
+@pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  // print('Handling a background message: ${message.messageId}');
+
+  print('📩 [FCM BG] Mensaje recibido en background o con app cerrada');
+  print('📩 [FCM BG] Message ID: ${message.messageId}');
+  print('📩 [FCM BG] Data: ${message.data}');
+
   RemoteNotification? notification = message.notification;
   if (notification != null) {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
@@ -262,6 +289,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       notification.body,
       platformChannelSpecifics,
     );
+  }
+
+  // ✅ Reportar recepción en BG
+  if (message.messageId != null) {
+    await RioGasService.recepcionFCM(
+      message.messageId!,
+      "Recibido BG",
+    );
+    print('📬 [FCM BG] Notificación reportada a RecepcionFCM');
   }
 }
 
@@ -462,10 +498,6 @@ void _showUpdateDialog(String message, String link, bool isRequired) {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                if (isRequired) {
-                  // Cierra completamente la aplicación si es requerido
-                  SystemNavigator.pop();
-                }
               },
               child: Text('Cancelar'),
             ),

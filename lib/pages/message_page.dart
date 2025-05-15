@@ -83,15 +83,15 @@ class _MessagePageState extends State<MessagePage> {
     // Subscribe to a topic for messages
     _firebaseMessaging.subscribeToTopic('messages');
 
-    // Handle foreground messages
+    /*// Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (message.notification != null) {
         _showForegroundNotification(message.notification!);
       }
-    });
+    });*/
 
     // Handle background messages (optional, already handled in main.dart)
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    //FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
 
   Future<void> _showForegroundNotification(
@@ -120,7 +120,7 @@ class _MessagePageState extends State<MessagePage> {
   static Future<void> _firebaseMessagingBackgroundHandler(
     RemoteMessage message,
   ) async {
-    await Firebase.initializeApp();
+    //await Firebase.initializeApp();
     print('Handling a background message: ${message.messageId}');
   }
 

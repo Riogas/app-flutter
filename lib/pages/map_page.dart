@@ -22,20 +22,31 @@ class _MapPageState extends State<MapPage> {
   List<Marker> _markers = [];
   late Box constantBox;
   late Box pedidosBox;
+  late Box sessionBox; // Box para guardar el estado del mapa
   final MapController _mapController =
       MapController(); // 🟢 Agregar controlador del mapa
 
   @override
   void initState() {
     super.initState();
-    _getCurrentLocation();
-    _getPendingOrders();
-    _initializeHive();
+    _initializeHive().then((_) {
+      _checkMapState(); // Verificar el estado del mapa después de inicializar Hive
+      _getCurrentLocation();
+      _getPendingOrders();
+    });
   }
 
   Future<void> _initializeHive() async {
     constantBox = await Hive.openBox('constantBox');
     pedidosBox = await Hive.openBox('pedidosBox');
+    sessionBox = await Hive.openBox('sessionBox'); // Inicializar sessionBox
+  }
+
+  void _checkMapState() {
+    final isMapActive = sessionBox.get('isMapActive', defaultValue: false);
+    setState(() {
+      _isMapEnabled = isMapActive;
+    });
   }
 
   Future<void> _getCurrentLocation() async {
@@ -259,6 +270,14 @@ class _MapPageState extends State<MapPage> {
     // Agrega más colores según sea necesario
   };
 
+  void _activateMap() {
+    setState(() {
+      _isMapEnabled = true;
+    });
+    sessionBox.put(
+        'isMapActive', true); // Guardar el estado del mapa como activo
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -276,11 +295,7 @@ class _MapPageState extends State<MapPage> {
       body: !_isMapEnabled
           ? Center(
               child: ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    _isMapEnabled = true; // Activar el mapa
-                  });
-                },
+                onPressed: _activateMap, // Activar el mapa y guardar el estado
                 child: Text('Activar Mapa'),
               ),
             )
@@ -291,8 +306,7 @@ class _MapPageState extends State<MapPage> {
                       : CircularProgressIndicator(),
                 )
               : FlutterMap(
-                  mapController:
-                      _mapController, // 🟢 Asignar controlador al mapa
+                  mapController: _mapController, // Asignar controlador al mapa
                   options: MapOptions(
                     initialCenter:
                         _focusedPosition ?? _currentPosition ?? LatLng(0, 0),

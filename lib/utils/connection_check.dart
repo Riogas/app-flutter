@@ -63,7 +63,8 @@ class ConnectionCheck {
           true; //await _firebaseService.checkFirestoreConnectivity();
 
       // Check RioGas connectivity
-      status['riogas'] = await _checkRioGasConnectivity();
+      status['riogas'] = true;
+      //await _checkRioGasConnectivity();
 
       // Check Internet connectivity and type
       var connectivityResult = await Connectivity().checkConnectivity();
@@ -89,7 +90,10 @@ class ConnectionCheck {
           _startRioGasTimer();
         }
       } else {
-        await RioGasService.processPendingRequests(); // Updated call
+        var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+        if (failedRequestsBox.isNotEmpty) {
+          await RioGasService.processPendingRequests(); // Updated call
+        }
         _resetRioGasTimer();
       }
 
@@ -117,7 +121,7 @@ class ConnectionCheck {
 
   void _startRioGasTimer() {
     // print('⏱️ Starting RioGas connectivity timer...');
-    _rioGasTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    _rioGasTimer = Timer.periodic(Duration(seconds: 60), (timer) {
       _counter++;
       // print('⏱️ Counter: $_counter');
       if (_counter >= _maxCounter) {

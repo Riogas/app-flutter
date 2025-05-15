@@ -51,6 +51,8 @@ dependencies:
   local_auth: ^2.1.6
   proj4dart: ^2.1.0
   android_alarm_manager_plus: ^4.0.7
+  firebase_crashlytics: ^4.3.5
+  firebase_analytics: ^11.4.5
 
 
 

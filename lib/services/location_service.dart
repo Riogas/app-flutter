@@ -41,8 +41,8 @@ class LocationService {
       context,
     ); // 🔹 Verifica y solicita permiso en background
     await _enableBackgroundExecution();
-    _startLocationUpdates();
-    await _startLocationAndSyncTimers(); // 🔹 Configura los timers para Firestore y RioGas
+    //_startLocationUpdates();
+    //await _startLocationAndSyncTimers(); // 🔹 Configura los timers para Firestore y RioGas
   }
 
   /// 🔹 Solicita ignorar la optimización de batería
@@ -125,7 +125,7 @@ class LocationService {
       print('❌ Permisos de ubicación denegados.');
 
       // Start a timer to periodically check for location permissions
-      Timer.periodic(Duration(seconds: 10), (timer) async {
+      Timer.periodic(Duration(seconds: 30), (timer) async {
         LocationPermission updatedPermission =
             await Geolocator.checkPermission();
         if (updatedPermission == LocationPermission.always) {
@@ -314,7 +314,7 @@ class LocationService {
 
   /// 🔹 Obtiene la ubicación actual y la envía al Stream y Firestore
   Future<void> _getAndShowLocation() async {
-    if (_locationPermissionDenied) return;
+    /*if (_locationPermissionDenied) return;
 
     try {
       Position position = await Geolocator.getCurrentPosition(
@@ -338,7 +338,7 @@ class LocationService {
       ); // 🔹 Actualiza Hive
     } catch (e) {
       // print('❌ Error al obtener ubicación: $e');
-    }
+    }*/
   }
 
   /// 🔹 Actualiza la última ubicación y la distancia total en Hive

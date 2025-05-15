@@ -45,7 +45,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     });
 
     // Initialize the Timer
-    _hiveStateChecker = Timer.periodic(Duration(seconds: 5), (_) {
+    _hiveStateChecker = Timer.periodic(Duration(seconds: 30), (_) {
       if (mounted) {
         setState(() {}); // Update the UI periodically
       }

@@ -18,6 +18,10 @@ import '../utils/config.dart'; // Import Config class
 import '../utils/constantes.dart'; // Import Constants class
 import 'package:local_auth/local_auth.dart'; // Import local_auth package
 import 'package:flutter/services.dart'; // Import for MethodChannel
+import 'package:permission_handler/permission_handler.dart'; // Import permission_handler package
+import 'package:path_provider/path_provider.dart'; // Import for getTemporaryDirectory
+import 'package:open_file/open_file.dart'; // Import for OpenFile
+import 'package:dio/dio.dart'; // Import for Dio HTTP client
 
 class LoginPage extends StatefulWidget {
   @override
@@ -78,170 +82,81 @@ class _LoginPageState extends State<LoginPage> {
 
     print("Antes del login");
 
-    if (response != null && response['OK'] == 0) {
-      print("✅ Login exitoso. Verificando dispositivo...");
+    if (response != null && response['OK'] == 99) {
+      _validateAppVersion();
+    } else {
+      if (response != null && response['OK'] == 0) {
+        print("✅ Login exitoso. Verificando dispositivo...");
 
-      // Save the last logged-in username in Hive
-      var usuarioBox = await Hive.openBox('usuarioBox');
-      await usuarioBox.put('lastUsername', _usernameController.text);
-      print(
-          '✅ Se guardó el último nombre de usuario: ${_usernameController.text}');
-
-      // Verificar si el campo "huella" no está configurado
-      final LocalAuthentication auth = LocalAuthentication();
-      bool isBiometricAvailable = await auth.isDeviceSupported();
-      if (usuarioBox.get('huella') == null && isBiometricAvailable) {
+        // Save the last logged-in username in Hive
+        var usuarioBox = await Hive.openBox('usuarioBox');
+        await usuarioBox.put('lastUsername', _usernameController.text);
         print(
-            "🔐 Huella no configurada. Mostrando diálogo para habilitar huella.");
-        bool shouldEnableFingerprint = await _showEnableFingerprintDialog();
-        if (shouldEnableFingerprint) {
-          print("🔐 Usuario aceptó habilitar huella.");
-          await _configureFingerprintAuthentication();
+            '✅ Se guardó el último nombre de usuario: ${_usernameController.text}');
 
-          // Verificar nuevamente si la huella fue configurada correctamente
-          if (usuarioBox.get('huella') != true) {
-            print('❌ Configuración de huella fallida. Deteniendo flujo.');
-            return; // Detener el flujo si la configuración falla
-          }
-        }
-      }
+        // Verificar si el campo "huella" no está configurado
+        final LocalAuthentication auth = LocalAuthentication();
+        bool isBiometricAvailable = await auth.isDeviceSupported();
+        if (usuarioBox.get('huella') == null && isBiometricAvailable) {
+          print(
+              "🔐 Huella no configurada. Mostrando diálogo para habilitar huella.");
+          bool shouldEnableFingerprint = await _showEnableFingerprintDialog();
+          if (shouldEnableFingerprint) {
+            print("🔐 Usuario aceptó habilitar huella.");
+            await _configureFingerprintAuthentication();
 
-      // Si el campo "huella" está configurado en true, solicitar autenticación con huella
-      if (usuarioBox.get('huella') == true) {
-        bool isAuthenticated = await _authenticateWithFingerprint();
-        if (!isAuthenticated) {
-          print("❌ Autenticación con huella fallida.");
-          return; // Detener el flujo de inicio de sesión
-        }
-      }
-
-      // 🔹 Validar dispositivo antes de mostrar selección de móviles
-      bool isDeviceValid = await _validateDevice();
-      print(
-        "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
-      );
-
-      if (!isDeviceValid) {
-        print("🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
-        bool shouldRegister = await _showRegisterDeviceDialog();
-
-        if (shouldRegister) {
-          print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
-          bool registrationSuccess = await _registerDevice(
-            _usernameController.text,
-          );
-
-          if (registrationSuccess) {
-            var box = await Hive.openBox('sessionBox');
-            String habilitado = box.get('Habilitado', defaultValue: 'N');
-
-            if (habilitado == 'N') {
-              print(
-                "✅ Dispositivo registrado con éxito. Esperando aprobación...",
-              );
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
-                  ),
-                  backgroundColor: Colors.green,
-                ),
-              );
-              return; // Volver al login
-            } else {
-              print("📥 Extrayendo lista de móviles...");
-              _availableMoviles = _extractAvailableMoviles(response);
-
-              if (_availableMoviles.isNotEmpty) {
-                print(
-                    "📋 Móviles disponibles para seleccionar: $_availableMoviles");
-                print(
-                    "🛑 Mostrando selección de móviles antes de continuar...");
-
-                // 🔹 Mostrar selección de móviles antes de continuar
-                await _showMobileSelectionDialog(response);
-              }
+            // Verificar nuevamente si la huella fue configurada correctamente
+            if (usuarioBox.get('huella') != true) {
+              print('❌ Configuración de huella fallida. Deteniendo flujo.');
+              return; // Detener el flujo si la configuración falla
             }
-          } else {
-            print("❌ Error al registrar el dispositivo.");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error al registrar dispositivo.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            return; // Volver al login
           }
-        } else {
-          print("🔙 Usuario canceló el registro. Volviendo al login...");
-          return; // Volver al login
         }
-      }
 
-      // 🔹 Extraer lista de móviles de la respuesta
-      print("📥 Extrayendo lista de móviles...");
-      _availableMoviles = _extractAvailableMoviles(response);
+        // Si el campo "huella" está configurado en true, solicitar autenticación con huella
+        if (usuarioBox.get('huella') == true) {
+          bool isAuthenticated = await _authenticateWithFingerprint();
+          if (!isAuthenticated) {
+            print("❌ Autenticación con huella fallida.");
+            return; // Detener el flujo de inicio de sesión
+          }
+        }
 
-      if (_availableMoviles.isNotEmpty) {
-        print("📋 Móviles disponibles para seleccionar: $_availableMoviles");
-        print("🛑 Mostrando selección de móviles antes de continuar...");
+        // 🔹 Validar dispositivo antes de mostrar selección de móviles
+        bool isDeviceValid = await _validateDevice();
+        print(
+          "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+        );
 
-        // 🔹 Mostrar selección de móviles antes de continuar
-        await _showMobileSelectionDialog(response);
-      }
-    } else if (response != null && response['OK'] == 9) {
-      // 🔹 Validar dispositivo antes de mostrar selección de móviles
-      bool isDeviceValid = await _validateDevice();
-      print(
-        "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
-      );
+        if (!isDeviceValid) {
+          print(
+              "🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
+          bool shouldRegister = await _showRegisterDeviceDialog();
 
-      if (!isDeviceValid) {
-        print("🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
-        bool shouldRegister = await _showRegisterDeviceDialog();
+          if (shouldRegister) {
+            print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
+            bool registrationSuccess = await _registerDevice(
+              _usernameController.text,
+            );
 
-        if (shouldRegister) {
-          print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
-          bool registrationSuccess = await _registerDevice(
-            _usernameController.text,
-          );
+            if (registrationSuccess) {
+              var box = await Hive.openBox('sessionBox');
+              String habilitado = box.get('Habilitado', defaultValue: 'N');
 
-          if (registrationSuccess) {
-            var box = await Hive.openBox('sessionBox');
-            String habilitado = box.get('Habilitado', defaultValue: 'N');
-
-            if (habilitado == 'N') {
-              print(
-                "✅ Dispositivo registrado con éxito. Esperando aprobación...",
-              );
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
-                  ),
-                  backgroundColor: Colors.green,
-                ),
-              );
-              return; // Volver al login
-            } else {
-              var response = await RioGasService.validarUsuario(
-                _usernameController.text,
-                _passwordController.text,
-                _deviceId,
-              );
-
-              print("Antes del login");
-
-              if (response != null && response['OK'] == 0) {
-                print("✅ Login exitoso. Verificando dispositivo...");
-
-                // 🔹 Validar dispositivo antes de mostrar selección de móviles
-                bool isDeviceValid = await _validateDevice();
+              if (habilitado == 'N') {
                 print(
-                  "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+                  "✅ Dispositivo registrado con éxito. Esperando aprobación...",
                 );
-
-                // 🔹 Extraer lista de móviles de la respuesta
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
+                    ),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                return; // Volver al login
+              } else {
                 print("📥 Extrayendo lista de móviles...");
                 _availableMoviles = _extractAvailableMoviles(response);
 
@@ -255,40 +170,138 @@ class _LoginPageState extends State<LoginPage> {
                   await _showMobileSelectionDialog(response);
                 }
               }
+            } else {
+              print("❌ Error al registrar el dispositivo.");
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error al registrar dispositivo.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return; // Volver al login
             }
           } else {
-            print("❌ Error al registrar el dispositivo.");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error al registrar dispositivo.'),
-                backgroundColor: Colors.red,
-              ),
-            );
+            print("🔙 Usuario canceló el registro. Volviendo al login...");
             return; // Volver al login
           }
-        } else {
-          print("🔙 Usuario canceló el registro. Volviendo al login...");
-          return; // Volver al login
         }
-      }
-    } else if (response == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'En este momento no es posible comunicarse con los servidores de RioGas. Favor intente más tarde.',
+
+        // 🔹 Extraer lista de móviles de la respuesta
+        print("📥 Extrayendo lista de móviles...");
+        _availableMoviles = _extractAvailableMoviles(response);
+
+        if (_availableMoviles.isNotEmpty) {
+          print("📋 Móviles disponibles para seleccionar: $_availableMoviles");
+          print("🛑 Mostrando selección de móviles antes de continuar...");
+
+          // 🔹 Mostrar selección de móviles antes de continuar
+          await _showMobileSelectionDialog(response);
+        }
+      } else if (response != null && response['OK'] == 9) {
+        // 🔹 Validar dispositivo antes de mostrar selección de móviles
+        bool isDeviceValid = await _validateDevice();
+        print(
+          "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+        );
+
+        if (!isDeviceValid) {
+          print(
+              "🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
+          bool shouldRegister = await _showRegisterDeviceDialog();
+
+          if (shouldRegister) {
+            print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
+            bool registrationSuccess = await _registerDevice(
+              _usernameController.text,
+            );
+
+            if (registrationSuccess) {
+              var box = await Hive.openBox('sessionBox');
+              String habilitado = box.get('Habilitado', defaultValue: 'N');
+
+              if (habilitado == 'N') {
+                print(
+                  "✅ Dispositivo registrado con éxito. Esperando aprobación...",
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
+                    ),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                return; // Volver al login
+              } else {
+                var response = await RioGasService.validarUsuario(
+                  _usernameController.text,
+                  _passwordController.text,
+                  _deviceId,
+                );
+
+                print("Antes del login");
+
+                if (response != null && response['OK'] == 0) {
+                  print("✅ Login exitoso. Verificando dispositivo...");
+
+                  // 🔹 Validar dispositivo antes de mostrar selección de móviles
+                  bool isDeviceValid = await _validateDevice();
+                  print(
+                    "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+                  );
+
+                  // 🔹 Extraer lista de móviles de la respuesta
+                  print("📥 Extrayendo lista de móviles...");
+                  _availableMoviles = _extractAvailableMoviles(response);
+
+                  if (_availableMoviles.isNotEmpty) {
+                    print(
+                        "📋 Móviles disponibles para seleccionar: $_availableMoviles");
+                    print(
+                        "🛑 Mostrando selección de móviles antes de continuar...");
+
+                    // 🔹 Mostrar selección de móviles antes de continuar
+                    await _showMobileSelectionDialog(response);
+                  }
+                }
+              }
+            } else {
+              print("❌ Error al registrar el dispositivo.");
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error al registrar dispositivo.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return; // Volver al login
+            }
+          } else {
+            print("🔙 Usuario canceló el registro. Volviendo al login...");
+            return; // Volver al login
+          }
+        }
+      } else if (response == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'En este momento no es posible comunicarse con los servidores de RioGas. Favor intente más tarde.',
+            ),
+            backgroundColor: Colors.red,
           ),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } else if (response != null && response['OK'] > 0 && response['OK'] != 9) {
-      String errorMessage = response['message'] ?? 'Error desconocido';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
-      );
-    } else if (response != null && response.containsKey('error')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(response['error']), backgroundColor: Colors.red),
-      );
+        );
+      } else if (response != null &&
+          response['OK'] > 0 &&
+          response['OK'] != 9) {
+        String errorMessage = response['message'] ?? 'Error desconocido';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+        );
+      } else if (response != null && response.containsKey('error')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(response['error']), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -862,13 +875,25 @@ class _LoginPageState extends State<LoginPage> {
       final movil = sessionBox.get('movil') ?? "0";
       final escenario = sessionBox.get('escenario') ?? "0";
       final usuario = sessionBox.get('username') ?? "string";
+      String? idTerminal = sessionBox.get('deviceId');
 
       final platform = MethodChannel("background_service");
       await platform.invokeMethod("startLocationService", {
-        "interval": 1,
+        "interval": 3,
         "movil": movil,
         "escenario": escenario,
         "usuario": usuario,
+        "deviceId": "$idTerminal",
+      });
+      print(
+          "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
+
+      await platform.invokeMethod("FcmNotification", {
+        "interval": 3,
+        "movil": movil,
+        "escenario": escenario,
+        "usuario": usuario,
+        "deviceId": "$idTerminal",
       });
       print(
           "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
@@ -877,10 +902,7 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         Navigator.pop(context);
       }
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => HomePage()),
-      );
+      await _checkNotificationPermissionAndNavigate();
     } else {
       // 🔹 Cargar y guardar constantes desde Firebase
       print("Cargando y guardando constantes desde Firebase...");
@@ -889,6 +911,150 @@ class _LoginPageState extends State<LoginPage> {
       // 🔹 Cerrar el diálogo de carga
       Navigator.pop(context);
     }
+  }
+
+  Future<void> _validateAppVersion() async {
+    String appVersion = await AuthService.getAppVersion();
+    String deviceId = await AuthService.getDeviceId();
+
+    var response = await RioGasService.validarVersion(appVersion, deviceId);
+
+    if (response != null) {
+      if (response['OK'] == 1) {
+        _showMessage(response['message']);
+      } else if (response['OK'] == 2) {
+        bool isRequired =
+            response['Requerida'] ?? false; // Obtiene el valor de 'Requerida'
+        _showUpdateDialog(response['message'], response['link'], isRequired);
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Información'),
+            content: Text(message),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: Text('Aceptar'),
+              ),
+            ],
+          );
+        },
+      );
+    });
+  }
+
+  void _showUpdateDialog(String message, String link, bool isRequired) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Actualización Requerida'),
+            content: Text(message),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  print(
+                      '🔄 Confirmación recibida. Iniciando proceso de actualización.');
+
+                  // Solicitar permiso REQUEST_INSTALL_PACKAGES
+                  if (await Permission.requestInstallPackages.isDenied) {
+                    print(
+                        '⚠️ Permiso REQUEST_INSTALL_PACKAGES denegado. Solicitando permiso.');
+                    final status =
+                        await Permission.requestInstallPackages.request();
+                    if (!status.isGranted) {
+                      print('❌ Permiso REQUEST_INSTALL_PACKAGES no concedido.');
+                      _showMessage(
+                          'No se puede continuar sin el permiso para instalar paquetes.');
+                      return;
+                    }
+                  }
+
+                  try {
+                    // Mostrar indicador de progreso
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          title: Text('Descargando actualización...'),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 20),
+                              Text(
+                                  'Por favor, espera mientras se descarga la actualización.')
+                            ],
+                          ),
+                        );
+                      },
+                    );
+
+                    // Descarga el archivo desde la URL
+                    final tempDir = await getTemporaryDirectory();
+                    final filePath = '${tempDir.path}/app_update.apk';
+
+                    Dio dio = Dio();
+                    await dio.download(link, filePath,
+                        onReceiveProgress: (received, total) {
+                      if (total != -1) {
+                        print(
+                            '📥 Progreso de descarga: ${(received / total * 100).toStringAsFixed(0)}%');
+                      }
+                    });
+
+                    Navigator.of(context)
+                        .pop(); // Cierra el diálogo de progreso
+
+                    print(
+                        '✅ Descarga completada. Archivo guardado en: $filePath');
+
+                    // Abre el archivo descargado para instalarlo
+                    final result = await OpenFile.open(filePath);
+
+                    var box = await Hive.openBox('sessionBox');
+                    box.clear(); // Limpia la caja de sesión al cerrar la app
+
+                    if (result.type == ResultType.done) {
+                      print('✅ Archivo abierto exitosamente.');
+                    } else {
+                      print(
+                          '⚠️ No se pudo abrir el archivo descargado. Resultado: ${result.message}');
+                      _showMessage('No se pudo abrir el archivo descargado.');
+                    }
+                  } catch (e) {
+                    Navigator.of(context)
+                        .pop(); // Cierra el diálogo de progreso en caso de error
+                    print(
+                        '❌ Error al intentar descargar o abrir el archivo: $e');
+                    _showMessage(
+                        'Error al intentar descargar o abrir el archivo: $e');
+                  }
+                },
+                child: Text('Confirmar'),
+              ),
+            ],
+          );
+        },
+      );
+    });
   }
 
   Future<bool> _checkActiveSession(
@@ -1261,6 +1427,48 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       print('❌ Error durante la autenticación con huella: $e');
       return false;
+    }
+  }
+
+  Future<void> _checkNotificationPermissionAndNavigate() async {
+    // Verificar si las notificaciones están habilitadas
+    if (await Permission.notification.isGranted) {
+      // Si están habilitadas, navegar a HomePage
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => HomePage()),
+      );
+    } else {
+      // Mostrar diálogo para solicitar permisos
+      bool shouldOpenSettings = await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Permisos de Notificación'),
+            content: Text(
+                'Para continuar, habilite las notificaciones en la configuración de la aplicación.'),
+            actions: <Widget>[
+              TextButton(
+                child: Text('Cancelar'),
+                onPressed: () {
+                  Navigator.of(context).pop(false);
+                },
+              ),
+              ElevatedButton(
+                child: Text('Configurar'),
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                },
+              ),
+            ],
+          );
+        },
+      );
+
+      if (shouldOpenSettings == true) {
+        // Abrir configuración de la aplicación
+        await openAppSettings();
+      }
     }
   }
 

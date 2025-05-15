@@ -108,20 +108,20 @@ class _HomePageState extends State<HomePage>
       // Handle connectivity changes
     });
 
-    // Start the counter for periodic connectivity checks
+    /*// Start the counter for periodic connectivity checks
     _counterService.startCounter(
       intervalSeconds: 10,
       onTick: _checkConnectivityAndPerformAction,
-    );
+    );*/
 
     // 🔹 Inicializar la verificación de conectividad periódica
     _connectivityCheckTimer = Timer.periodic(
-      Duration(seconds: 5),
+      Duration(seconds: 90),
       (timer) => _checkInternetConnectivity(),
     );
 
     // Obtener el valor de la constante 200
-    _initializeRetryInterval();
+    //_initializeRetryInterval();
 
     _initGpsListener();
   }
@@ -453,7 +453,7 @@ class _HomePageState extends State<HomePage>
     Map<String, dynamic> pedido,
     int pedidoId,
   ) async {
-    String pedidoTpo = pedido['Tipo'] == 'PEDIDOS' ? 'PEDIDOS' : 'SERVICES';
+    String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
     String lectDesc = 'DESCARGA';
     String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
@@ -614,9 +614,14 @@ class _HomePageState extends State<HomePage>
               _gpsSubscription.cancel();
               _connectivitySubscription.cancel();
               _connectivityCheckTimer.cancel();
+
+              box.deleteFromDisk();
+              // Navigate to HomePage after clearing sessionBox
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => HomePage()),
+              );
             }
-            // Close the application completely
-            SystemNavigator.pop();
           },
           child: Text('Aceptar'),
         ),

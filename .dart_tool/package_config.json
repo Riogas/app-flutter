@@ -302,6 +302,24 @@
       "languageVersion": "3.0"
     },
     {
+      "name": "firebase_analytics",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_analytics-11.4.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "firebase_analytics_platform_interface",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_analytics_platform_interface-4.3.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "firebase_analytics_web",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_analytics_web-0.5.10+11",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
       "name": "firebase_app_check",
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_app_check-0.3.2+5",
       "packageUri": "lib/",
@@ -354,6 +372,18 @@
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_core_web-2.22.0",
       "packageUri": "lib/",
       "languageVersion": "3.4"
+    },
+    {
+      "name": "firebase_crashlytics",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_crashlytics-4.3.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "firebase_crashlytics_platform_interface",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_crashlytics_platform_interface-3.8.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
     },
     {
       "name": "firebase_data_connect",
@@ -1286,7 +1316,7 @@
       "languageVersion": "3.6"
     }
   ],
-  "generated": "2025-05-13T12:56:23.414530Z",
+  "generated": "2025-05-15T17:25:22.349289Z",
   "generator": "pub",
   "generatorVersion": "3.8.0-70.0.dev",
   "flutterRoot": "file:///C:/flutter",

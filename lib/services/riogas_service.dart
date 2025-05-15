@@ -36,6 +36,11 @@ class RioGasService {
 
   static Future<void> startRetryTimer() async {
     // print('🔄 Iniciando el temporizador de reintentos.');
+    if (_retryTimer != null && _retryTimer!.isActive) {
+      // Ya hay un timer activo, no iniciar otro
+      return;
+    }
+
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
     // print("📦 requestbox values: ${failedRequestsBox.values}");
     if (failedRequestsBox.isNotEmpty) {
@@ -49,8 +54,12 @@ class RioGasService {
         // print('🔄 Timer triggered. Executing retry timer callback.');
         try {
           await processPendingRequests();
-          //_retryTimer = null; // Reset the timer to null after processing
-          // print('⏱️ Retry timer reset to null after processing.');
+          if (failedRequestsBox.isEmpty) {
+            timer.cancel();
+            _retryTimer =
+                null; // 🔁 opcional, para saber que ya no hay timer activo
+            print('✅ Todos los pendientes procesados. Timer detenido.');
+          }
         } catch (e) {
           // print('❌ Error in retry timer callback: $e');
         }
@@ -1015,13 +1024,25 @@ class RioGasService {
     }
   }
 
+  static Future<Map<String, dynamic>?> recepcionFCM(
+    String fcmIdentificador,
+    String fcmEstado,
+  ) async {
+    return _post('RecepcionFCM', {
+      'FCMIdentificador': fcmIdentificador,
+      'FCMEStado': fcmEstado,
+    });
+  }
+
   static Future<void> monitorAndSendErrors() async {
     var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
     var conexionBox = await Hive.openBox('conexionBox');
 
     // Monitorear constantemente los errores
-    Timer.periodic(Duration(seconds: 10), (timer) async {
+    Timer.periodic(Duration(seconds: 60), (timer) async {
       bool isConnected = conexionBox.get('conexionRioGas', defaultValue: false);
+
+      print('⚠️ timer Conexion riogas.');
 
       if (!isConnected) {
         print('⚠️ No hay conectividad con RioGas. Esperando conexión...');
@@ -1103,6 +1124,8 @@ class RioGasService {
       String fechaHora,
       String tipoCierre) async {
     String appVersion = await AuthService.getAppVersion();
+    var box = await Hive.openBox('sessionBox');
+    String? usuarioNombre = box.get('NombreUsuario');
     return _post('RegistrarCierre', {
       'token': token,
       'movil': movil,
@@ -1112,7 +1135,7 @@ class RioGasService {
       'FechaHora': fechaHora,
       'version': appVersion,
       'origen': 'MoveIT',
-      'usuarioCierre': usuario,
+      'usuarioCierre': usuarioNombre,
       'aplicaFirestore': false,
     });
   }
