@@ -80,3 +80,4 @@ flutter:
     - assets/garrafa.png
     - assets/logomoveit.png
     - assets/logo-riogas.png
+    - assets/moveit_background.png   # 👈 esta línea debe tener 4 espacios en total    
