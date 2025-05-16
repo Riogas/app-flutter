@@ -619,7 +619,7 @@ class _HomePageState extends State<HomePage>
               // Navigate to HomePage after clearing sessionBox
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (context) => HomePage()),
+                MaterialPageRoute(builder: (context) => LoginPage()),
               );
             }
           },

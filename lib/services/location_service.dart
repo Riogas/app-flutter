@@ -467,6 +467,9 @@ class LocationService {
 
     if (rioGasIntervalValue != null) {
       rioGasInterval = _parseUpdateInterval(rioGasIntervalValue);
+      // print(
+      //   '⏳ Configurando timer para RioGas cada $rioGasInterval segundos.',
+      // );
 
       // print('⏳ Configurando timer para RioGas cada $rioGasInterval segundos.');
     }

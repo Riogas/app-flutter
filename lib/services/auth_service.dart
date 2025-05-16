@@ -42,6 +42,7 @@ class AuthService {
       username,
       password,
       deviceId,
+      await getAppVersionNro(),
     );
 
     print("en auth_service.dart");

@@ -459,6 +459,7 @@ class RioGasService {
     String usuario,
     String password,
     String deviceId,
+    String Version,
   ) async {
     String? token = await FirebaseMessaging.instance.getToken();
     print('🪙 Token: $token');
@@ -467,6 +468,7 @@ class RioGasService {
       'password': password,
       'DeviceId': deviceId,
       'tokenFCM': token,
+      'INAux1': Version,
     });
   }
 

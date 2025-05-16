@@ -78,6 +78,7 @@ class _LoginPageState extends State<LoginPage> {
       _usernameController.text,
       _passwordController.text,
       _deviceId,
+      _appNroVersion,
     );
 
     print("Antes del login");
@@ -93,7 +94,7 @@ class _LoginPageState extends State<LoginPage> {
         await usuarioBox.put('lastUsername', _usernameController.text);
         print(
             '✅ Se guardó el último nombre de usuario: ${_usernameController.text}');
-
+/*
         // Verificar si el campo "huella" no está configurado
         final LocalAuthentication auth = LocalAuthentication();
         bool isBiometricAvailable = await auth.isDeviceSupported();
@@ -112,7 +113,7 @@ class _LoginPageState extends State<LoginPage> {
             }
           }
         }
-
+*/
         // Si el campo "huella" está configurado en true, solicitar autenticación con huella
         if (usuarioBox.get('huella') == true) {
           bool isAuthenticated = await _authenticateWithFingerprint();
@@ -237,6 +238,7 @@ class _LoginPageState extends State<LoginPage> {
                   _usernameController.text,
                   _passwordController.text,
                   _deviceId,
+                  _appNroVersion,
                 );
 
                 print("Antes del login");
