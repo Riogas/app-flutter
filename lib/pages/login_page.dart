@@ -1493,11 +1493,11 @@ class _LoginPageState extends State<LoginPage> {
           ? Center(child: CircularProgressIndicator())
           : Container(
               height: MediaQuery.of(context).size.height,
+              width: double.infinity,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.blue, Colors.white],
+                image: DecorationImage(
+                  image: AssetImage('assets/MoveITBackGround.png'),
+                  fit: BoxFit.cover,
                 ),
               ),
               child: Column(
