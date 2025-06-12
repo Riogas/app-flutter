@@ -8,6 +8,24 @@ import '../utils/error_event.dart';
 import '../utils/config.dart'; // Importa el archivo de configuración
 import '../utils/constantes.dart'; // Importa la función getConstantValue
 
+// Función utilitaria para abrir cajas Hive de forma segura
+dynamic openBoxSafe(String boxName) async {
+  try {
+    if (!Hive.isBoxOpen(boxName)) {
+      // Si tu versión de Hive soporta boxExists, puedes agregar aquí la verificación
+      // if (!await Hive.boxExists(boxName)) {
+      //   print('⚠️ La caja $boxName no existe en disco.');
+      //   return null;
+      // }
+      return await Hive.openBox(boxName);
+    }
+    return Hive.box(boxName);
+  } catch (e) {
+    print('❌ Error abriendo la caja $boxName: $e');
+    return null;
+  }
+}
+
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   User? _user;
@@ -67,7 +85,8 @@ class FirebaseService {
   }
 
   Future<void> _updateConnectionErrorState(bool hasError) async {
-    var conexionBox = await Hive.openBox('conexionBox');
+    var conexionBox = await openBoxSafe('conexionBox');
+    if (conexionBox == null) return;
     DateTime? now = DateTime.now();
     if (now == null) {
       // print('⚠ Error: DateTime.now() returned null.');
@@ -96,39 +115,30 @@ class FirebaseService {
   void monitorStream<T>(Stream<T> stream, String streamName) {
     stream.listen(
       (event) async {
-        print(
-            '✅ Stream "$streamName" received data: $event'); // Log data received
-        var conexionBox = await Hive.openBox('conexionBox');
+        print('✅ Stream "$streamName" received data: $event');
+        var conexionBox = await openBoxSafe('conexionBox');
+        if (conexionBox == null) return;
         DateTime now = DateTime.now();
-        conexionBox.put(
-          'ConexionFirestore',
-          true,
-        ); // Actualiza conexión exitosa
+        conexionBox.put('ConexionFirestore', true);
         conexionBox.put('lastSuccessfulConnection', now.toIso8601String());
       },
       onError: (error) async {
-        print(
-            '❌ Stream "$streamName" encountered an error: $error'); // Log error
-        var conexionBox = await Hive.openBox('conexionBox');
-        conexionBox.put(
-          'ConexionFirestore',
-          false,
-        ); // Actualiza conexión fallida
+        print('❌ Stream "$streamName" encountered an error: $error');
+        var conexionBox = await openBoxSafe('conexionBox');
+        if (conexionBox == null) return;
+        conexionBox.put('ConexionFirestore', false);
         if (error is FirebaseException && error.code == 'permission-denied') {
           await _logFirestorePermissionError(
-            error.message ?? 'Permission denied',
-          );
+              error.message ?? 'Permission denied');
         } else {
           await _logError('Stream Error', error.toString());
         }
       },
       onDone: () async {
-        print('⚠ Stream "$streamName" has been closed.'); // Log stream closed
-        var conexionBox = await Hive.openBox('conexionBox');
-        conexionBox.put(
-          'ConexionFirestore',
-          false,
-        ); // Actualiza conexión cerrada
+        print('⚠ Stream "$streamName" has been closed.');
+        var conexionBox = await openBoxSafe('conexionBox');
+        if (conexionBox == null) return;
+        conexionBox.put('ConexionFirestore', false);
       },
       cancelOnError: true,
     );
@@ -138,15 +148,15 @@ class FirebaseService {
       Stream<T> stream, String streamName, Function reconnectCallback) {
     stream.listen(
       (event) async {
-        // ...existing code...
-        var conexionBox = await Hive.openBox('conexionBox');
+        var conexionBox = await openBoxSafe('conexionBox');
+        if (conexionBox == null) return;
         DateTime now = DateTime.now();
         conexionBox.put('ConexionFirestore', true);
         conexionBox.put('lastSuccessfulConnection', now.toIso8601String());
       },
       onError: (error) async {
-        // ...existing code...
-        var conexionBox = await Hive.openBox('conexionBox');
+        var conexionBox = await openBoxSafe('conexionBox');
+        if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
         if (error is FirebaseException && error.code == 'permission-denied') {
           await _logFirestorePermissionError(
@@ -154,14 +164,12 @@ class FirebaseService {
         } else {
           await _logError('Stream Error', error.toString());
         }
-        // Attempt to reconnect
         reconnectCallback();
       },
       onDone: () async {
-        // ...existing code...
-        var conexionBox = await Hive.openBox('conexionBox');
+        var conexionBox = await openBoxSafe('conexionBox');
+        if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
-        // Attempt to reconnect
         reconnectCallback();
       },
       cancelOnError: true,
@@ -171,7 +179,6 @@ class FirebaseService {
   void monitorStreamWithUsage<T>(Stream<T> stream, String streamName) {
     int totalBytes = 0;
     DateTime startTime = DateTime.now();
-
     stream.listen(
       (event) async {
         try {
@@ -211,7 +218,8 @@ class FirebaseService {
             startTime = DateTime.now();
           }
 
-          var conexionBox = await Hive.openBox('conexionBox');
+          var conexionBox = await openBoxSafe('conexionBox');
+          if (conexionBox == null) return;
           conexionBox.put('ConexionFirestore', true);
           conexionBox.put(
               'lastSuccessfulConnection', DateTime.now().toIso8601String());
@@ -221,13 +229,15 @@ class FirebaseService {
       },
       onError: (error) async {
         print('❌ Stream "$streamName" encontró un error: $error');
-        var conexionBox = await Hive.openBox('conexionBox');
+        var conexionBox = await openBoxSafe('conexionBox');
+        if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
         await _logError('Stream Error', error.toString());
       },
       onDone: () async {
         print('⚠ Stream "$streamName" se ha cerrado.');
-        var conexionBox = await Hive.openBox('conexionBox');
+        var conexionBox = await openBoxSafe('conexionBox');
+        if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
       },
       cancelOnError: true,
@@ -268,7 +278,8 @@ class FirebaseService {
   }
 
   Stream<Map<String, dynamic>?> getSesionesStream() async* {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String movil = box.get('movil', defaultValue: '0');
     String collectionName = 'Sesiones-$escenarioId';
@@ -342,19 +353,19 @@ class FirebaseService {
   }
 
   Future<void> _deleteAllHiveBoxes() async {
-    var box = await Hive.openBox('sessionBox');
-    var constantBox = await Hive.openBox('constantBox');
-    var mensajesBox = await Hive.openBox('mensajesBox');
-    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-
-    await box.deleteFromDisk();
-    await constantBox.deleteFromDisk();
-    await mensajesBox.deleteFromDisk();
-    await failedRequestsBox.deleteFromDisk();
+    var box = await openBoxSafe('sessionBox');
+    var constantBox = await openBoxSafe('constantBox');
+    var mensajesBox = await openBoxSafe('mensajesBox');
+    var failedRequestsBox = await openBoxSafe('failedRequestsBox');
+    if (box != null) await box.deleteFromDisk();
+    if (constantBox != null) await constantBox.deleteFromDisk();
+    if (mensajesBox != null) await mensajesBox.deleteFromDisk();
+    if (failedRequestsBox != null) await failedRequestsBox.deleteFromDisk();
   }
 
   Stream<List<DocumentSnapshot>> getPedidosStream() async* {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String usuario = box.get('username', defaultValue: '0').toString();
     int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
@@ -523,7 +534,8 @@ class FirebaseService {
 
   Stream<List<DocumentSnapshot>> getMensajesStream() async* {
     try {
-      var box = await Hive.openBox('sessionBox');
+      var box = await openBoxSafe('sessionBox');
+      if (box == null) return;
       String escenarioId = box.get('escenario', defaultValue: '0').toString();
       int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
@@ -580,7 +592,8 @@ class FirebaseService {
   }
 
   Future<List<DocumentSnapshot>> getUnreadMessages() async {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return [];
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
@@ -600,7 +613,8 @@ class FirebaseService {
   }
 
   Future<void> markMessageAsRead(String messageId) async {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'Mensajes-$escenarioId';
 
@@ -623,7 +637,8 @@ class FirebaseService {
     String messageId,
     Map<String, dynamic> fields,
   ) async {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'Mensajes-$escenarioId';
 
@@ -643,7 +658,8 @@ class FirebaseService {
   }
 
   Stream<DocumentSnapshot?> getMovilStream() async* {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String movil = box.get('movil', defaultValue: '0');
     String collectionName = 'Moviles-$escenarioId';
@@ -678,7 +694,8 @@ class FirebaseService {
   }
 
   Future<void> updateMovilEstado(int estado) async {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     var movilid = await box.get('movil');
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'Moviles-$escenarioId';
@@ -702,7 +719,8 @@ class FirebaseService {
   }
 
   Stream<List<Map<String, dynamic>>> getSubEstadoMovilesStream() async* {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     print('Escenario ID: $escenarioId');
     print('Movil ID: ${box.get('movil')}');
@@ -746,7 +764,8 @@ class FirebaseService {
 
   Stream<List<Map<String, dynamic>>>
       getSubEstadoFinalizacionPedidosStream() async* {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'SubEstadoFinalizacionPedidos-$escenarioId';
 
@@ -794,7 +813,8 @@ class FirebaseService {
 
   Stream<List<Map<String, dynamic>>>
       getSubEstadoFinalizacionServicesStream() async* {
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'SubEstadoFinalizacionServices-$escenarioId';
 

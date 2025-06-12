@@ -142,6 +142,10 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           totalPedido: pedido['Precio'] ?? 0,
           codPedido: pedidoId,
           pedidoTipo: pedido['Tipo'],
+          ubicacion:
+              pedido.containsKey('ubicacion') && pedido['ubicacion'] is GeoPoint
+                  ? pedido['ubicacion'] as GeoPoint
+                  : null,
         ),
       ),
     );

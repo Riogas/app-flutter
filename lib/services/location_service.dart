@@ -130,8 +130,12 @@ class LocationService {
             await Geolocator.checkPermission();
         if (updatedPermission == LocationPermission.always) {
           _locationPermissionDenied = false;
-          await sessionBox.put(
-              '_locationPermissionDenied', _locationPermissionDenied);
+          if (Hive.isBoxOpen('sessionBox')) {
+            final sessionBox = Hive.box('sessionBox');
+            await sessionBox.put(
+                '_locationPermissionDenied', _locationPermissionDenied);
+          }
+
           print(
               '✅ Permisos de ubicación concedidos. Continuando con el flujo normal.');
           timer.cancel(); // Stop the timer once permissions are granted

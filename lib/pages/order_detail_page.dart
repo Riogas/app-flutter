@@ -8,6 +8,9 @@ import '../services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa para manejar URLs
 import 'package:MoveIT/pages/home_page.dart';
 import '../utils/screenBlock.dart';
+import 'package:geolocator/geolocator.dart';
+import 'dart:async';
+import '../utils/constantes.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
@@ -15,6 +18,7 @@ class OrderDetailPage extends StatefulWidget {
   final double totalPedido; // Add this parameter
   final int codPedido;
   final String pedidoTipo;
+  final GeoPoint? ubicacion;
 
   OrderDetailPage({
     required this.detalleHtml,
@@ -22,6 +26,7 @@ class OrderDetailPage extends StatefulWidget {
     required this.totalPedido, // Initialize it
     required this.codPedido,
     required this.pedidoTipo,
+    this.ubicacion,
   });
 
   @override
@@ -35,6 +40,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   String? _selectedSubEstado;
   String? _observaciones = '';
   final _observacionesController = TextEditingController();
+
+  int? _distanciaMaxMtsCumpPedidos; // Variable para guardar el valor del stream
+  Stream<DocumentSnapshot?>? _movilStream;
+  StreamSubscription<DocumentSnapshot?>? _movilSubscription;
 
   @override
   void initState() {
@@ -82,6 +91,79 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         });
       }
     });
+    _calcularDistanciaDesdeUbicacionCliente(); // llamada a función
+
+    // Suscribirse al stream de moviles para obtener DistanciaMaxMtsCumpPedidos
+    _movilStream = _firebaseService.getMovilStream();
+    _movilSubscription = _movilStream!.listen((snapshot) {
+      if (snapshot != null && snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>?;
+        if (data != null && data.containsKey('DistanciaMaxMtsCumpPedidos')) {
+          final value = data['DistanciaMaxMtsCumpPedidos'];
+          if (value is int && value > 0) {
+            if (mounted) {
+              setState(() {
+                _distanciaMaxMtsCumpPedidos = value;
+              });
+            }
+          } else {
+            if (mounted) {
+              setState(() {
+                _distanciaMaxMtsCumpPedidos = null;
+              });
+            }
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _distanciaMaxMtsCumpPedidos = null;
+            });
+          }
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _distanciaMaxMtsCumpPedidos = null;
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _movilSubscription?.cancel();
+    _observacionesController.dispose();
+    super.dispose();
+  }
+
+  void _calcularDistanciaDesdeUbicacionCliente() async {
+    try {
+      var currentLocation = await LocationService().getCurrentLocation();
+      if (currentLocation != null) {
+        double latActual = currentLocation['latitude'];
+        double lngActual = currentLocation['longitude'];
+        double distanciaEnMetros = 0;
+        if (widget.ubicacion != null) {
+          double latCliente = widget.ubicacion!.latitude;
+          double lngCliente = widget.ubicacion!.longitude;
+          distanciaEnMetros = Geolocator.distanceBetween(
+            latActual,
+            lngActual,
+            latCliente,
+            lngCliente,
+          );
+          print(
+              '📏 Distancia hasta cliente: \\${distanciaEnMetros.toStringAsFixed(2)} metros');
+        } else {
+          print('⚠️ Ubicación del cliente no disponible, distanciaEnMetros=0');
+        }
+      } else {
+        print('❌ No se pudo obtener la ubicación actual.');
+      }
+    } catch (e) {
+      print('⚠️ Error al calcular distancia: $e');
+    }
   }
 
   void injectCSS() {
@@ -384,6 +466,37 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             locationBox.get('totalDistance', defaultValue: 0.0);
         String movil = box.get('movil').toString(); // Get movil from sessionBox
 
+        /* Aqui debería ir la lógica para controlar la distancia del cliente */
+        // Calcular distancia entre ubicación actual y cliente
+        double latActual = currentLocation['latitude'];
+        double lngActual = currentLocation['longitude'];
+        double distanciaEnMetros = 0;
+        if (widget.ubicacion != null) {
+          double latCliente = widget.ubicacion!.latitude;
+          double lngCliente = widget.ubicacion!.longitude;
+          distanciaEnMetros = Geolocator.distanceBetween(
+            latActual,
+            lngActual,
+            latCliente,
+            lngCliente,
+          );
+        }
+
+        String? CalculoDistancia = await getConstantValue('90');
+
+        if (_distanciaMaxMtsCumpPedidos != null &&
+            distanciaEnMetros > _distanciaMaxMtsCumpPedidos! &&
+            CalculoDistancia == 'S') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'La distancia al cliente es mayor a la permitida para finalizar el pedido.',
+              ),
+            ),
+          );
+          return;
+        }
+
         var response = await RioGasService.finalizarPedido(
             int.parse(escenario), // Convert escenario to int
             pedidoId,
@@ -397,7 +510,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             _observaciones ?? '',
             DateTime.now().toUtc().toIso8601String(),
             movil,
-            '',
+            distanciaEnMetros.toString(),
             currentLocation['latitude'].toString(),
             currentLocation['longitude'].toString(),
             currentLocation['utmX'].toString(),

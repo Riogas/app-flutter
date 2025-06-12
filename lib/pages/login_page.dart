@@ -22,8 +22,189 @@ import 'package:permission_handler/permission_handler.dart'; // Import permissio
 import 'package:path_provider/path_provider.dart'; // Import for getTemporaryDirectory
 import 'package:open_file/open_file.dart'; // Import for OpenFile
 import 'package:dio/dio.dart'; // Import for Dio HTTP client
+import 'package:video_player/video_player.dart';
+import '../utils/stream_manager.dart';
+
+class LoginBackground extends StatefulWidget {
+  final Widget child;
+
+  const LoginBackground({super.key, required this.child});
+
+  @override
+  State<LoginBackground> createState() => _LoginBackgroundState();
+}
+
+class _LoginBackgroundState extends State<LoginBackground> {
+  late VideoPlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = VideoPlayerController.asset('assets/back_video.mp4')
+      ..initialize().then((_) {
+        setState(() {});
+        _controller.setLooping(true);
+        _controller.setVolume(0.0); // sin sonido
+        _controller.play();
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _controller.value.isInitialized
+            ? FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller.value.size.width,
+                  height: _controller.value.size.height,
+                  child: VideoPlayer(_controller),
+                ),
+              )
+            : Container(color: Colors.black),
+        Container(
+          color: Colors.black.withOpacity(0.3), // capa oscura encima opcional
+        ),
+        widget.child,
+      ],
+    );
+  }
+}
+
+class ShinyButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  final String text;
+
+  const ShinyButton({
+    Key? key,
+    required this.onPressed,
+    required this.text,
+  }) : super(key: key);
+
+  @override
+  State<ShinyButton> createState() => _ShinyButtonState();
+}
+
+class _ShinyButtonState extends State<ShinyButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _progress;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 5),
+    )..repeat(); // ← Repite infinito
+
+    _progress = Tween<double>(begin: -2.0, end: 2.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.linear),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColor = const Color(0xFFB34700); // Naranja oscuro elegante
+
+    return AnimatedBuilder(
+      animation: _progress,
+      builder: (context, child) {
+        return Stack(
+          children: [
+            ElevatedButton(
+              onPressed: widget.onPressed,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: baseColor,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                textStyle:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(40),
+                ),
+                elevation: 8,
+              ),
+              child: Text(widget.text),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(40),
+                  child: CustomPaint(
+                    painter: _DiagonalSheenPainter(progress: _progress.value),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DiagonalSheenPainter extends CustomPainter {
+  final double progress;
+
+  _DiagonalSheenPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+
+    final gradient = LinearGradient(
+      begin: Alignment(-1.0 + progress, 1.0 - progress),
+      end: Alignment(1.0 + progress, -1.0 - progress),
+      colors: [
+        Colors.transparent,
+        Colors.white.withOpacity(0.3),
+        Colors.transparent,
+      ],
+      stops: const [0.4, 0.5, 0.6],
+    );
+
+    final paint = Paint()
+      ..shader = gradient.createShader(rect)
+      ..blendMode = BlendMode.lighten;
+
+    canvas.drawRect(rect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DiagonalSheenPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
 
 class LoginPage extends StatefulWidget {
+  final bool forcedLogout;
+  final String? forcedLogoutMessage;
+  final String? movil;
+
+  const LoginPage({
+    Key? key,
+    this.forcedLogout = false,
+    this.forcedLogoutMessage,
+    this.movil,
+  }) : super(key: key);
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -41,12 +222,19 @@ class _LoginPageState extends State<LoginPage> {
   String _phoneNumber = ''; // Global variable to store the phone number
   TextEditingController licensePlateController =
       TextEditingController(); // New controller for license plate
+  bool _isLoginButtonLoading = false; // Add this line
 
   @override
   void initState() {
     super.initState();
     _loadLastUsername(); // Load the last username from Hive
     _initialize();
+
+    if (widget.forcedLogout) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _handleForcedLogoutAndShowDialog();
+      });
+    }
   }
 
   Future<void> _loadLastUsername() async {
@@ -73,186 +261,167 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = false);
   }
 
-  Future<void> _login() async {
-    var response = await RioGasService.validarUsuario(
-      _usernameController.text,
-      _passwordController.text,
-      _deviceId,
-      _appNroVersion,
+  Future<void> _handleForcedLogoutAndShowDialog() async {
+    try {
+      final movil = int.tryParse(widget.movil ?? '0') ?? 0;
+      final box = await Hive.openBox('sessionBox');
+
+      String? deviceId = box.get('deviceId');
+      String? idUsuario = box.get('username');
+      String escenario = box.get('escenario') ?? "0";
+      String usuario = box.get('username') ?? "string";
+      String? idTerminal = box.get('deviceId');
+
+      final platform = MethodChannel("background_service");
+      await platform.invokeMethod("stopLocationService", {
+        "movil": movil,
+        "escenario": escenario,
+        "usuario": usuario,
+        "deviceId": "$idTerminal",
+      });
+      print("🛑 Servicio de ubicación detenido y notificación eliminada.");
+
+      await RioGasService.registrarCierre(
+        movil,
+        deviceId ?? '',
+        idUsuario ?? '',
+        DateTime.now().toIso8601String(),
+        'DeslogueoForzado',
+      );
+
+      await box.clear();
+      await Hive.openBox('mensajesBox').then((b) => b.clear());
+
+      await _cancelStreams();
+
+      await box.deleteFromDisk();
+
+      // Mostrar diálogo solo si el widget sigue montado
+      if (mounted) {
+        _showForcedLogoutDialog(widget.forcedLogoutMessage);
+      }
+    } catch (e) {
+      print('❌ Error durante limpieza por deslogueo forzado: $e');
+    }
+  }
+
+  void _showForcedLogoutDialog(String? mensaje) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Deslogueo forzado'),
+        content: Text(
+          mensaje ??
+              'Su sesión ha sido cerrada. Por favor, inicie sesión nuevamente.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
     );
+  }
 
-    print("Antes del login");
+  Future<void> _cancelStreams() async {
+    await cancelAllStreams(); // ahora sí, porque lo hiciste accesible globalmente
+    print('🔴 Todos los streams cancelados.');
+  }
 
-    if (response != null && response['OK'] == 99) {
-      _validateAppVersion();
-    } else {
-      if (response != null && response['OK'] == 0) {
-        print("✅ Login exitoso. Verificando dispositivo...");
+  Future<void> _login() async {
+    if (_isLoginButtonLoading) return;
+    setState(() {
+      _isLoginButtonLoading = true;
+    });
+    try {
+      print("🔘 Se presionó el botón de login");
 
-        // Save the last logged-in username in Hive
-        var usuarioBox = await Hive.openBox('usuarioBox');
-        await usuarioBox.put('lastUsername', _usernameController.text);
-        print(
-            '✅ Se guardó el último nombre de usuario: ${_usernameController.text}');
+      var response = await RioGasService.validarUsuario(
+        _usernameController.text,
+        _passwordController.text,
+        _deviceId,
+        _appNroVersion,
+      );
+
+      print("Antes del login");
+
+      if (response != null && response['OK'] == 99) {
+        _validateAppVersion();
+      } else {
+        if (response != null && response['OK'] == 0) {
+          print("✅ Login exitoso. Verificando dispositivo...");
+
+          // Save the last logged-in username in Hive
+          var usuarioBox = await Hive.openBox('usuarioBox');
+          await usuarioBox.put('lastUsername', _usernameController.text);
+          print(
+              '✅ Se guardó el último nombre de usuario: ${_usernameController.text}');
 /*
-        // Verificar si el campo "huella" no está configurado
-        final LocalAuthentication auth = LocalAuthentication();
-        bool isBiometricAvailable = await auth.isDeviceSupported();
-        if (usuarioBox.get('huella') == null && isBiometricAvailable) {
-          print(
-              "🔐 Huella no configurada. Mostrando diálogo para habilitar huella.");
-          bool shouldEnableFingerprint = await _showEnableFingerprintDialog();
-          if (shouldEnableFingerprint) {
-            print("🔐 Usuario aceptó habilitar huella.");
-            await _configureFingerprintAuthentication();
+          // Verificar si el campo "huella" no está configurado
+          final LocalAuthentication auth = LocalAuthentication();
+          bool isBiometricAvailable = await auth.isDeviceSupported();
+          if (usuarioBox.get('huella') == null && isBiometricAvailable) {
+            print(
+                "🔐 Huella no configurada. Mostrando diálogo para habilitar huella.");
+            bool shouldEnableFingerprint = await _showEnableFingerprintDialog();
+            if (shouldEnableFingerprint) {
+              print("🔐 Usuario aceptó habilitar huella.");
+              await _configureFingerprintAuthentication();
 
-            // Verificar nuevamente si la huella fue configurada correctamente
-            if (usuarioBox.get('huella') != true) {
-              print('❌ Configuración de huella fallida. Deteniendo flujo.');
-              return; // Detener el flujo si la configuración falla
-            }
-          }
-        }
-*/
-        // Si el campo "huella" está configurado en true, solicitar autenticación con huella
-        if (usuarioBox.get('huella') == true) {
-          bool isAuthenticated = await _authenticateWithFingerprint();
-          if (!isAuthenticated) {
-            print("❌ Autenticación con huella fallida.");
-            return; // Detener el flujo de inicio de sesión
-          }
-        }
-
-        // 🔹 Validar dispositivo antes de mostrar selección de móviles
-        bool isDeviceValid = await _validateDevice();
-        print(
-          "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
-        );
-
-        if (!isDeviceValid) {
-          print(
-              "🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
-          bool shouldRegister = await _showRegisterDeviceDialog();
-
-          if (shouldRegister) {
-            print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
-            bool registrationSuccess = await _registerDevice(
-              _usernameController.text,
-            );
-
-            if (registrationSuccess) {
-              var box = await Hive.openBox('sessionBox');
-              String habilitado = box.get('Habilitado', defaultValue: 'N');
-
-              if (habilitado == 'N') {
-                print(
-                  "✅ Dispositivo registrado con éxito. Esperando aprobación...",
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
-                    ),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-                return; // Volver al login
-              } else {
-                print("📥 Extrayendo lista de móviles...");
-                _availableMoviles = _extractAvailableMoviles(response);
-
-                if (_availableMoviles.isNotEmpty) {
-                  print(
-                      "📋 Móviles disponibles para seleccionar: $_availableMoviles");
-                  print(
-                      "🛑 Mostrando selección de móviles antes de continuar...");
-
-                  // 🔹 Mostrar selección de móviles antes de continuar
-                  await _showMobileSelectionDialog(response);
-                }
+              // Verificar nuevamente si la huella fue configurada correctamente
+              if (usuarioBox.get('huella') != true) {
+                print('❌ Configuración de huella fallida. Deteniendo flujo.');
+                return; // Detener el flujo si la configuración falla
               }
-            } else {
-              print("❌ Error al registrar el dispositivo.");
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Error al registrar dispositivo.'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-              return; // Volver al login
             }
-          } else {
-            print("🔙 Usuario canceló el registro. Volviendo al login...");
-            return; // Volver al login
           }
-        }
+*/
+          // Si el campo "huella" está configurado en true, solicitar autenticación con huella
+          if (usuarioBox.get('huella') == true) {
+            bool isAuthenticated = await _authenticateWithFingerprint();
+            if (!isAuthenticated) {
+              print("❌ Autenticación con huella fallida.");
+              return; // Detener el flujo de inicio de sesión
+            }
+          }
 
-        // 🔹 Extraer lista de móviles de la respuesta
-        print("📥 Extrayendo lista de móviles...");
-        _availableMoviles = _extractAvailableMoviles(response);
-
-        if (_availableMoviles.isNotEmpty) {
-          print("📋 Móviles disponibles para seleccionar: $_availableMoviles");
-          print("🛑 Mostrando selección de móviles antes de continuar...");
-
-          // 🔹 Mostrar selección de móviles antes de continuar
-          await _showMobileSelectionDialog(response);
-        }
-      } else if (response != null && response['OK'] == 9) {
-        // 🔹 Validar dispositivo antes de mostrar selección de móviles
-        bool isDeviceValid = await _validateDevice();
-        print(
-          "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
-        );
-
-        if (!isDeviceValid) {
+          // 🔹 Validar dispositivo antes de mostrar selección de móviles
+          bool isDeviceValid = await _validateDevice();
           print(
-              "🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
-          bool shouldRegister = await _showRegisterDeviceDialog();
+            "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+          );
 
-          if (shouldRegister) {
-            print("📲 Usuario aceptó registrar el dispositivo. Registrando...");
-            bool registrationSuccess = await _registerDevice(
-              _usernameController.text,
-            );
+          if (!isDeviceValid) {
+            print(
+                "🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
+            bool shouldRegister = await _showRegisterDeviceDialog();
 
-            if (registrationSuccess) {
-              var box = await Hive.openBox('sessionBox');
-              String habilitado = box.get('Habilitado', defaultValue: 'N');
+            if (shouldRegister) {
+              print(
+                  "📲 Usuario aceptó registrar el dispositivo. Registrando...");
+              bool registrationSuccess = await _registerDevice(
+                _usernameController.text,
+              );
 
-              if (habilitado == 'N') {
-                print(
-                  "✅ Dispositivo registrado con éxito. Esperando aprobación...",
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
-                    ),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-                return; // Volver al login
-              } else {
-                var response = await RioGasService.validarUsuario(
-                  _usernameController.text,
-                  _passwordController.text,
-                  _deviceId,
-                  _appNroVersion,
-                );
+              if (registrationSuccess) {
+                var box = await Hive.openBox('sessionBox');
+                String habilitado = box.get('Habilitado', defaultValue: 'N');
 
-                print("Antes del login");
-
-                if (response != null && response['OK'] == 0) {
-                  print("✅ Login exitoso. Verificando dispositivo...");
-
-                  // 🔹 Validar dispositivo antes de mostrar selección de móviles
-                  bool isDeviceValid = await _validateDevice();
+                if (habilitado == 'N') {
                   print(
-                    "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+                    "✅ Dispositivo registrado con éxito. Esperando aprobación...",
                   );
-
-                  // 🔹 Extraer lista de móviles de la respuesta
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  return; // Volver al login
+                } else {
                   print("📥 Extrayendo lista de móviles...");
                   _availableMoviles = _extractAvailableMoviles(response);
 
@@ -266,44 +435,146 @@ class _LoginPageState extends State<LoginPage> {
                     await _showMobileSelectionDialog(response);
                   }
                 }
+              } else {
+                print("❌ Error al registrar el dispositivo.");
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error al registrar dispositivo.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return; // Volver al login
               }
             } else {
-              print("❌ Error al registrar el dispositivo.");
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Error al registrar dispositivo.'),
-                  backgroundColor: Colors.red,
-                ),
-              );
+              print("🔙 Usuario canceló el registro. Volviendo al login...");
               return; // Volver al login
             }
-          } else {
-            print("🔙 Usuario canceló el registro. Volviendo al login...");
-            return; // Volver al login
           }
-        }
-      } else if (response == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'En este momento no es posible comunicarse con los servidores de RioGas. Favor intente más tarde.',
+
+          // 🔹 Extraer lista de móviles de la respuesta
+          print("📥 Extrayendo lista de móviles...");
+          _availableMoviles = _extractAvailableMoviles(response);
+
+          if (_availableMoviles.isNotEmpty) {
+            print(
+                "📋 Móviles disponibles para seleccionar: $_availableMoviles");
+            print("🛑 Mostrando selección de móviles antes de continuar...");
+
+            // 🔹 Mostrar selección de móviles antes de continuar
+            await _showMobileSelectionDialog(response);
+          }
+        } else if (response != null && response['OK'] == 9) {
+          // 🔹 Validar dispositivo antes de mostrar selección de móviles
+          bool isDeviceValid = await _validateDevice();
+          print(
+            "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+          );
+
+          if (!isDeviceValid) {
+            print(
+                "🚨 Dispositivo no registrado. Mostrando diálogo de registro...");
+            bool shouldRegister = await _showRegisterDeviceDialog();
+
+            if (shouldRegister) {
+              print(
+                  "📲 Usuario aceptó registrar el dispositivo. Registrando...");
+              bool registrationSuccess = await _registerDevice(
+                _usernameController.text,
+              );
+
+              if (registrationSuccess) {
+                var box = await Hive.openBox('sessionBox');
+                String habilitado = box.get('Habilitado', defaultValue: 'N');
+
+                if (habilitado == 'N') {
+                  print(
+                    "✅ Dispositivo registrado con éxito. Esperando aprobación...",
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Su dispositivo fue registrado con éxito. Actualmente se encuentra en espera de aprobación por la agencia.',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  return; // Volver al login
+                } else {
+                  var response = await RioGasService.validarUsuario(
+                    _usernameController.text,
+                    _passwordController.text,
+                    _deviceId,
+                    _appNroVersion,
+                  );
+
+                  print("Antes del login");
+
+                  if (response != null && response['OK'] == 0) {
+                    print("✅ Login exitoso. Verificando dispositivo...");
+
+                    // 🔹 Validar dispositivo antes de mostrar selección de móviles
+                    bool isDeviceValid = await _validateDevice();
+                    print(
+                      "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
+                    );
+
+                    // 🔹 Extraer lista de móviles de la respuesta
+                    print("📥 Extrayendo lista de móviles...");
+                    _availableMoviles = _extractAvailableMoviles(response);
+
+                    if (_availableMoviles.isNotEmpty) {
+                      print(
+                          "📋 Móviles disponibles para seleccionar: $_availableMoviles");
+                      print(
+                          "🛑 Mostrando selección de móviles antes de continuar...");
+
+                      // 🔹 Mostrar selección de móviles antes de continuar
+                      await _showMobileSelectionDialog(response);
+                    }
+                  }
+                }
+              } else {
+                print("❌ Error al registrar el dispositivo.");
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error al registrar dispositivo.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return; // Volver al login
+              }
+            } else {
+              print("🔙 Usuario canceló el registro. Volviendo al login...");
+              return; // Volver al login
+            }
+          }
+        } else if (response == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'En este momento no es posible comunicarse con los servidores de RioGas. Favor intente más tarde.',
+              ),
+              backgroundColor: Colors.red,
             ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      } else if (response != null &&
-          response['OK'] > 0 &&
-          response['OK'] != 9) {
-        String errorMessage = response['message'] ?? 'Error desconocido';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
-        );
-      } else if (response != null && response.containsKey('error')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(response['error']), backgroundColor: Colors.red),
-        );
+          );
+        } else if (response != null &&
+            response['OK'] > 0 &&
+            response['OK'] != 9) {
+          String errorMessage = response['message'] ?? 'Error desconocido';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+          );
+        } else if (response != null && response.containsKey('error')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(response['error']), backgroundColor: Colors.red),
+          );
+        }
       }
+    } finally {
+      setState(() {
+        _isLoginButtonLoading = false;
+      });
     }
   }
 
@@ -786,6 +1057,48 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  Future<void> autoLogin() async {
+    Map<String, String> credentials = await generateCredentials();
+
+    String email = credentials['email']!;
+    String password = credentials['password']!;
+
+    await registerOrReuseUser(email, password);
+
+    print("🟢 Login exitoso como $email");
+  }
+
+  Future<Map<String, String>> generateCredentials() async {
+    String deviceId = await AuthService.getDeviceId();
+
+    print("Device ID para credenciales: $deviceId");
+
+    // Normalizá el ID (sin símbolos raros)
+    String sanitized = deviceId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+
+    String email = 'android-$sanitized@riogas.com.uy';
+    String password = 'P@ss${sanitized}#${sanitized.length}';
+
+    return {
+      'email': email,
+      'password': password,
+    };
+  }
+
+  Future<String> getDeviceId() async {
+    final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+
+    if (Platform.isAndroid) {
+      AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+      return androidInfo.id;
+    } else if (Platform.isIOS) {
+      IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+      return iosInfo.identifierForVendor ?? 'unknown_ios';
+    } else {
+      return 'unknown_device';
+    }
+  }
+
   Future<void> _proceedAfterMobileSelection(
     Map<String, dynamic> response,
     String? selectedMovil,
@@ -1023,7 +1336,7 @@ class _LoginPageState extends State<LoginPage> {
                     });
 
                     Navigator.of(context)
-                        .pop(); // Cierra el diálogo de progreso
+                        .pop(); // Cierra la ventana de progreso
 
                     print(
                         '✅ Descarga completada. Archivo guardado en: $filePath');
@@ -1043,7 +1356,7 @@ class _LoginPageState extends State<LoginPage> {
                     }
                   } catch (e) {
                     Navigator.of(context)
-                        .pop(); // Cierra el diálogo de progreso en caso de error
+                        .pop(); // Cierra la ventana de progreso en caso de error
                     print(
                         '❌ Error al intentar descargar o abrir el archivo: $e');
                     _showMessage(
@@ -1087,6 +1400,10 @@ class _LoginPageState extends State<LoginPage> {
       );
       return false;
     }
+
+    /* CREACION O VALIDACIÓN DE DISPOSITIVO EN FIRESTORE */
+    await autoLogin();
+    print("✅ Dispositivo validado");
 
     // Authenticate with Firestore using credentials from Config
     try {
@@ -1477,121 +1794,105 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.blue,
-        title: Text(
-          '',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-          ),
-        ),
-        centerTitle: true,
-      ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
-          : Container(
-              height: MediaQuery.of(context).size.height,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: AssetImage('assets/MoveITBackGround.png'),
-                  fit: BoxFit.cover,
-                ),
-              ),
+          : LoginBackground(
               child: Column(
                 children: [
+                  SizedBox(height: 5), // Margen superior igual a AppBar
                   Expanded(
                     child: SingleChildScrollView(
                       child: Padding(
-                        padding: const EdgeInsets.all(16.0),
+                        padding: const EdgeInsets.all(1.0),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Image.network(
-                              'https://www.riogas.uy/ica_geos_/static/Resources/LogoTransparente.png',
-                              width: 150,
-                              height: 150,
+                              'https://www.riogas.uy/ica_geos_/static/Resources/RGDelivery.png',
+                              width: 250,
+                              height: 250,
                             ),
-                            SizedBox(height: 20),
-                            SizedBox(height: 20),
+                            SizedBox(height: 1),
                             TextField(
                               controller: _usernameController,
-                              style: TextStyle(color: Colors.black),
+                              style: TextStyle(color: Colors.white),
                               decoration: InputDecoration(
                                 filled: true,
                                 fillColor: Colors.transparent,
                                 labelText: 'Usuario',
-                                labelStyle: TextStyle(color: Colors.black),
+                                labelStyle: TextStyle(color: Colors.white),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.black),
+                                  borderSide: BorderSide(color: Colors.white),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.black),
+                                  borderSide: BorderSide(color: Colors.white),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.black),
+                                  borderSide: BorderSide(color: Colors.white),
                                 ),
-                                prefixIcon: Icon(
-                                  Icons.person,
-                                  color: Colors.black,
-                                ),
+                                prefixIcon:
+                                    Icon(Icons.person, color: Colors.white),
                               ),
                             ),
                             SizedBox(height: 10),
                             TextField(
                               controller: _passwordController,
                               obscureText: true,
-                              style: TextStyle(color: Colors.black),
+                              style: TextStyle(color: Colors.white),
                               decoration: InputDecoration(
                                 filled: true,
                                 fillColor: Colors.transparent,
                                 labelText: 'Contraseña',
-                                labelStyle: TextStyle(color: Colors.black),
+                                labelStyle: TextStyle(color: Colors.white),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.black),
+                                  borderSide: BorderSide(color: Colors.white),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.black),
+                                  borderSide: BorderSide(color: Colors.white),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.black),
+                                  borderSide: BorderSide(color: Colors.white),
                                 ),
-                                prefixIcon: Icon(
-                                  Icons.lock,
-                                  color: Colors.black,
-                                ),
+                                prefixIcon:
+                                    Icon(Icons.lock, color: Colors.white),
                               ),
                             ),
                             SizedBox(height: 20),
-                            ElevatedButton(
-                              onPressed: _login,
-                              child: Text('Iniciar sesión'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 50,
-                                  vertical: 15,
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed:
+                                    _isLoginButtonLoading ? null : _login,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blueAccent,
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(vertical: 16),
+                                  textStyle: TextStyle(fontSize: 18),
                                 ),
-                                textStyle: TextStyle(fontSize: 18),
+                                child: _isLoginButtonLoading
+                                    ? SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Text('Iniciar sesión'),
                               ),
                             ),
                             SizedBox(height: 10),
                             Text(
                               _appVersion,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey,
-                              ),
+                              style:
+                                  TextStyle(fontSize: 14, color: Colors.grey),
                             ),
                             SizedBox(height: 20),
                           ],
@@ -1608,18 +1909,7 @@ class _LoginPageState extends State<LoginPage> {
                           child: Text(
                             'ID: $_deviceId',
                             textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Image.asset(
-                            'assets/logo-riogas.png',
-                            width: 100,
-                            height: 30,
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
                           ),
                         ),
                       ],

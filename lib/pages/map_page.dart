@@ -205,6 +205,10 @@ class _MapPageState extends State<MapPage> {
                               0.0, // Ajusta según sea necesario
                           codPedido: data['id'],
                           pedidoTipo: data['Tipo'],
+                          ubicacion: data.containsKey('ubicacion') &&
+                                  data['ubicacion'] is GeoPoint
+                              ? data['ubicacion'] as GeoPoint
+                              : null,
                         ),
                       ),
                     );

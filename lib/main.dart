@@ -305,6 +305,21 @@ Future<void> _validateAppVersion() async {
   String appVersion = await AuthService.getAppVersion();
   String deviceId = await AuthService.getDeviceId();
 
+  // 🔹 Verificar si ya se asignó un móvil en sessionBox
+  var box = await Hive.openBox('sessionBox');
+  var movil = box.get('movil');
+
+  bool tieneMovilValido = movil != null &&
+      movil.toString().isNotEmpty &&
+      int.tryParse(movil.toString()) != null &&
+      int.parse(movil.toString()) > 0;
+
+  if (tieneMovilValido) {
+    print(
+        "🔴 hay un móvil válido registrado, no se controla porque esta usando la app.");
+    return; // 🚫 Detenemos la validación si no hay móvil
+  }
+
   var response = await RioGasService.validarVersion(appVersion, deviceId);
 
   if (response != null) {

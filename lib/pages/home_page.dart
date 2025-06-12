@@ -26,6 +26,20 @@ import '../utils/constantes.dart';
 import 'package:android_intent_plus/android_intent.dart'; // Import AndroidIntent
 import 'package:android_intent_plus/flag.dart'; // Import Flag for AndroidIntent
 import 'package:flutter/services.dart'; // Import SystemNavigator
+import '../utils/stream_manager.dart'; // o el path correcto
+
+// Función utilitaria para abrir cajas Hive de forma segura
+dynamic openBoxSafe(String boxName) async {
+  try {
+    if (!Hive.isBoxOpen(boxName)) {
+      return await Hive.openBox(boxName);
+    }
+    return Hive.box(boxName);
+  } catch (e) {
+    print('❌ Error abriendo la caja $boxName: $e');
+    return null;
+  }
+}
 
 class HomePage extends StatefulWidget {
   @override
@@ -35,7 +49,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   final FirebaseService _firebaseService = FirebaseService();
-  late StreamSubscription<LatLng>
+  StreamSubscription<LatLng>?
       _locationSubscription; // 🔹 Guardamos la suscripción
   final LocationService _locationService =
       LocationService(); // 🔹 Definimos _locationService
@@ -43,10 +57,10 @@ class _HomePageState extends State<HomePage>
   int _unreadMessages = 0;
   int _newOrders = 0;
   bool _constantsLoaded = false;
-  late StreamSubscription _ordersSubscription;
+  StreamSubscription? _ordersSubscription;
   final Completer<void> _locationServiceCompleter = Completer<void>();
   String _movil = '0';
-  late StreamSubscription _connectivitySubscription;
+  StreamSubscription? _connectivitySubscription;
   final CounterService _counterService =
       CounterService(); // Initialize CounterService
   late AnimationController _blinkController;
@@ -57,7 +71,7 @@ class _HomePageState extends State<HomePage>
   bool showPopup = false; // Add a flag for showing the popup
   late Box pedidosBox;
   bool _isFirstLoad = true; // Flag to suppress notifications on first load
-  late StreamSubscription<bool> _gpsSubscription;
+  StreamSubscription<bool>? _gpsSubscription;
   final StreamController<bool> _gpsStreamController =
       StreamController<bool>.broadcast();
   bool _isDialogVisible =
@@ -108,6 +122,9 @@ class _HomePageState extends State<HomePage>
       // Handle connectivity changes
     });
 
+    connectivitySubscription =
+        _connectivitySubscription; // 🔹 Asignar a la global
+
     /*// Start the counter for periodic connectivity checks
     _counterService.startCounter(
       intervalSeconds: 10,
@@ -119,6 +136,8 @@ class _HomePageState extends State<HomePage>
       Duration(seconds: 90),
       (timer) => _checkInternetConnectivity(),
     );
+
+    connectivityCheckTimer = _connectivityCheckTimer; // 🔹 Asignar a la global
 
     // Obtener el valor de la constante 200
     //_initializeRetryInterval();
@@ -156,38 +175,34 @@ class _HomePageState extends State<HomePage>
   void dispose() {
     _blinkController.dispose(); // Dispose the animation controller
     _counterService.stopCounter(); // Stop the counter when disposing
-    _ordersSubscription.cancel();
+    _ordersSubscription?.cancel();
     _locationServiceCompleter.future.then((_) {
-      _locationSubscription.cancel(); // 🔹 Cancelamos el stream de ubicación
+      _locationSubscription?.cancel(); // 🔹 Cancelamos el stream de ubicación
       _locationService
           .stopLocationUpdates(); // 🔹 Detenemos el servicio correctamente
     });
     _connectivitySubscription
-        .cancel(); // 🔹 Cancelar la suscripción de conectividad
+        ?.cancel(); // 🔹 Cancelar la suscripción de conectividad
     _connectivityCheckTimer.cancel(); // Cancel the timer when disposing
     _connectionCheck.stopMonitoring();
     _connectionStatusNotifier.dispose(); // Dispose the notifier
-    _gpsSubscription.cancel();
+    _gpsSubscription?.cancel();
     _gpsStreamController.close();
     super.dispose();
   }
 
   Future<void> _initializeHomePage() async {
     await _loadSessionData();
-    await RioGasService.initializeService(); //
-    var box = await Hive.openBox('sessionBox');
+    await RioGasService.initializeService();
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     bool firstLoginDone = box.get('firstLoginDone', defaultValue: false);
-
     setState(() {
-      _isFirstLoad =
-          !firstLoginDone; // Set _isFirstLoad based on firstLoginDone
+      _isFirstLoad = !firstLoginDone;
     });
-
     _listenToMessages();
     _listenToPendingOrders();
     _printConstantDocumentNames();
-
-    // Set the flag to false after the initial load
     setState(() {
       _isFirstLoad = false;
     });
@@ -199,6 +214,9 @@ class _HomePageState extends State<HomePage>
       _locationSubscription =
           _locationService.locationStream.listen((location) {});
       _locationServiceCompleter.complete();
+
+      locationSubscription =
+          _locationSubscription; // 🔹 Guardamos la suscripción
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -209,8 +227,8 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _loadSessionData() async {
-    var box = await Hive.openBox('sessionBox');
-    // print("📦 Contenido de sessionBox:");
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     box.toMap().forEach((key, value) => null);
     setState(() {
       _movil = box.get('movil', defaultValue: '0');
@@ -220,14 +238,13 @@ class _HomePageState extends State<HomePage>
   Future<void> _printConstantDocumentNames() async {
     if (!_constantsLoaded) {
       try {
-        var box = await Hive.openBox('sessionBox');
+        var box = await openBoxSafe('sessionBox');
+        if (box == null) return;
         String escenario = box.get('escenario', defaultValue: '1000');
         QuerySnapshot querySnapshot = await FirebaseFirestore.instance
             .collection('Constantes-1000')
             .get();
-        // print("📂 Documentos en 'Constantes-$escenario':");
         querySnapshot.docs.forEach((doc) => null);
-
         setState(() {
           _constantsLoaded = true;
         });
@@ -238,8 +255,8 @@ class _HomePageState extends State<HomePage>
   }
 
   void _initPedidosBoxListener() async {
-    pedidosBox = await Hive.openBox('pedidosBox');
-
+    pedidosBox = await openBoxSafe('pedidosBox');
+    if (pedidosBox == null) return;
     pedidosBox.watch().listen((BoxEvent event) {
       if (event.key != null) {
         int pedidoId;
@@ -291,7 +308,8 @@ class _HomePageState extends State<HomePage>
   }
 
   void _initMensajesBoxListener() async {
-    var mensajesBox = await Hive.openBox('mensajesBox');
+    var mensajesBox = await openBoxSafe('mensajesBox');
+    if (mensajesBox == null) return;
     mensajesBox.watch().listen((event) {
       int unreadCount = mensajesBox.values
           .where((estado) => estado == 'Descargado')
@@ -308,10 +326,13 @@ class _HomePageState extends State<HomePage>
         .listen((bool isEnabled) {
       _gpsStreamController.add(isEnabled);
     });
+
+    gpsSubscription = _gpsSubscription; // 🔹 Asignar a la global
   }
 
   void _listenToMessages() async {
-    var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
+    var mensajesBox = await openBoxSafe('mensajesBox');
+    if (mensajesBox == null) return;
     _firebaseService.getMensajesStream().listen((messages) async {
       int newMessagesCount = 0;
 
@@ -334,11 +355,12 @@ class _HomePageState extends State<HomePage>
           int messageId = int.parse(numericIdMatch!.group(0)!);
 
           // Call descargaLecturaMensajes for each new message
-          var box = await Hive.openBox('sessionBox');
+          var box = await openBoxSafe('sessionBox');
+          if (box == null) return;
           String escenario = box.get('escenario', defaultValue: '1000');
-          String movil = box.get('movil');
-          String username = box.get('username');
-          String deviceId = box.get('deviceId');
+          String movil = box.get('movil') ?? '';
+          String username = box.get('username') ?? '';
+          String deviceId = box.get('deviceId') ?? '';
           final locationService = LocationService();
 
           String latitude = '0.0';
@@ -362,7 +384,8 @@ class _HomePageState extends State<HomePage>
           }
 
           // Retrieve speed and distance from Hive
-          var locationBox = await Hive.openBox('locationBox');
+          var locationBox = await openBoxSafe('locationBox');
+          if (locationBox == null) return;
           double velocidad = double.parse(locationBox
               .get('lastSpeed', defaultValue: 0.0)
               .toStringAsFixed(2));
@@ -411,11 +434,9 @@ class _HomePageState extends State<HomePage>
   }
 
   void _listenToPendingOrders() {
-    _ordersSubscription = _firebaseService.getPedidosStream().listen((
-      orders,
-    ) async {
+    _ordersSubscription =
+        _firebaseService.getPedidosStream().listen((orders) async {
       setState(() {
-        //_newOrders = orders.length;
         _newOrders = orders.where((order) {
           var orderData = order.data() as Map<String, dynamic>?;
           int pedidoId = orderData?['id'] ?? -1;
@@ -423,19 +444,16 @@ class _HomePageState extends State<HomePage>
           return pedidoEstado != 'Procesando';
         }).length;
       });
-
       for (var order in orders) {
-        var pedido = order.data() as Map<String, dynamic>; // Extract data
-        int pedidoId = pedido['id'] ?? -1; // Extract ID from the data map
-
-        var pedidosBox = await Hive.openBox('pedidosBox'); // Open pedidosBox
-
+        var pedido = order.data() as Map<String, dynamic>;
+        int pedidoId = pedido['id'] ?? -1;
+        var pedidosBox = await openBoxSafe('pedidosBox');
+        if (pedidosBox == null) return;
         if (!pedidosBox.containsKey(pedidoId.toString())) {
           await pedidosBox.put(
             pedidoId.toString(),
             'Descargado',
-          ); // Mark as "Descargado"
-
+          );
           // Suppress notifications on first load
           /*_showNotification(
             'Nueva Visita',
@@ -447,6 +465,9 @@ class _HomePageState extends State<HomePage>
         }
       }
     });
+
+    // 🔗 Asignar también a la global
+    ordersSubscription = _ordersSubscription;
   }
 
   Future<void> _callDescargaLecturaPedidos(
@@ -479,7 +500,8 @@ class _HomePageState extends State<HomePage>
     String latitud = locationData?['latitude'].toString() ?? '';
     String longitud = locationData?['longitude'].toString() ?? '';
 
-    var box = await Hive.openBox('sessionBox');
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) return;
     int escenarioId = int.tryParse(box.get('escenario').toString()) ?? 0;
     String movil = box.get('movil');
     String username = box.get('username');
@@ -487,7 +509,8 @@ class _HomePageState extends State<HomePage>
     String inAux1 = movil;
 
     // Retrieve speed and distance from Hive
-    var locationBox = await Hive.openBox('locationBox');
+    var locationBox = await openBoxSafe('locationBox');
+    if (locationBox == null) return;
     double velocidad = double.parse(
         locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2));
     double distanciaRecorrida =
@@ -577,6 +600,30 @@ class _HomePageState extends State<HomePage>
     });
   }
 
+  Future<void> forzarDeslogueoYRedirigir(
+    BuildContext context,
+    String nomUsuario,
+    String movil,
+  ) async {
+    final mensaje = (nomUsuario == 'Desconocido' || movil == 'Desconocido')
+        ? 'Se ha terminado su tiempo de sesión, por favor ingrese nuevamente.'
+        : 'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.';
+
+    // Redirigir al LoginPage, pasándole que debe ejecutar cierre forzado
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LoginPage(
+            forcedLogout: true,
+            forcedLogoutMessage: mensaje,
+            movil: movil,
+          ),
+        ),
+      );
+    });
+  }
+
   Widget _showForcedLogoutDialog(
     BuildContext context,
     String nomUsuario,
@@ -609,10 +656,10 @@ class _HomePageState extends State<HomePage>
               ).then((box) => box.clear()); // Clear mensajesBox
 
               // Cancel all active streams and listeners
-              _ordersSubscription.cancel();
-              _locationSubscription.cancel();
-              _gpsSubscription.cancel();
-              _connectivitySubscription.cancel();
+              _ordersSubscription?.cancel();
+              _locationSubscription?.cancel();
+              _gpsSubscription?.cancel();
+              _connectivitySubscription?.cancel();
               _connectivityCheckTimer.cancel();
 
               box.deleteFromDisk();
@@ -712,7 +759,8 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _markMessageAsRead(String messageId) async {
-    var mensajesBox = await Hive.openBox('mensajesBox');
+    var mensajesBox = await openBoxSafe('mensajesBox');
+    if (mensajesBox == null) return;
     await mensajesBox.put(messageId, 'Leido'); // Mark as read
     // print('📨 Mensaje $messageId marcado como "Leido" en Hive.');
   }
@@ -774,7 +822,7 @@ class _HomePageState extends State<HomePage>
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Riogas - MoveIT',
+          '',
           style: TextStyle(fontSize: 14.0), // Reduced font size
         ),
         toolbarHeight: 40.0,
@@ -973,10 +1021,10 @@ class _HomePageState extends State<HomePage>
                         var box = Hive.box('sessionBox');
                         if (data != null &&
                             data['idTerminal'] != box.get('deviceId')) {
-                          return _showForcedLogoutDialog(
+                          forzarDeslogueoYRedirigir(
                             context,
-                            data?['nomUsuario'] ?? 'Desconocido',
-                            data?['movil'] ?? 'Desconocido',
+                            data['nomUsuario'] ?? 'Desconocido',
+                            data['movil'] ?? 'Desconocido',
                           );
                         }
                       }
@@ -987,7 +1035,7 @@ class _HomePageState extends State<HomePage>
                         bool logoutControlled =
                             box.get('logoutControlled', defaultValue: false);
                         if (!logoutControlled) {
-                          return _showForcedLogoutDialog(
+                          forzarDeslogueoYRedirigir(
                             context,
                             'Desconocido',
                             'Desconocido',
@@ -1167,7 +1215,8 @@ class _HomePageState extends State<HomePage>
 
                       await _firebaseService.updateMovilEstado(newEstadoNro);
                       // Call the actualizarMoviles service
-                      var locationBox = await Hive.openBox('locationBox');
+                      var locationBox = await openBoxSafe('locationBox');
+                      if (locationBox == null) return;
                       double velocidad = double.parse(locationBox
                           .get('lastSpeed', defaultValue: 0.0)
                           .toStringAsFixed(2));
@@ -1239,8 +1288,8 @@ class _HomePageState extends State<HomePage>
   }
 
   void _showConnectivityDialog(BuildContext context) async {
-    var box = await Hive.openBox('conexionBox');
-    // print("📦 Contenido de conexionBox:");
+    var box = await openBoxSafe('conexionBox');
+    if (box == null) return;
     box.toMap().forEach((key, value) => null);
     bool conexionFirestore = box.get('conexionFirestore', defaultValue: true);
     bool conexionRioGas = box.get('conexionRioGas', defaultValue: false);

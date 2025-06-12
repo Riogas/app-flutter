@@ -16,6 +16,9 @@ import 'package:sms_autofill/sms_autofill.dart';
 import 'dart:math';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
+import 'package:open_file/open_file.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -96,6 +99,20 @@ class _SettingsPageState extends State<SettingsPage> {
 
       // Establecer bandera para logout controlado
       sessionBox.put('logoutControlled', true);
+
+      final movil = sessionBox.get('movil') ?? "0";
+      final escenario = sessionBox.get('escenario') ?? "0";
+      final usuario = sessionBox.get('username') ?? "string";
+      String? idTerminal = sessionBox.get('deviceId');
+
+      final platform = MethodChannel("background_service");
+      await platform.invokeMethod("stopLocationService", {
+        "movil": movil,
+        "escenario": escenario,
+        "usuario": usuario,
+        "deviceId": "$idTerminal",
+      });
+      print("🛑 Servicio de ubicación detenido y notificación eliminada.");
 
       // Llamar al servicio RegistrarCierre antes de cerrar sesión
       await RioGasService.registrarCierre(
@@ -1023,39 +1040,61 @@ class _SettingsPageState extends State<SettingsPage> {
               Icons.description,
               _generateReport,
             ),
+            // El botón de manual PDF ahora siempre se muestra, y la URL se obtiene al presionar
+            _buildInfoRowWithButton(
+              Icons.picture_as_pdf,
+              'Manual',
+              '',
+              Icons.download,
+              () async {
+                String? manualUrl = await getConstantValue('250');
+                if (manualUrl == null || manualUrl.isEmpty) {
+                  _showMessage('No se encontró la URL del manual.');
+                  return;
+                }
+                try {
+                  if (manualUrl.startsWith('http')) {
+                    final uri = Uri.parse(manualUrl);
+                    final response = await HttpClient()
+                        .getUrl(uri)
+                        .then((req) => req.close());
+                    if (response.statusCode == 200) {
+                      final bytes =
+                          await consolidateHttpClientResponseBytes(response);
+                      final dir = await getTemporaryDirectory();
+                      final file = File('${dir.path}/manual.pdf');
+                      await file.writeAsBytes(bytes);
+                      final result = await OpenFile.open(file.path);
+                      if (result.type != ResultType.done) {
+                        _showMessage(
+                            'No se pudo abrir el manual PDF.\nError: ' +
+                                result.message);
+                      }
+                    } else {
+                      _showMessage('No se pudo descargar el manual PDF.');
+                    }
+                  } else {
+                    // Descargar desde asset local
+                    final bytes =
+                        await DefaultAssetBundle.of(context).load(manualUrl);
+                    final dir = await getTemporaryDirectory();
+                    final file = File('${dir.path}/manual.pdf');
+                    await file.writeAsBytes(bytes.buffer.asUint8List());
+                    final result = await OpenFile.open(file.path);
+                    if (result.type != ResultType.done) {
+                      _showMessage('No se pudo abrir el manual PDF.\nError: ' +
+                          result.message);
+                    }
+                  }
+                } catch (e) {
+                  _showMessage('No se pudo abrir el manual PDF.\nError: $e');
+                }
+              },
+            ),
             _buildInfoRowWithButton(
               Icons.verified,
               'Versión de la App',
               appVersion,
-            ),
-            FutureBuilder<String?>(
-              future: getConstantValue('240'), // Fetch constant value
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return SizedBox.shrink(); // Show nothing while loading
-                }
-                if (snapshot.hasData &&
-                    snapshot.data != null &&
-                    snapshot.data!.isNotEmpty) {
-                  return _buildInfoRowWithButton(
-                    Icons.menu_book,
-                    'Manual',
-                    '',
-                    Icons.open_in_new,
-                    () async {
-                      final Uri manualUri = Uri.parse(snapshot.data!);
-                      if (await canLaunchUrl(manualUri)) {
-                        await launchUrl(manualUri,
-                            mode: LaunchMode.externalApplication);
-                      } else {
-                        _showMessage('No se pudo abrir el enlace del manual.');
-                      }
-                    },
-                  );
-                }
-                return SizedBox
-                    .shrink(); // Show nothing if constant is null or empty
-              },
             ),
             FutureBuilder<bool>(
               future: _shouldShowDistance(),

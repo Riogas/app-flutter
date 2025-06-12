@@ -12,7 +12,8 @@ import '../services/riogas_service.dart'; // Import for RioGasService
 class ConnectionCheck {
   final FirebaseService _firebaseService = FirebaseService();
   final Duration checkInterval = Duration(seconds: 10);
-  late Timer _timer;
+  Timer? _timer;
+
   Timer? _rioGasTimer; // Timer for counting seconds
   int _counter = 0; // Counter for RioGas connectivity
   int _maxCounter = 0; // Max counter value from constant
@@ -33,7 +34,7 @@ class ConnectionCheck {
   }
 
   void stopMonitoring() {
-    _timer.cancel();
+    _timer?.cancel(); // ✅ Solo cancela si fue inicializado
     detenerEscucha();
     _connectionStatusController.close();
   }

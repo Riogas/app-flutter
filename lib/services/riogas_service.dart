@@ -866,8 +866,20 @@ class RioGasService {
     // );
     // print('AgenciaId: $agenciaId, EscenarioId: $escenarioId');
     // print('MovilId: $movilId');
+
+    final DateTime fechaDesdeDate = DateTime(year, month, day);
+    final DateTime fechaHastaDate = fechaDesdeDate.add(Duration(days: 1));
+
+    final String fechaDesde =
+        '${fechaDesdeDate.year}${fechaDesdeDate.month.toString().padLeft(2, '0')}${fechaDesdeDate.day.toString().padLeft(2, '0')}000000';
+    final String fechaHasta =
+        '${fechaHastaDate.year}${fechaHastaDate.month.toString().padLeft(2, '0')}${fechaHastaDate.day.toString().padLeft(2, '0')}000000';
+
     final url =
-        'https://www.riogas.uy/ica_geos_/com.icageos.urlhttprpt2?Year=$year&Month=$month&Day=$day&Hour=$hour&Minutes=$minutes&Seconds=$seconds&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId';
+        'https://www.riogas.uy/ica_geos_/com.icageos.urlhttprpt2sgm?FechaDesde=$fechaDesde&FechaHasta=$fechaHasta&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId&Tipo=RESUMIDO';
+    //'https://www.riogas.uy/ica_geos_/com.icageos.urlhttprpt2?Year=$year&Month=$month&Day=$day&Hour=$hour&Minutes=$minutes&Seconds=$seconds&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId';
+
+    print('🌐 Downloading PDF from: $url');
 
     try {
       // print('🌐 Downloading PDF from: $url');
