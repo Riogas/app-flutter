@@ -893,7 +893,7 @@ class _HomePageState extends State<HomePage>
                             int.tryParse(element['SubEstadoCod'].toString()) ==
                             estadoNro,
                         orElse: () => {
-                          'DescCombo': 'Desconocido',
+                          'SubEstadoDesc': 'Desconocido',
                           'CodColor': '000000',
                         },
                       );
@@ -902,7 +902,7 @@ class _HomePageState extends State<HomePage>
                       //   'Matched SubEstado: $subEstado',
                       // ); // Log matched subEstado
 
-                      String estadoText = subEstado['DescCombo'];
+                      String estadoText = subEstado['SubEstadoDesc'];
                       String codColor = subEstado['CodColor'];
                       List<String> rgb = codColor.split(',');
                       String hexColor = rgb.length == 3
@@ -918,44 +918,18 @@ class _HomePageState extends State<HomePage>
 
                       return GestureDetector(
                         onTap: () {
-                          String currentEstadoDesc = subEstados.firstWhere(
-                            (element) =>
-                                int.tryParse(
-                                    element['SubEstadoCod'].toString()) ==
-                                estadoNro,
-                            orElse: () => {'TipoEstado': 'NoActivo'},
-                          )['TipoEstado'];
-                          print(
-                            'Estado actual: $currentEstadoDesc',
-                          ); // Log current estado description
-                          if (currentEstadoDesc == "NoActivo") {
-                            _showEstadoDropdown(
-                              context,
-                              _movil,
-                              estadoNro,
-                              subEstados,
-                            );
-                          } else {
-                            SnackBar snackBar = SnackBar(
-                              content: Text(
-                                'No hay acciones disponibles para el estado actual.',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                ),
-                              ),
-                            );
-
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(snackBar);
-                          }
+                          _handleEstadoClick(
+                            context,
+                            _movil,
+                            movilData,
+                            subEstados,
+                          );
                         },
                         child: Row(
                           children: [
                             Container(
                               padding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 color: estadoColor,
                                 borderRadius: BorderRadius.circular(12),
@@ -1130,22 +1104,15 @@ class _HomePageState extends State<HomePage>
     int currentEstado,
     List<Map<String, dynamic>> subEstados,
   ) {
-    String?
-        selectedEstadoDesc; // Variable to store the selected state's DescCombo
+    String? selectedEstadoDesc;
+    String observacion = '';
+    bool permiteObservacion = false;
 
-    // print("🔍 Debugging Estado Dropdown:");
-    // print("movilId: $movilId");
-    // print("currentEstado: $currentEstado");
-    // print("subEstados: $subEstados");
-
-    // Get the current state's DescCombo
     String currentEstadoDesc = subEstados.firstWhere(
       (element) =>
           int.tryParse(element['SubEstadoCod'].toString()) == currentEstado,
       orElse: () => {'TipoEstado': 'Desconocido'},
     )['TipoEstado'];
-
-    // print("currentEstadoDesc: $currentEstadoDesc");
 
     showDialog(
       context: context,
@@ -1154,39 +1121,75 @@ class _HomePageState extends State<HomePage>
           builder: (context, setState) {
             return AlertDialog(
               title: Text('Cambiar Estado'),
-              content: DropdownButton<String>(
-                value: selectedEstadoDesc,
-                hint: Text('Selecciona un estado'),
-                items: subEstados
-                    .where(
-                  (subEstado) =>
-                      subEstado['VisibleEnCombo'] == true &&
-                      subEstado['TipoEstado'] != currentEstadoDesc,
-                )
-                    .map((subEstado) {
-                  // print(
-                  //   "🔍 SubEstado disponible: ${subEstado['DescCombo']}",
-                  // );
-                  return DropdownMenuItem<String>(
-                    value: subEstado['DescCombo'] as String,
-                    child: Text(subEstado['DescCombo'] as String),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    selectedEstadoDesc = newValue; // Update the selected state
-                    // print("🔄 Estado seleccionado: $selectedEstadoDesc");
-                  });
-                },
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButton<String>(
+                    value: selectedEstadoDesc,
+                    hint: Text('Selecciona un estado'),
+                    isExpanded: true,
+                    items: subEstados
+                        .where(
+                      (subEstado) =>
+                          subEstado['VisibleEnCombo'] == true &&
+                          subEstado['TipoEstado'] != currentEstadoDesc,
+                    )
+                        .map((subEstado) {
+                      return DropdownMenuItem<String>(
+                        value: subEstado['SubEstadoDesc'] as String,
+                        child: Text(subEstado['SubEstadoDesc'] as String),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        selectedEstadoDesc = newValue;
+
+                        final subEstado = subEstados.firstWhere(
+                          (s) => s['SubEstadoDesc'] == newValue,
+                          orElse: () => {},
+                        );
+                        permiteObservacion = subEstado['PermiteObs'] == true;
+                      });
+                    },
+                  ),
+                  if (permiteObservacion)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16.0),
+                      child: TextField(
+                        onChanged: (value) {
+                          observacion = value;
+                        },
+                        maxLines: 3,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(),
+                          labelText: 'Observación',
+                          hintText:
+                              'Ingrese una observación (mín. 5 caracteres)',
+                        ),
+                      ),
+                    ),
+                ],
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(), // Close dialog
+                  onPressed: () => Navigator.of(context).pop(),
                   child: Text('Cancelar'),
                 ),
                 TextButton(
                   onPressed: () async {
                     if (selectedEstadoDesc != null) {
+                      if (permiteObservacion && observacion.trim().length < 5) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'La observación debe tener al menos 5 caracteres.',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
                       // Mostrar loading
                       showDialog(
                         context: context,
@@ -1202,21 +1205,21 @@ class _HomePageState extends State<HomePage>
                         ),
                       );
 
-                      var selectedSubEstado = subEstados.firstWhere(
-                        (subEstado) =>
-                            subEstado['DescCombo'] == selectedEstadoDesc,
+                      final selectedSubEstado = subEstados.firstWhere(
+                        (s) => s['SubEstadoDesc'] == selectedEstadoDesc,
                         orElse: () => {'SubEstadoCod': currentEstado},
                       );
 
-                      int newEstadoNro = int.tryParse(
+                      final newEstadoNro = int.tryParse(
                             selectedSubEstado['SubEstadoCod'].toString(),
                           ) ??
                           currentEstado;
 
                       await _firebaseService.updateMovilEstado(newEstadoNro);
-                      // Call the actualizarMoviles service
+
                       var locationBox = await openBoxSafe('locationBox');
                       if (locationBox == null) return;
+
                       double velocidad = double.parse(locationBox
                           .get('lastSpeed', defaultValue: 0.0)
                           .toStringAsFixed(2));
@@ -1228,7 +1231,6 @@ class _HomePageState extends State<HomePage>
                       String utmX = '0.0';
                       String utmY = '0.0';
 
-                      // Invoca el método para obtener la ubicación
                       final locationData =
                           await _locationService.getCurrentLocation();
 
@@ -1237,44 +1239,31 @@ class _HomePageState extends State<HomePage>
                         longitude = locationData['longitude'].toString();
                         utmX = locationData['utmX'].toString();
                         utmY = locationData['utmY'].toString();
-
-                        print('Latitud: $latitude, Longitud: $longitude');
-                        print('UTMX: $utmX, UTMY: $utmY');
-                      } else {
-                        print('No se pudo obtener la ubicación.');
                       }
 
-                      var result = await RioGasService.actualizarMoviles(
-                          int.parse(
-                            await Hive.box(
-                              'sessionBox',
-                            ).get('escenario', defaultValue: '0'),
-                          ),
-                          int.parse(movilId),
-                          await Hive.box(
-                            'sessionBox',
-                          ).get('username', defaultValue: ''),
-                          '', // NroSesion (if available, replace with actual value)
-                          await Hive.box(
-                            'sessionBox',
-                          ).get('deviceId', defaultValue: ''),
-                          newEstadoNro.toString(),
-                          latitude,
-                          longitude,
-                          utmX,
-                          utmY,
-                          DateTime.now().toUtc().toIso8601String(),
-                          '', // inAux1
-                          '', // inAux2
-                          velocidad, // Pass speed from Hive
-                          distanciaRecorrida // Pass distance from Hive
-                          );
+                      final result = await RioGasService.actualizarMoviles(
+                        int.parse(await Hive.box('sessionBox')
+                            .get('escenario', defaultValue: '0')),
+                        int.parse(movilId),
+                        await Hive.box('sessionBox')
+                            .get('username', defaultValue: ''),
+                        '',
+                        await Hive.box('sessionBox')
+                            .get('deviceId', defaultValue: ''),
+                        newEstadoNro.toString(),
+                        latitude,
+                        longitude,
+                        utmX,
+                        utmY,
+                        DateTime.now().toUtc().toIso8601String(),
+                        '', // inAux1
+                        observacion, // ✅ Se pasa aquí la observación
+                        velocidad,
+                        distanciaRecorrida,
+                      );
 
-                      // Cerrar el loading y el cuadro de diálogo principal
-                      Navigator.of(context, rootNavigator: true)
-                          .pop(); // Cierra el loading
-                      Navigator.of(context)
-                          .pop(); // Cierra el cuadro de diálogo principal
+                      Navigator.of(context, rootNavigator: true).pop();
+                      Navigator.of(context).pop();
                     }
                   },
                   child: Text('Confirmar'),
@@ -1285,6 +1274,88 @@ class _HomePageState extends State<HomePage>
         );
       },
     );
+  }
+
+  Future<void> _handleEstadoClick(
+    BuildContext context,
+    String movilId,
+    Map<String, dynamic> movilData,
+    List<Map<String, dynamic>> subEstados,
+  ) async {
+    final puedeActivar = movilData['SePuedeActivarDesdeLaApp'] ?? 'N';
+    final puedeDesactivar = movilData['SePuedeDesactivarDesdeLaApp'] ?? 'N';
+    final permiteBaja = movilData['PermiteBajaMomentanea'] ?? 'N';
+    final estadoActual = movilData['EstadoNro'];
+
+    print('🔍 Manejo de estado del móvil:');
+    print('Móvil ID: $movilId');
+    print('Estado actual: $estadoActual');
+
+    print('Subestados: $subEstados');
+
+    // Obtener el TipoEstado actual del móvil
+    final subEstadoActual = subEstados.firstWhere(
+      (s) => s['SubEstadoCod'].toString() == estadoActual.toString(),
+      orElse: () => <String, dynamic>{},
+    );
+    final tipoEstadoActual = subEstadoActual['TipoEstado'];
+
+    print('TipoEstado actual: $tipoEstadoActual');
+
+    // ✅ Verificar que tipoEstadoActual no sea null o vacío
+    if (tipoEstadoActual == null ||
+        tipoEstadoActual.toString().trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No hay acciones disponibles para el estado actual.',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Filtrar subestados válidos
+    final subEstadosValidos = subEstados.where((subEstado) {
+      final visible = subEstado['VisibleEnCombo'] ?? true;
+      if (!visible) return false;
+
+      final tipoEstado = subEstado['TipoEstado'];
+      if (tipoEstado == tipoEstadoActual) return false;
+
+      final requiereActivacion = subEstado['RequierePermActivacion'] ?? 'N';
+      final requiereDesactivacion =
+          subEstado['RequierePermDesactivacion'] ?? 'N';
+      final requiereBaja = subEstado['RequierePermBajaMomentanea'] ?? 'N';
+
+      if (requiereActivacion == 'S' && puedeActivar == 'N') return false;
+      if (requiereDesactivacion == 'S' && puedeDesactivar == 'N') return false;
+      if (requiereBaja == 'S' && permiteBaja == 'N') return false;
+
+      return true;
+    }).toList();
+
+    print('Estado actual: $tipoEstadoActual');
+    print('Subestados válidos: $subEstadosValidos');
+
+    if (subEstadosValidos.isNotEmpty) {
+      _showEstadoDropdown(
+        context,
+        movilId,
+        estadoActual,
+        subEstadosValidos,
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No hay acciones disponibles para el estado actual.',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
   }
 
   void _showConnectivityDialog(BuildContext context) async {
