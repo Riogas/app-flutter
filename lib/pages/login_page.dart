@@ -14,6 +14,7 @@ import 'dart:io';
 import 'dart:math'; // Add this import for random number generation
 import 'package:sms_autofill/sms_autofill.dart'; // Import SmsAutoFill package
 import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth package
+import 'package:firebase_messaging/firebase_messaging.dart'; // <-- Add this import
 import '../utils/config.dart'; // Import Config class
 import '../utils/constantes.dart'; // Import Constants class
 import 'package:local_auth/local_auth.dart'; // Import local_auth package
@@ -336,6 +337,26 @@ class _LoginPageState extends State<LoginPage> {
     });
     try {
       print("🔘 Se presionó el botón de login");
+
+      // 🔔 SOLICITAR PERMISO DE NOTIFICACIONES
+      NotificationSettings settings =
+          await FirebaseMessaging.instance.requestPermission();
+
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        print("❌ Permiso de notificaciones denegado.");
+      } else if (settings.authorizationStatus ==
+          AuthorizationStatus.notDetermined) {
+        print("⚠️ Permiso de notificaciones no determinado.");
+      } else {
+        print("✅ Permiso de notificaciones otorgado.");
+
+        try {
+          String? token = await FirebaseMessaging.instance.getToken();
+          print('📲 Token FCM: $token');
+        } catch (e) {
+          print('❌ Error al obtener token FCM: $e');
+        }
+      }
 
       var response = await RioGasService.validarUsuario(
         _usernameController.text,
@@ -1423,11 +1444,8 @@ class _LoginPageState extends State<LoginPage> {
       return false;
     }
 
-    String hoy = DateTime.now()
-        .toUtc()
-        .toIso8601String()
-        .split('T')[0]
-        .replaceAll('-', '');
+    String hoy =
+        DateTime.now().toIso8601String().split('T')[0].replaceAll('-', '');
     String pathMovil =
         'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
     String pathUsuario =
@@ -1488,29 +1506,53 @@ class _LoginPageState extends State<LoginPage> {
       }
     }
 
+    const logTag = '[VerificarSesionActiva]';
+
     if (activeDocSnapshotMovil.exists) {
       var data = activeDocSnapshotMovil.data() as Map<String, dynamic>;
+      print('$logTag 🔍 Se encontró sesión activa en el móvil $selectedMovil');
+      print(
+          '$logTag 🔎 Datos actuales: idUsuario=${data['idUsuario']}, idTerminal=${data['idTerminal']}');
+
       if (data['idUsuario'] != idUsuario || data['idTerminal'] != idTerminal) {
+        print(
+            '$logTag ⚠️ El móvil $selectedMovil está ocupado por otro usuario (${data['nomUsuario']}) o terminal (${data['idTerminal']})');
+
         _wasActiveSessionForAnotherUser = true;
+
         bool shouldProceed = await _showActiveSessionDialog(
           selectedMovil!,
           data['nomUsuario'],
           'Usted se está intentando conectar al móvil $selectedMovil, en el cual está logueado el usuario ${data['nomUsuario']}. ¿Desea continuar?',
         );
+
+        print('$logTag 🤔 Usuario eligió continuar: $shouldProceed');
         return shouldProceed;
+      } else {
+        print(
+            '$logTag ✅ El usuario actual ya está logueado en este terminal, se permite continuar.');
       }
     }
 
     if (activeDocSnapshotUsuario.exists) {
       var data = activeDocSnapshotUsuario.data() as Map<String, dynamic>;
+      print(
+          '$logTag 🔍 Se detectó sesión activa previa del usuario ${data['nomUsuario']} en el móvil ${data['movil']}');
+
       _wasActiveSessionForAnotherUser = true;
+
       bool shouldProceed = await _showActiveSessionDialog(
         selectedMovil!,
         data['nomUsuario'],
         'Su usuario ya está logueado en el movil ${data['movil']}. ¿Desea continuar?',
       );
+
+      print('$logTag 🤔 Usuario eligió continuar: $shouldProceed');
       return shouldProceed;
     }
+
+    print(
+        '$logTag ✅ No hay conflictos de sesión. Se permite iniciar sesión normalmente.');
 
     return true;
   }

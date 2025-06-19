@@ -54,6 +54,38 @@ class SessionService {
     String mesActual = fechaActual.substring(0, 6); // yyyymm
     String diaActual = fechaActual.substring(6, 8); // dd
 
+    const logTag = '[SaveSession]';
+
+    print('$logTag Guardando sesión para el usuario: $idUsuario');
+    print('$logTag Escenario ID: $escenarioId');
+    print('$logTag Fecha actual: $fechaActual');
+    print('$logTag Hora actual: $horaActual');
+    print('$logTag ID de sesión: $idSesion');
+    print('$logTag ID de terminal: $idTerminal');
+    print('$logTag Información del dispositivo: $infoDispositivo');
+    print('$logTag Nombre de usuario: $nombreUsuario');
+    print('$logTag Móvil: $movil');
+    print('$logTag Versión de la app: $versionApp');
+    print('$logTag Versión de Android: $versionAndroid');
+    print('$logTag Nivel de batería: $nivelBateria');
+    print('$logTag GPS activado: $gpsActivado');
+    print('$logTag Primera ubicación: $primeraUbicacion');
+    print('$logTag Tipo de cierre de sesión: $tipoDeCierreDeSesion');
+    print('$logTag Distancia recorrida (mts): $distanciaRecorridaMts');
+    print('$logTag Estado de la sesión: $estado');
+    print('$logTag Fecha y hora de expiración: $fchHoraExpira');
+    print('$logTag Fecha y hora de inicio: $fchHoraInicio');
+    print('$logTag Fecha y hora de última conexión: $fchUltConexionDisp');
+    print('$logTag Tiempo de logueo (mins): $tiempoLogueoMins');
+    print('$logTag ID de usuario: $idUsuario');
+    print('$logTag Ubicación inicial: $primeraUbicacion');
+    print(
+        '$logTag Ubicación final: $primeraUbicacion'); // Asumiendo que es la misma
+    print('$logTag Hora de creación: $now');
+    print('$logTag Mes actual: $mesActual');
+    print('$logTag Día actual: $diaActual');
+    print('$logTag Guardando sesión en Firestore...');
+
     // 🔹 Referencias en Firestore
     DocumentReference fechaDocRef =
         _firestore.collection('Sesiones-$escenarioId').doc(fechaActual);
@@ -119,6 +151,27 @@ class SessionService {
         activeData['estado'] = 'Cerrada';
         activeData['tipoDeCierreDeSesion'] = tipoDeCierreDeSesion;
 
+        print(
+          '$logTag Actualizando datos de la sesión activa: tiempo=$tiempoLogueoMins mins, distancia=$distanciaRecorridaMts mts, tipo="$tipoDeCierreDeSesion"',
+        );
+
+        // 🔹 Llamar al método para cerrar la sesión activa
+        // y hacer una copia del documento "activo" con el nombre basado en la hora actual
+        // Nota: Asegúrate de que este método esté implementado correctamente
+        print(
+          '$logTag Cerrando sesión activa para el usuario $idUsuario, antes de BuscarSesion en escenario $escenarioId, fecha $fechaActual...',
+        );
+        // a
+
+        buscarSesionActivaPorUsuarioYCerrarla(
+          escenarioId: escenarioId,
+          fechaActual: fechaActual,
+          idUsuario: idUsuario,
+          tiempoLogueoMins: tiempoLogueoMins,
+          distanciaRecorridaMts: distanciaRecorridaMts,
+          tipoDeCierreDeSesion: tipoDeCierreDeSesion,
+        );
+
         // 🔹 Hacer una copia del documento "activo" con el nombre basado en la hora actual
         DocumentReference backupDocRef = movilCollectionRef.doc(horaActual);
         await backupDocRef.set(activeData);
@@ -169,6 +222,84 @@ class SessionService {
     } catch (e) {
       print('❌ Error al guardar la sesión en Firestore: $e');
     }
+  }
+
+  Future<void> buscarSesionActivaPorUsuarioYCerrarla({
+    required String escenarioId,
+    required String fechaActual,
+    required String idUsuario,
+    required int tiempoLogueoMins,
+    required int distanciaRecorridaMts,
+    required String tipoDeCierreDeSesion,
+  }) async {
+    const logTag = '[CerrarSesionActiva]';
+    final firestore = FirebaseFirestore.instance;
+
+    print(
+        '$logTag 🟡 Iniciando cierre de sesión para usuario $idUsuario en escenario $escenarioId, fecha $fechaActual...');
+
+    // 🔹 Acceder al documento Usuario-{idUsuario}/activo
+    final usuarioNivelDocRef = firestore
+        .collection('Sesiones-$escenarioId')
+        .doc(fechaActual)
+        .collection('Usuario-$idUsuario')
+        .doc('activo');
+
+    final docSnapshot = await usuarioNivelDocRef.get();
+
+    if (!docSnapshot.exists) {
+      print('$logTag ⚠️ No se encontró documento activo en Usuario-$idUsuario');
+      return;
+    }
+
+    final usuarioData = docSnapshot.data()!;
+    final movilActivo = usuarioData['movil'];
+    print('$logTag 🔍 Móvil activo detectado: Movil-$movilActivo');
+
+    // 🔹 Acceder directamente al documento Movil-{movil}/activo
+    final movilCollectionRef = firestore
+        .collection('Sesiones-$escenarioId')
+        .doc(fechaActual)
+        .collection('Movil-$movilActivo');
+
+    final activoDocRef = movilCollectionRef.doc('activo');
+    final activoDataSnapshot = await activoDocRef.get();
+
+    if (!activoDataSnapshot.exists) {
+      print('$logTag ❌ No se encontró documento activo en Movil-$movilActivo');
+      return;
+    }
+
+    final activeData = activoDataSnapshot.data()!;
+    print('$logTag ✅ Documento activo encontrado en Movil-$movilActivo');
+
+    // 🔹 Obtener hora actual en formato HHMMSS
+    final now = DateTime.now();
+    final horaActual =
+        '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+
+    print('$logTag ⏰ Hora actual registrada: $horaActual');
+
+    // 🔹 Actualizar campos de cierre
+    activeData['tiempoLogueoMins'] = tiempoLogueoMins;
+    activeData['distanciaRecorridaMts'] = distanciaRecorridaMts;
+    activeData['estado'] = 'Cerrada';
+    activeData['tipoDeCierreDeSesion'] = tipoDeCierreDeSesion;
+
+    print(
+        '$logTag ✍️ Actualizando datos de cierre: tiempo=$tiempoLogueoMins mins, distancia=$distanciaRecorridaMts mts, tipo="$tipoDeCierreDeSesion"');
+
+    // 🔹 Copiar el documento activo con nombre nuevo (horaActual)
+    final backupDocRef = movilCollectionRef.doc(horaActual);
+    await backupDocRef.set(activeData);
+    print('$logTag 📄 Documento "activo" copiado como "$horaActual".');
+
+    // 🔹 Eliminar el documento "activo"
+    await activoDocRef.delete();
+    print('$logTag 🗑️ Documento "activo" eliminado correctamente.');
+
+    print(
+        '$logTag ✅ Cierre de sesión completado exitosamente para usuario $idUsuario.');
   }
 
   Future<bool> isSessionActiveForToday() async {

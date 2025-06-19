@@ -1159,6 +1159,8 @@ class _HomePageState extends State<HomePage>
                         onChanged: (value) {
                           observacion = value;
                         },
+                        //limitar cantidad de caracteres a 100
+                        maxLength: 100,
                         maxLines: 3,
                         decoration: InputDecoration(
                           border: OutlineInputBorder(),

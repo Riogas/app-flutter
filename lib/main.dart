@@ -132,7 +132,7 @@ void main() async {
   await _initializeFirebaseMessaging();
 
   // 🔹 Verificar configuraciones de batería y actividad en segundo plano
-  await _checkBatteryAndBackgroundSettings();
+  //await _checkBatteryAndBackgroundSettings();
 
   // 🔹 Verificar sesión activa
   bool hasActiveSession = await _checkActiveSession(
