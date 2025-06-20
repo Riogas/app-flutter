@@ -8,27 +8,31 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:path_provider/path_provider.dart';
 
+const String kSessionTag = "[SESSION_SERVICE]";
+
 class SessionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Uuid _uuid = Uuid();
   final Battery _battery = Battery();
 
-  Future<void> saveSession({
+  Future<Map<String, dynamic>> saveSession({
     required String idUsuario,
     required String nomUsuario,
     required LatLng primeraUbicacion,
     required String versionApp,
     required String tipoDeCierreDeSesion,
   }) async {
+    print("$kSessionTag saveSession: INICIO");
     var box = await Hive.openBox('sessionBox');
 
-    // ✅ Asegurar valores NO NULOS
     String escenarioId = box.get('escenario') ?? '0';
     if (escenarioId == '0') {
-      print('❌ Error: No se pudo crear la sesión.');
-      return;
+      return {
+        'success': false,
+        'message': 'No se pudo crear la sesión: escenario no definido.',
+      };
     }
-    String movil = box.get('movil') ?? 'Desconocido';
+    String movilSeleccionado = box.get('movil') ?? 'Desconocido';
     String idSesion = _uuid.v4();
     String idTerminal = box.get('deviceId') ?? 'UnknownDevice';
     String infoDispositivo = await _getDeviceInfo();
@@ -36,66 +40,17 @@ class SessionService {
     String versionAndroid = await _getAndroidVersion();
     int nivelBateria = await _getBatteryLevel();
     bool gpsActivado = await _isGpsEnabled();
+    int distanciaRecorridaMts = 0;
+    String estado = 'Activa';
+    int tiempoLogueoMins = 0;
 
-    // ✅ Evitar error con valores Timestamp (Firebase no soporta Timestamp en Hive)
     DateTime now = DateTime.now();
     Timestamp fchHoraExpira = Timestamp.fromDate(now.add(Duration(hours: 8)));
     Timestamp fchHoraInicio = Timestamp.fromDate(now);
     Timestamp fchUltConexionDisp = Timestamp.fromDate(now);
 
-    int distanciaRecorridaMts = 0;
-    String estado = 'Activa';
-    int tiempoLogueoMins = 0;
-
-    // ✅ Asegurar formato de fecha y hora
     String fechaActual =
         now.toIso8601String().split('T')[0].replaceAll('-', '');
-    String horaActual = now.toIso8601String().split('T')[1].split('.')[0];
-    String mesActual = fechaActual.substring(0, 6); // yyyymm
-    String diaActual = fechaActual.substring(6, 8); // dd
-
-    const logTag = '[SaveSession]';
-
-    print('$logTag Guardando sesión para el usuario: $idUsuario');
-    print('$logTag Escenario ID: $escenarioId');
-    print('$logTag Fecha actual: $fechaActual');
-    print('$logTag Hora actual: $horaActual');
-    print('$logTag ID de sesión: $idSesion');
-    print('$logTag ID de terminal: $idTerminal');
-    print('$logTag Información del dispositivo: $infoDispositivo');
-    print('$logTag Nombre de usuario: $nombreUsuario');
-    print('$logTag Móvil: $movil');
-    print('$logTag Versión de la app: $versionApp');
-    print('$logTag Versión de Android: $versionAndroid');
-    print('$logTag Nivel de batería: $nivelBateria');
-    print('$logTag GPS activado: $gpsActivado');
-    print('$logTag Primera ubicación: $primeraUbicacion');
-    print('$logTag Tipo de cierre de sesión: $tipoDeCierreDeSesion');
-    print('$logTag Distancia recorrida (mts): $distanciaRecorridaMts');
-    print('$logTag Estado de la sesión: $estado');
-    print('$logTag Fecha y hora de expiración: $fchHoraExpira');
-    print('$logTag Fecha y hora de inicio: $fchHoraInicio');
-    print('$logTag Fecha y hora de última conexión: $fchUltConexionDisp');
-    print('$logTag Tiempo de logueo (mins): $tiempoLogueoMins');
-    print('$logTag ID de usuario: $idUsuario');
-    print('$logTag Ubicación inicial: $primeraUbicacion');
-    print(
-        '$logTag Ubicación final: $primeraUbicacion'); // Asumiendo que es la misma
-    print('$logTag Hora de creación: $now');
-    print('$logTag Mes actual: $mesActual');
-    print('$logTag Día actual: $diaActual');
-    print('$logTag Guardando sesión en Firestore...');
-
-    // 🔹 Referencias en Firestore
-    DocumentReference fechaDocRef =
-        _firestore.collection('Sesiones-$escenarioId').doc(fechaActual);
-    CollectionReference movilCollectionRef = fechaDocRef.collection(
-      'Movil-$movil',
-    );
-    DocumentReference sessionDocRef = movilCollectionRef.doc(horaActual);
-    DocumentReference ultimaDocRef = movilCollectionRef.doc('activo');
-    DocumentReference usuarioNivelDocRef =
-        fechaDocRef.collection('Usuario-$idUsuario').doc('activo');
 
     Map<String, dynamic> sessionData = {
       'distanciaRecorridaMts': distanciaRecorridaMts,
@@ -108,7 +63,7 @@ class SessionService {
       'idUsuario': idUsuario,
       'infoDispositivo': infoDispositivo,
       'nomUsuario': nombreUsuario,
-      'movil': movil,
+      'movil': movilSeleccionado,
       'primeraUbicacion': GeoPoint(
         primeraUbicacion.latitude,
         primeraUbicacion.longitude,
@@ -124,216 +79,357 @@ class SessionService {
       'gpsActivado': gpsActivado,
     };
 
-    print('Guardando sesión en Firestore con los siguientes datos:');
-    print(sessionData);
-
+    print("$kSessionTag saveSession: Datos de sesión preparados");
     try {
-      // ✅ Asegurar que el documento padre (fecha) tenga un campo para ser reconocido
-      await fechaDocRef.set({'FchHoraCreacion': now}, SetOptions(merge: true));
+      // Asegurar que el documento de la fecha existe
+      await _firestore.collection('sessions-$escenarioId').doc(fechaActual).set(
+          {'createdAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      // 1. Verificar si el usuario ya está logueado en otro móvil
       print(
-        'Documento padre (fecha) asegurado en Firestore con FchHoraCreacion.',
-      );
-
-      // ✅ Verificar si existe un documento "activo"
-      DocumentSnapshot activeDocSnapshot = await ultimaDocRef.get();
-      if (activeDocSnapshot.exists) {
-        var activeData = activeDocSnapshot.data() as Map<String, dynamic>;
-
-        // 🔹 Calcular el tiempo de sesión y la distancia recorrida
-        DateTime fchHoraInicioActiva =
-            (activeData['fchHoraInicio'] as Timestamp).toDate();
-        int tiempoLogueoMins = now.difference(fchHoraInicioActiva).inMinutes;
-        int distanciaRecorridaMts = activeData['distanciaRecorridaMts'] ?? 0;
-
-        // 🔹 Actualizar los datos de la copia del documento "activo"
-        activeData['tiempoLogueoMins'] = tiempoLogueoMins;
-        activeData['distanciaRecorridaMts'] = distanciaRecorridaMts;
-        activeData['estado'] = 'Cerrada';
-        activeData['tipoDeCierreDeSesion'] = tipoDeCierreDeSesion;
-
+          "$kSessionTag saveSession: Verificando usuario logueado en otro móvil");
+      final doc = await _firestore
+          .collection('sessions-$escenarioId')
+          .doc(fechaActual)
+          .collection('activeSessions')
+          .doc('Usuario-$idUsuario')
+          .get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        final movilAnterior = data['idMovil'] ?? data['movil'] ?? 'Desconocido';
         print(
-          '$logTag Actualizando datos de la sesión activa: tiempo=$tiempoLogueoMins mins, distancia=$distanciaRecorridaMts mts, tipo="$tipoDeCierreDeSesion"',
-        );
-
-        // 🔹 Llamar al método para cerrar la sesión activa
-        // y hacer una copia del documento "activo" con el nombre basado en la hora actual
-        // Nota: Asegúrate de que este método esté implementado correctamente
-        print(
-          '$logTag Cerrando sesión activa para el usuario $idUsuario, antes de BuscarSesion en escenario $escenarioId, fecha $fechaActual...',
-        );
-        // a
-
-        buscarSesionActivaPorUsuarioYCerrarla(
-          escenarioId: escenarioId,
-          fechaActual: fechaActual,
-          idUsuario: idUsuario,
-          tiempoLogueoMins: tiempoLogueoMins,
-          distanciaRecorridaMts: distanciaRecorridaMts,
-          tipoDeCierreDeSesion: tipoDeCierreDeSesion,
-        );
-
-        // 🔹 Hacer una copia del documento "activo" con el nombre basado en la hora actual
-        DocumentReference backupDocRef = movilCollectionRef.doc(horaActual);
-        await backupDocRef.set(activeData);
-        print('Documento "activo" copiado a $horaActual correctamente.');
-
-        // 🔹 Eliminar el documento "activo" actual
-        await ultimaDocRef.delete();
-        print('Documento "activo" borrado correctamente.');
-
-        // 🔹 Eliminar el documento "activo" correspondiente en Usuario-$idUsuario
-        if (activeData['idUsuario'] == idUsuario) {
-          await usuarioNivelDocRef.delete();
-          print(
-              'Documento "activo" en Usuario-$idUsuario borrado correctamente.');
-        }
-
-        final dir = await getApplicationDocumentsDirectory();
-        final hiveDir = Directory(
-          '${dir.path}/',
-        ); // o Hive.defaultPath si lo configuraste
-
-        if (await hiveDir.exists() && tipoDeCierreDeSesion == "logoutUser") {
-          final files = hiveDir.listSync();
-
-          for (var file in files) {
-            if (file is File && file.path.endsWith('.hive')) {
-              try {
-                await file.delete();
-                print('Archivo eliminado: ${file.path}');
-              } catch (e) {
-                print('Error eliminando ${file.path}: $e');
-              }
-            }
-          }
-        }
+            "$kSessionTag saveSession: Usuario ya logueado en $movilAnterior");
+        return {
+          'success': false,
+          'message':
+              'Su usuario ya está logueado en el movil ${data['movil']}. ¿Desea continuar?',
+          'movilAnterior': movilAnterior,
+        };
       }
-
-      if (tipoDeCierreDeSesion == "" ||
-          tipoDeCierreDeSesion == "logoutForzadoPorOtroLogin") {
-        // ✅ Crear el nuevo documento "activo"
-        await ultimaDocRef.set(sessionData);
-        print('Documento "activo" creado correctamente.');
-
-        // ✅ Crear el nuevo documento "activo" correspondiente en Usuario-$idUsuario
-        await usuarioNivelDocRef.set(sessionData);
-        print('Documento "activo" en Usuario-$idUsuario creado correctamente.');
+      // 2. Verificar si el móvil ya está en uso por otro usuario
+      print(
+          "$kSessionTag saveSession: Verificando móvil en uso por otro usuario");
+      final snapshot = await _firestore
+          .collection('sessions-$escenarioId')
+          .doc(fechaActual)
+          .collection('activeSessions')
+          .where('movil', isEqualTo: movilSeleccionado)
+          .get();
+      if (snapshot.docs.isNotEmpty) {
+        final data = snapshot.docs.first.data();
+        final otroUsuario = data['idUsuario'] ?? 'Desconocido';
+        print("$kSessionTag saveSession: Móvil en uso por $otroUsuario");
+        return {
+          'success': false,
+          'message':
+              'Usted se está intentando conectar al móvil $movilSeleccionado, en el cual está logueado el usuario ${data['nomUsuario']}. ¿Desea continuar?',
+          'otroUsuario': otroUsuario,
+        };
       }
+      // 3. Crear la sesión si no hay conflictos
+      print("$kSessionTag saveSession: Creando sesión en Firestore");
+      await _firestore
+          .collection('sessions-$escenarioId')
+          .doc(fechaActual)
+          .collection('activeSessions')
+          .doc('Usuario-$idUsuario')
+          .set(sessionData);
+      print("$kSessionTag saveSession: Sesión guardada exitosamente");
+      return {
+        'success': true,
+        'message': 'Sesión guardada exitosamente.',
+        'idSesion': idSesion,
+      };
     } catch (e) {
-      print('❌ Error al guardar la sesión en Firestore: $e');
+      print("$kSessionTag saveSession: ERROR $e");
+      return {
+        'success': false,
+        'message': 'Error al guardar la sesión: $e',
+      };
     }
   }
 
-  Future<void> buscarSesionActivaPorUsuarioYCerrarla({
-    required String escenarioId,
-    required String fechaActual,
+  // Refactorización para obtener los datos de sesión comunes
+  Future<Map<String, dynamic>> _getSessionCommonData({
     required String idUsuario,
-    required int tiempoLogueoMins,
-    required int distanciaRecorridaMts,
+    required String nomUsuario,
+    required LatLng primeraUbicacion,
+    required String versionApp,
     required String tipoDeCierreDeSesion,
   }) async {
-    const logTag = '[CerrarSesionActiva]';
-    final firestore = FirebaseFirestore.instance;
-
-    print(
-        '$logTag 🟡 Iniciando cierre de sesión para usuario $idUsuario en escenario $escenarioId, fecha $fechaActual...');
-
-    // 🔹 Acceder al documento Usuario-{idUsuario}/activo
-    final usuarioNivelDocRef = firestore
-        .collection('Sesiones-$escenarioId')
-        .doc(fechaActual)
-        .collection('Usuario-$idUsuario')
-        .doc('activo');
-
-    final docSnapshot = await usuarioNivelDocRef.get();
-
-    if (!docSnapshot.exists) {
-      print('$logTag ⚠️ No se encontró documento activo en Usuario-$idUsuario');
-      return;
-    }
-
-    final usuarioData = docSnapshot.data()!;
-    final movilActivo = usuarioData['movil'];
-    print('$logTag 🔍 Móvil activo detectado: Movil-$movilActivo');
-
-    // 🔹 Acceder directamente al documento Movil-{movil}/activo
-    final movilCollectionRef = firestore
-        .collection('Sesiones-$escenarioId')
-        .doc(fechaActual)
-        .collection('Movil-$movilActivo');
-
-    final activoDocRef = movilCollectionRef.doc('activo');
-    final activoDataSnapshot = await activoDocRef.get();
-
-    if (!activoDataSnapshot.exists) {
-      print('$logTag ❌ No se encontró documento activo en Movil-$movilActivo');
-      return;
-    }
-
-    final activeData = activoDataSnapshot.data()!;
-    print('$logTag ✅ Documento activo encontrado en Movil-$movilActivo');
-
-    // 🔹 Obtener hora actual en formato HHMMSS
-    final now = DateTime.now();
-    final horaActual =
-        '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
-
-    print('$logTag ⏰ Hora actual registrada: $horaActual');
-
-    // 🔹 Actualizar campos de cierre
-    activeData['tiempoLogueoMins'] = tiempoLogueoMins;
-    activeData['distanciaRecorridaMts'] = distanciaRecorridaMts;
-    activeData['estado'] = 'Cerrada';
-    activeData['tipoDeCierreDeSesion'] = tipoDeCierreDeSesion;
-
-    print(
-        '$logTag ✍️ Actualizando datos de cierre: tiempo=$tiempoLogueoMins mins, distancia=$distanciaRecorridaMts mts, tipo="$tipoDeCierreDeSesion"');
-
-    // 🔹 Copiar el documento activo con nombre nuevo (horaActual)
-    final backupDocRef = movilCollectionRef.doc(horaActual);
-    await backupDocRef.set(activeData);
-    print('$logTag 📄 Documento "activo" copiado como "$horaActual".');
-
-    // 🔹 Eliminar el documento "activo"
-    await activoDocRef.delete();
-    print('$logTag 🗑️ Documento "activo" eliminado correctamente.');
-
-    print(
-        '$logTag ✅ Cierre de sesión completado exitosamente para usuario $idUsuario.');
+    print("$kSessionTag _getSessionCommonData: INICIO");
+    var box = await Hive.openBox('sessionBox');
+    String escenarioId = box.get('escenario') ?? '0';
+    String movilSeleccionado = box.get('movil') ?? 'Desconocido';
+    String idSesion = _uuid.v4();
+    String idTerminal = box.get('deviceId') ?? 'UnknownDevice';
+    String infoDispositivo = await _getDeviceInfo();
+    String nombreUsuario = (box.get('NombreUsuario') ?? 'Sin Nombre').trim();
+    String versionAndroid = await _getAndroidVersion();
+    int nivelBateria = await _getBatteryLevel();
+    bool gpsActivado = await _isGpsEnabled();
+    int distanciaRecorridaMts = 0;
+    String estado = 'Activa';
+    int tiempoLogueoMins = 0;
+    DateTime now = DateTime.now();
+    Timestamp fchHoraExpira = Timestamp.fromDate(now.add(Duration(hours: 8)));
+    Timestamp fchHoraInicio = Timestamp.fromDate(now);
+    Timestamp fchUltConexionDisp = Timestamp.fromDate(now);
+    String fechaActual =
+        now.toIso8601String().split('T')[0].replaceAll('-', '');
+    print("$kSessionTag _getSessionCommonData: Datos comunes preparados");
+    return {
+      'escenarioId': escenarioId,
+      'movilSeleccionado': movilSeleccionado,
+      'idSesion': idSesion,
+      'idTerminal': idTerminal,
+      'infoDispositivo': infoDispositivo,
+      'nombreUsuario': nombreUsuario,
+      'versionAndroid': versionAndroid,
+      'nivelBateria': nivelBateria,
+      'gpsActivado': gpsActivado,
+      'distanciaRecorridaMts': distanciaRecorridaMts,
+      'estado': estado,
+      'tiempoLogueoMins': tiempoLogueoMins,
+      'now': now,
+      'fchHoraExpira': fchHoraExpira,
+      'fchHoraInicio': fchHoraInicio,
+      'fchUltConexionDisp': fchUltConexionDisp,
+      'fechaActual': fechaActual,
+      'primeraUbicacion': primeraUbicacion,
+      'versionApp': versionApp,
+      'tipoDeCierreDeSesion': tipoDeCierreDeSesion,
+      'idUsuario': idUsuario,
+      'nomUsuario': nomUsuario,
+    };
   }
 
-  Future<bool> isSessionActiveForToday() async {
-    var box = await Hive.openBox('sessionBox');
-    String movil = box.get('movil') ?? 'Desconocido';
-    String escenarioId = box.get('escenario') ?? '0';
-
-    if (escenarioId == '0') {
-      return false;
+  Future<Map<String, dynamic>> setHistory({
+    required String idUsuario,
+    required String nomUsuario,
+    required LatLng primeraUbicacion,
+    required String versionApp,
+    required String tipoDeCierreDeSesion,
+  }) async {
+    print("$kSessionTag setHistory: INICIO");
+    final common = await _getSessionCommonData(
+      idUsuario: idUsuario,
+      nomUsuario: nomUsuario,
+      primeraUbicacion: primeraUbicacion,
+      versionApp: versionApp,
+      tipoDeCierreDeSesion: tipoDeCierreDeSesion,
+    );
+    if (common['escenarioId'] == '0') {
+      print("$kSessionTag setHistory: escenario no definido");
+      return {
+        'success': false,
+        'message': 'No se pudo crear la sesión: escenario no definido.',
+      };
     }
+    final escenarioId = common['escenarioId'];
+    final movilSeleccionado = common['movilSeleccionado'];
+    final fechaActual = common['fechaActual'];
+    final now = common['now'] as DateTime;
+    final horaActual = now.toIso8601String().split('T')[1].split('.')[0];
+    final idSesion = common['idSesion'];
+    final sessionData = {
+      'distanciaRecorridaMts': common['distanciaRecorridaMts'],
+      'estado': common['estado'],
+      'fchHoraExpira': common['fchHoraExpira'],
+      'fchHoraInicio': common['fchHoraInicio'],
+      'fchUltConexionDisp': common['fchUltConexionDisp'],
+      'idSesion': idSesion,
+      'idTerminal': common['idTerminal'],
+      'idUsuario': idUsuario,
+      'infoDispositivo': common['infoDispositivo'],
+      'nomUsuario': common['nombreUsuario'],
+      'movil': movilSeleccionado,
+      'primeraUbicacion': GeoPoint(
+        (common['primeraUbicacion'] as LatLng).latitude,
+        (common['primeraUbicacion'] as LatLng).longitude,
+      ),
+      'tiempoLogueoMins': common['tiempoLogueoMins'],
+      'ultUbicacion': GeoPoint(
+        (common['primeraUbicacion'] as LatLng).latitude,
+        (common['primeraUbicacion'] as LatLng).longitude,
+      ),
+      'versionApp': versionApp,
+      'versionAndroid': common['versionAndroid'],
+      'nivelBateria': common['nivelBateria'],
+      'gpsActivado': common['gpsActivado'],
+    };
+    try {
+      // Asegurar que el documento de la fecha existe
+      await _firestore.collection('sessions-$escenarioId').doc(fechaActual).set(
+          {'createdAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      print("$kSessionTag setHistory: Documento de fecha asegurado");
+      print("$kSessionTag setHistory: Buscando sesión activa");
+      final doc = await _firestore
+          .collection('sessions-$escenarioId')
+          .doc(fechaActual)
+          .collection('activeSessions')
+          .doc('Usuario-$idUsuario')
+          .get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        final movilAnterior = data['idMovil'] ?? data['movil'] ?? 'Desconocido';
+        final historyId = '${horaActual.replaceAll(':', '')}-$idUsuario';
+        print("$kSessionTag setHistory: Moviendo sesión activa a history");
+        await _firestore
+            .collection('sessions-$escenarioId')
+            .doc(fechaActual)
+            .collection('history')
+            .doc(historyId)
+            .set(data);
+        await _firestore
+            .collection('sessions-$escenarioId')
+            .doc(fechaActual)
+            .collection('activeSessions')
+            .doc('Usuario-$idUsuario')
+            .delete();
+        print("$kSessionTag setHistory: Sesión movida a history");
+        print(
+            "$kSessionTag setHistory: Llamando a saveSession para crear la nueva sesión");
+        final saveResult = await saveSession(
+          idUsuario: idUsuario,
+          nomUsuario: nomUsuario,
+          primeraUbicacion: primeraUbicacion,
+          versionApp: versionApp,
+          tipoDeCierreDeSesion: tipoDeCierreDeSesion,
+        );
+        print("$kSessionTag setHistory: Resultado de saveSession: $saveResult");
+        return saveResult;
+      }
+      // Si no existe, verificar si el móvil está en uso por otro usuario
+      print("$kSessionTag setHistory: Buscando móvil en uso por otro usuario");
+      final snapshot = await _firestore
+          .collection('sessions-$escenarioId')
+          .doc(fechaActual)
+          .collection('activeSessions')
+          .where('movil', isEqualTo: movilSeleccionado)
+          .get();
+      if (snapshot.docs.isNotEmpty) {
+        final data = snapshot.docs.first.data();
+        final otroUsuario = data['idUsuario'] ?? 'Desconocido';
+        final docId = snapshot.docs.first.id;
+        final historyId = '${horaActual.replaceAll(':', '')}-$otroUsuario';
+        print("$kSessionTag setHistory: Moviendo móvil en uso a history");
+        await _firestore
+            .collection('sessions-$escenarioId')
+            .doc(fechaActual)
+            .collection('history')
+            .doc(historyId)
+            .set(data);
+        await _firestore
+            .collection('sessions-$escenarioId')
+            .doc(fechaActual)
+            .collection('activeSessions')
+            .doc(docId)
+            .delete();
+        print("$kSessionTag setHistory: Móvil liberado y movido a history");
+        print(
+            "$kSessionTag setHistory: Llamando a saveSession para crear la nueva sesión");
+        final saveResult = await saveSession(
+          idUsuario: idUsuario,
+          nomUsuario: nomUsuario,
+          primeraUbicacion: primeraUbicacion,
+          versionApp: versionApp,
+          tipoDeCierreDeSesion: tipoDeCierreDeSesion,
+        );
+        print("$kSessionTag setHistory: Resultado de saveSession: $saveResult");
+        return saveResult;
+      }
+      print(
+          "$kSessionTag setHistory: No existe sesión previa para mover a history");
+      return {
+        'success': false,
+        'message': 'No existe sesión previa para mover a history.',
+      };
+    } catch (e) {
+      print("$kSessionTag setHistory: ERROR $e");
+      return {
+        'success': false,
+        'message': 'Error en setHistory: $e',
+      };
+    }
+  }
 
+  Future<Map<String, dynamic>> cerrarSesion({
+    required String idUsuario,
+    required String tipoDeCierreDeSesion,
+  }) async {
+    print("$kSessionTag cerrarSesion: INICIO");
+    var box = await Hive.openBox('sessionBox');
+    String escenarioId = box.get('escenario') ?? '0';
+    if (escenarioId == '0') {
+      return {
+        'success': false,
+        'message': 'No se pudo cerrar la sesión: escenario no definido.',
+      };
+    }
     DateTime now = DateTime.now();
     String fechaActual =
         now.toIso8601String().split('T')[0].replaceAll('-', '');
-
-    DocumentReference fechaDocRef =
-        _firestore.collection('Sesiones-$escenarioId').doc(fechaActual);
-    CollectionReference movilCollectionRef =
-        fechaDocRef.collection('Movil-$movil');
-    DocumentReference ultimaDocRef = movilCollectionRef.doc('activo');
-
+    String horaActual = now.toIso8601String().split('T')[1].split('.')[0];
     try {
-      DocumentSnapshot activeDocSnapshot = await ultimaDocRef.get();
-      return activeDocSnapshot.exists;
+      // Asegurar que el documento de la fecha existe
+      await _firestore.collection('sessions-$escenarioId').doc(fechaActual).set(
+          {'createdAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      print("$kSessionTag cerrarSesion: Documento de fecha asegurado");
+      print("$kSessionTag cerrarSesion: Buscando sesión activa");
+      final doc = await _firestore
+          .collection('sessions-$escenarioId')
+          .doc(fechaActual)
+          .collection('activeSessions')
+          .doc('Usuario-$idUsuario')
+          .get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        final movilAnterior = data['idMovil'] ?? data['movil'] ?? 'Desconocido';
+        final historyId = '${horaActual.replaceAll(':', '')}-$idUsuario';
+        print("$kSessionTag cerrarSesion: Moviendo sesión activa a history");
+        await _firestore
+            .collection('sessions-$escenarioId')
+            .doc(fechaActual)
+            .collection('history')
+            .doc(historyId)
+            .set({
+          ...data,
+          'tipoDeCierreDeSesion': tipoDeCierreDeSesion,
+          'fchHoraCierre': Timestamp.fromDate(now),
+        });
+        await _firestore
+            .collection('sessions-$escenarioId')
+            .doc(fechaActual)
+            .collection('activeSessions')
+            .doc('Usuario-$idUsuario')
+            .delete();
+        print("$kSessionTag cerrarSesion: Sesión movida a history");
+        return {
+          'success': true,
+          'message': 'Login exitoso: sesión anterior movida a history.',
+          'movilAnterior': movilAnterior,
+        };
+      } else {
+        print(
+            "$kSessionTag cerrarSesion: No existe sesión activa para este usuario");
+        return {
+          'success': false,
+          'message': 'No existe sesión activa para este usuario.',
+        };
+      }
     } catch (e) {
-      print('Error al verificar sesión activa para hoy: $e');
-      return false;
+      print("$kSessionTag cerrarSesion: ERROR $e");
+      return {
+        'success': false,
+        'message': 'Error al cerrar la sesión: $e',
+      };
     }
   }
 
   Future<String> _getDeviceInfo() async {
+    print("$kSessionTag _getDeviceInfo: INICIO");
     DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
     String deviceInfoString = 'Unknown Device';
-
     try {
       if (Platform.isAndroid) {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
@@ -342,32 +438,41 @@ class SessionService {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
         deviceInfoString = '${iosInfo.name} ${iosInfo.model}';
       }
+      print("$kSessionTag _getDeviceInfo: $deviceInfoString");
     } catch (e) {
-      print('Error al obtener la información del dispositivo: $e');
+      print('$kSessionTag _getDeviceInfo: ERROR $e');
     }
-
     return deviceInfoString;
   }
 
   Future<String> _getAndroidVersion() async {
+    print("$kSessionTag _getAndroidVersion: INICIO");
     if (Platform.isAndroid) {
       DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
       AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+      print("$kSessionTag _getAndroidVersion: ${androidInfo.version.release}");
       return androidInfo.version.release;
     }
+    print("$kSessionTag _getAndroidVersion: N/A");
     return 'N/A';
   }
 
   Future<int> _getBatteryLevel() async {
+    print("$kSessionTag _getBatteryLevel: INICIO");
     try {
-      return await _battery.batteryLevel;
+      int level = await _battery.batteryLevel;
+      print("$kSessionTag _getBatteryLevel: $level");
+      return level;
     } catch (e) {
-      print('⚠️ Error al obtener nivel de batería: $e');
+      print('$kSessionTag _getBatteryLevel: ERROR $e');
       return -1; // 🔹 Devuelve -1 si no se puede obtener
     }
   }
 
   Future<bool> _isGpsEnabled() async {
-    return await Geolocator.isLocationServiceEnabled();
+    print("$kSessionTag _isGpsEnabled: INICIO");
+    bool enabled = await Geolocator.isLocationServiceEnabled();
+    print("$kSessionTag _isGpsEnabled: $enabled");
+    return enabled;
   }
 }

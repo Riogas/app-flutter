@@ -26,6 +26,8 @@ import 'package:dio/dio.dart'; // Import for Dio HTTP client
 import 'package:video_player/video_player.dart';
 import '../utils/stream_manager.dart';
 
+const String kLoginFlowTag = "[LOGIN_FLOW]";
+
 class LoginBackground extends StatefulWidget {
   final Widget child;
 
@@ -1124,10 +1126,10 @@ class _LoginPageState extends State<LoginPage> {
     Map<String, dynamic> response,
     String? selectedMovil,
   ) async {
-    print("Proceder después de seleccionar un móvil");
+    print("[32m$kLoginFlowTag Proceder después de seleccionar un móvil[0m");
     _showLoadingDialog();
 
-    print("Antes de guardar en hive");
+    print("[32m$kLoginFlowTag Antes de guardar en hive[0m");
 
     // 🔹 Guardar en Hive los datos del usuario, pero SOLO EL MÓVIL SELECCIONADO
     var box = await Hive.openBox('sessionBox');
@@ -1153,12 +1155,13 @@ class _LoginPageState extends State<LoginPage> {
     if (username != null && deviceId != null) {
       await RioGasService.registrarUltLog(
           int.parse(selectedMovil!), _deviceId, username);
-      print('✅ Servicio registrarUltLog llamado exitosamente.');
+      print(
+          "[32m$kLoginFlowTag ✅ Servicio registrarUltLog llamado exitosamente.[0m");
     } else {
       print(
-          '⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.');
+          "[31m$kLoginFlowTag ⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.[0m");
       print(
-          'username: $username, deviceId: $_deviceId, selectedMovil: $selectedMovil');
+          "[31m$kLoginFlowTag username: $username, deviceId: $_deviceId, selectedMovil: $selectedMovil[0m");
     }
 
     // 🔹 Limpiar pedidosBox de claves cuyo valor sea 'Procesando'
@@ -1185,67 +1188,97 @@ class _LoginPageState extends State<LoginPage> {
     if (versionData != null && versionData.containsKey('ReleaseNotes')) {
       await box.put('ReleaseNotes', versionData['ReleaseNotes']);
       print(
-        "?? ReleaseNotes guardado en sessionBox: ${versionData['ReleaseNotes']}",
-      );
+          "[32m$kLoginFlowTag ?? ReleaseNotes guardado en sessionBox: ${versionData['ReleaseNotes']}[0m");
     }
 
     // 🔹 Imprimir el contenido de sessionBox después de asegurarnos que se guardó correctamente
-    print("📦 Contenido de sessionBox después de guardar firstLoginDone:");
-    box.toMap().forEach((key, value) => print('$key: $value'));
+    print(
+        "[32m$kLoginFlowTag 📦 Contenido de sessionBox después de guardar firstLoginDone:[0m");
+    box
+        .toMap()
+        .forEach((key, value) => print("[32m$kLoginFlowTag $key: $value[0m"));
 
-    // 🔹 Verificar si existe un documento "activo" con un idUsuario o idTerminal diferente
-    bool shouldProceed = await _checkActiveSession(response, selectedMovil);
+    // 🔹 Intentar login automático con credenciales globales
+    bool success = await _autoLogin(context);
 
-    if (shouldProceed) {
-      // 🔹 Cargar y guardar constantes desde Firebase
-      print("Cargando y guardando constantes desde Firebase...");
-      await ConstantsService.loadAndSaveConstants();
+    if (success) {
+      print("[32m$kLoginFlowTag 🟢 Login automático exitoso.[0m");
 
       // 🔹 Obtener ubicación actual
       LatLng? currentLocation = await _getCurrentLocation();
 
       // 🔹 Guardar sesión en Firestore
-      await _saveSession(currentLocation);
+      final sessionResult = await _saveSession(currentLocation);
 
-      final sessionBox = await Hive.openBox('sessionBox');
-      final movil = sessionBox.get('movil') ?? "0";
-      final escenario = sessionBox.get('escenario') ?? "0";
-      final usuario = sessionBox.get('username') ?? "string";
-      String? idTerminal = sessionBox.get('deviceId');
-
-      final platform = MethodChannel("background_service");
-      await platform.invokeMethod("startLocationService", {
-        "interval": 3,
-        "movil": movil,
-        "escenario": escenario,
-        "usuario": usuario,
-        "deviceId": "$idTerminal",
-      });
       print(
-          "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
+          "[32m$kLoginFlowTag Guardando sesión en Firestore: $sessionResult[0m");
 
-      await platform.invokeMethod("FcmNotification", {
-        "interval": 3,
-        "movil": movil,
-        "escenario": escenario,
-        "usuario": usuario,
-        "deviceId": "$idTerminal",
-      });
-      print(
-          "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
+      if (sessionResult != null && sessionResult['success']) {
+        await _onSuccessfulLoginFlow(context);
+      } else {
+        print(
+            "[31m$kLoginFlowTag ❌ Error al guardar la sesión en Firestore.[0m");
 
-      // 🔹 Cerrar el diálogo de carga y navegar a HomePage
-      if (mounted) {
+        bool shouldProceed = await _showActiveSessionDialog(
+            sessionResult != null ? sessionResult['message'] : null);
+
+        print("[33m$kLoginFlowTag shouldProceed: $shouldProceed[0m");
+        if (shouldProceed) {
+          print(
+              "[33m$kLoginFlowTag Usuario decidió continuar, moviendo activo al histórico[0m");
+          // 🔹 Mover el activo al historico
+          var sessionBox = await Hive.openBox('sessionBox');
+          String? username = sessionBox.get('username');
+          String? nombreUsuario = sessionBox.get('NombreUsuario');
+          String? versionApp = _appVersion;
+          LatLng? currentLocation = await _getCurrentLocation();
+          print(
+              "[33m$kLoginFlowTag username: $username, nombreUsuario: $nombreUsuario, versionApp: $versionApp, currentLocation: $currentLocation[0m");
+          if (username != null && nombreUsuario != null) {
+            print("[33m$kLoginFlowTag Llamando a setHistory[0m");
+            final result = await SessionService().setHistory(
+              idUsuario: username,
+              nomUsuario: nombreUsuario,
+              primeraUbicacion: currentLocation ?? LatLng(0.0, 0.0),
+              versionApp: versionApp,
+              tipoDeCierreDeSesion: '',
+            );
+            print("[33m$kLoginFlowTag Resultado de setHistory: $result[0m");
+            if (result != null && result['success'] == true) {
+              print(
+                  "\u001b[32m$kLoginFlowTag ✅ Activo movido al histórico correctamente.\u001b[0m");
+              await _onSuccessfulLoginFlow(context);
+              return;
+            } else {
+              // Manejar el caso en que no se pudo mover el activo al histórico
+              print(
+                  "\u001b[31m$kLoginFlowTag ❌ No se pudo mover el activo al histórico.\u001b[0m");
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      "$kLoginFlowTag Ocurrió un error inesperado, favor intente nuevamente más tarde."),
+                ),
+              );
+            }
+          } else {
+            print(
+                "[31m$kLoginFlowTag ❌ Datos insuficientes para mover al histórico[0m");
+          }
+        } else {
+          print("[33m$kLoginFlowTag Usuario decidió NO continuar[0m");
+        }
+
+        // 🔹 Cargar y guardar constantes desde Firebase
+        print(
+            "[33m$kLoginFlowTag Cargando y guardando constantes desde Firebase...[0m");
+        await ConstantsService.loadAndSaveConstants();
+
+        // 🔹 Cerrar el diálogo de carga
+        print("[33m$kLoginFlowTag Cerrando diálogo de carga[0m");
         Navigator.pop(context);
       }
-      await _checkNotificationPermissionAndNavigate();
     } else {
-      // 🔹 Cargar y guardar constantes desde Firebase
-      print("Cargando y guardando constantes desde Firebase...");
-      await ConstantsService.loadAndSaveConstants();
-
-      // 🔹 Cerrar el diálogo de carga
-      Navigator.pop(context);
+      print("[31m$kLoginFlowTag 🔴 Error en el login automático.[0m");
     }
   }
 
@@ -1393,46 +1426,30 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
-  Future<bool> _checkActiveSession(
-    Map<String, dynamic> response,
-    String? selectedMovil,
-  ) async {
-    print('📦 Abriendo caja Hive: sessionBox...');
-    var box = await Hive.openBox('sessionBox');
-
-    String? escenario = box.get('escenario')?.toString();
-    String? idUsuario = box.get('username');
-    String? idTerminal = box.get('deviceId');
-    String? nombreUsuario = box.get('NombreUsuario');
-
-    print('🔍 Datos recuperados de Hive:');
-    print('   ➤ Escenario: $escenario');
-    print('   ➤ Usuario: $idUsuario');
-    print('   ➤ Terminal: $idTerminal');
-    print('   ➤ NombreUsuario: $nombreUsuario');
-
-    // Verificar si hay datos en sessionBox
-    if (escenario == null ||
-        idUsuario == null ||
-        idTerminal == null ||
-        nombreUsuario == null) {
-      print(
-        '⚠️ Falta información en sessionBox. No se puede validar sesión activa.',
+  Future<bool> _autoLogin(BuildContext context) async {
+    // ✅ CREACIÓN O VALIDACIÓN DE DISPOSITIVO EN FIRESTORE
+    try {
+      await autoLogin();
+      print("✅ Dispositivo validado");
+    } catch (e) {
+      print("❌ Error durante la validación del dispositivo: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al validar el dispositivo.'),
+          backgroundColor: Colors.red,
+        ),
       );
       return false;
     }
 
-    /* CREACION O VALIDACIÓN DE DISPOSITIVO EN FIRESTORE */
-    await autoLogin();
-    print("✅ Dispositivo validado");
-
-    // Authenticate with Firestore using credentials from Config
+    // 🔐 Autenticación con Firestore
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: Config.firestoreEmail,
         password: Config.firestorePassword,
       );
       print('✅ Autenticación con Firestore exitosa.');
+      return true;
     } catch (e) {
       print('❌ Error al autenticar con Firestore: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1443,143 +1460,30 @@ class _LoginPageState extends State<LoginPage> {
       );
       return false;
     }
-
-    String hoy =
-        DateTime.now().toIso8601String().split('T')[0].replaceAll('-', '');
-    String pathMovil =
-        'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
-    String pathUsuario =
-        'Sesiones-$escenario / $hoy / Usuario-$idUsuario / activo';
-
-    print('📄 Consultando documento Firestore: $pathMovil');
-
-    DocumentReference ultimaDocRefMovil = FirebaseFirestore.instance
-        .collection('Sesiones-$escenario')
-        .doc(hoy)
-        .collection('Movil-$selectedMovil')
-        .doc('activo');
-
-    DocumentReference ultimaDocRefUsuario = FirebaseFirestore.instance
-        .collection('Sesiones-$escenario')
-        .doc(hoy)
-        .collection('Usuario-$idUsuario')
-        .doc('activo');
-
-    DocumentSnapshot activeDocSnapshotMovil;
-    DocumentSnapshot activeDocSnapshotUsuario;
-
-    try {
-      activeDocSnapshotMovil = await ultimaDocRefMovil.get();
-      print('✅ Documento Firestore de Movil obtenido correctamente.');
-    } catch (e) {
-      if (e is FirebaseException && e.code == 'permission-denied') {
-        print('❌ Error de permisos al acceder a Firestore: ${e.message}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error de permisos al acceder a Firestore.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return false;
-      } else {
-        print('❌ Error inesperado al acceder a Firestore: $e');
-        rethrow;
-      }
-    }
-
-    try {
-      activeDocSnapshotUsuario = await ultimaDocRefUsuario.get();
-      print('✅ Documento Firestore de Usuario obtenido correctamente.');
-    } catch (e) {
-      if (e is FirebaseException && e.code == 'permission-denied') {
-        print('❌ Error de permisos al acceder a Firestore: ${e.message}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error de permisos al acceder a Firestore.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return false;
-      } else {
-        print('❌ Error inesperado al acceder a Firestore: $e');
-        rethrow;
-      }
-    }
-
-    const logTag = '[VerificarSesionActiva]';
-
-    if (activeDocSnapshotMovil.exists) {
-      var data = activeDocSnapshotMovil.data() as Map<String, dynamic>;
-      print('$logTag 🔍 Se encontró sesión activa en el móvil $selectedMovil');
-      print(
-          '$logTag 🔎 Datos actuales: idUsuario=${data['idUsuario']}, idTerminal=${data['idTerminal']}');
-
-      if (data['idUsuario'] != idUsuario || data['idTerminal'] != idTerminal) {
-        print(
-            '$logTag ⚠️ El móvil $selectedMovil está ocupado por otro usuario (${data['nomUsuario']}) o terminal (${data['idTerminal']})');
-
-        _wasActiveSessionForAnotherUser = true;
-
-        bool shouldProceed = await _showActiveSessionDialog(
-          selectedMovil!,
-          data['nomUsuario'],
-          'Usted se está intentando conectar al móvil $selectedMovil, en el cual está logueado el usuario ${data['nomUsuario']}. ¿Desea continuar?',
-        );
-
-        print('$logTag 🤔 Usuario eligió continuar: $shouldProceed');
-        return shouldProceed;
-      } else {
-        print(
-            '$logTag ✅ El usuario actual ya está logueado en este terminal, se permite continuar.');
-      }
-    }
-
-    if (activeDocSnapshotUsuario.exists) {
-      var data = activeDocSnapshotUsuario.data() as Map<String, dynamic>;
-      print(
-          '$logTag 🔍 Se detectó sesión activa previa del usuario ${data['nomUsuario']} en el móvil ${data['movil']}');
-
-      _wasActiveSessionForAnotherUser = true;
-
-      bool shouldProceed = await _showActiveSessionDialog(
-        selectedMovil!,
-        data['nomUsuario'],
-        'Su usuario ya está logueado en el movil ${data['movil']}. ¿Desea continuar?',
-      );
-
-      print('$logTag 🤔 Usuario eligió continuar: $shouldProceed');
-      return shouldProceed;
-    }
-
-    print(
-        '$logTag ✅ No hay conflictos de sesión. Se permite iniciar sesión normalmente.');
-
-    return true;
   }
 
-  Future<bool> _showActiveSessionDialog(
-    String selectedMovil,
-    String activeUser,
-    String contentText,
-  ) async {
+  Future<bool> _showActiveSessionDialog(String contentText) async {
     bool shouldProceed = false;
+
+    String title = 'Sesión Activa Encontrada';
+
     await showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Sesión Activa Encontrada'),
+          title: Text(title),
           content: Text(contentText),
           actions: <Widget>[
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(); //SERVICIO DE LIMPIEZA DE SESION
+                Navigator.of(context).pop(); // Cancela
               },
               child: Text('Cancelar'),
             ),
             ElevatedButton(
               onPressed: () {
                 shouldProceed = true;
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Confirma
               },
               child: Text('Confirmar'),
             ),
@@ -1587,16 +1491,17 @@ class _LoginPageState extends State<LoginPage> {
         );
       },
     );
+
     return shouldProceed;
   }
 
-  Future<void> _saveSession(LatLng? location) async {
+  Future<Map<String, dynamic>?> _saveSession(LatLng? location) async {
     var box = await Hive.openBox('sessionBox');
     String? username = box.get('username');
     String? nombreUsuario = box.get('NombreUsuario');
 
     if (username != null && nombreUsuario != null) {
-      await SessionService().saveSession(
+      final result = await SessionService().saveSession(
         idUsuario: username,
         nomUsuario: nombreUsuario,
         primeraUbicacion: location ?? LatLng(0.0, 0.0),
@@ -1604,7 +1509,9 @@ class _LoginPageState extends State<LoginPage> {
         tipoDeCierreDeSesion:
             _wasActiveSessionForAnotherUser ? 'logoutForzadoPorOtroLogin' : '',
       );
+      return result;
     }
+    return null;
   }
 
   Future<LatLng?> _getCurrentLocation() async {
@@ -1831,6 +1738,46 @@ class _LoginPageState extends State<LoginPage> {
         await openAppSettings();
       }
     }
+  }
+
+  /// Ejecuta la carga de constantes, inicialización de servicios y navegación tras login exitoso
+  Future<void> _onSuccessfulLoginFlow(BuildContext context) async {
+    // 🔹 Cargar y guardar constantes desde Firebase
+    print("Cargando y guardando constantes desde Firebase...");
+    await ConstantsService.loadAndSaveConstants();
+
+    final sessionBox = await Hive.openBox('sessionBox');
+    final movil = sessionBox.get('movil') ?? "0";
+    final escenario = sessionBox.get('escenario') ?? "0";
+    final usuario = sessionBox.get('username') ?? "string";
+    String? idTerminal = sessionBox.get('deviceId');
+
+    final platform = MethodChannel("background_service");
+    await platform.invokeMethod("startLocationService", {
+      "interval": 3,
+      "movil": movil,
+      "escenario": escenario,
+      "usuario": usuario,
+      "deviceId": "$idTerminal",
+    });
+    print(
+        "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
+
+    await platform.invokeMethod("FcmNotification", {
+      "interval": 3,
+      "movil": movil,
+      "escenario": escenario,
+      "usuario": usuario,
+      "deviceId": "$idTerminal",
+    });
+    print(
+        "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
+
+    // 🔹 Cerrar el diálogo de carga y navegar a HomePage
+    if (mounted) {
+      Navigator.pop(context);
+    }
+    await _checkNotificationPermissionAndNavigate();
   }
 
   @override

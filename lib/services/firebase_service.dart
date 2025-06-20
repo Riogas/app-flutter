@@ -277,50 +277,59 @@ class FirebaseService {
     return result;
   }
 
+  static const String kFirebaseSesionesTag = '[FIREBASE_SESIONES]';
+
   Stream<Map<String, dynamic>?> getSesionesStream() async* {
+    print('$kFirebaseSesionesTag INICIO getSesionesStream');
     var box = await openBoxSafe('sessionBox');
-    if (box == null) return;
+    if (box == null) {
+      print('$kFirebaseSesionesTag No se pudo abrir sessionBox');
+      return;
+    }
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String movil = box.get('movil', defaultValue: '0');
-    String collectionName = 'Sesiones-$escenarioId';
+    String collectionName = 'sessions-$escenarioId';
 
     DateTime now = DateTime.now();
     String fechaActual =
         now.toIso8601String().split('T')[0].replaceAll('-', '');
 
-    String movilCollectionName = 'Movil-$movil';
-    String activoDocName = 'activo';
-
-    DocumentReference activoDocRef = FirebaseFirestore.instance
+    // Referencia al documento del usuario en activeSessions
+    String usuarioDocName = 'Usuario-${box.get('username', defaultValue: '0')}';
+    DocumentReference usuarioDocRef = FirebaseFirestore.instance
         .collection(collectionName)
         .doc(fechaActual)
-        .collection(movilCollectionName)
-        .doc(activoDocName);
+        .collection('activeSessions')
+        .doc(usuarioDocName);
 
+    print(
+        '$kFirebaseSesionesTag Referencia a doc: $collectionName/$fechaActual/activeSessions/$usuarioDocName');
     try {
-      DocumentSnapshot snapshot = await activoDocRef.get(
+      DocumentSnapshot snapshot = await usuarioDocRef.get(
         const GetOptions(source: Source.server),
       );
 
       if (snapshot.exists) {
         var data = snapshot.data() as Map<String, dynamic>;
-        print('✅ Documento inicial encontrado: $data');
+        print('$kFirebaseSesionesTag ✅ Documento inicial encontrado: $data');
         yield data;
       } else {
-        print('⚠️ Documento inicial no encontrado. Eliminando Hive boxes.');
+        print(
+            '$kFirebaseSesionesTag ⚠️ Documento inicial no encontrado. Eliminando Hive boxes.');
         //await _deleteAllHiveBoxes();
         yield null;
       }
     } catch (error) {
-      print('❌ Error al obtener el documento inicial: $error');
+      print(
+          '$kFirebaseSesionesTag ❌ Error al obtener el documento inicial: $error');
       await _logError('Firestore Error', error.toString());
       yield null;
     }
 
-    Stream<Map<String, dynamic>?> sesionesStream = activoDocRef
+    Stream<Map<String, dynamic>?> sesionesStream = usuarioDocRef
         .snapshots(includeMetadataChanges: false)
         .handleError((error) async {
-      print('❌ Error en el stream de Firestore: $error');
+      print('$kFirebaseSesionesTag ❌ Error en el stream de Firestore: $error');
       if (error is FirebaseException && error.code == 'permission-denied') {
         await _logFirestorePermissionError(
           error.message ?? 'Permission denied',
@@ -328,25 +337,24 @@ class FirebaseService {
       } else {
         await _logError('Firestore Error', error.toString());
       }
-      /*bool isConnected = await checkFirestoreConnectivity();
-      if (!isConnected) {
-        print('⚠️ Pérdida de conectividad con Firestore.');
-      }*/
     }).asyncMap((snapshot) async {
       if (snapshot.exists) {
         var data = snapshot.data() as Map<String, dynamic>;
         print(
-            '🔄 [${DateTime.now()}] Documento actualizado en Firestore: $data');
-        print('📋 Metadatos del documento: ${snapshot.metadata}');
+            '$kFirebaseSesionesTag 🔄 [${DateTime.now()}] Documento actualizado en Firestore: $data');
+        print(
+            '$kFirebaseSesionesTag 📋 Metadatos del documento: ${snapshot.metadata}');
         return data;
       } else {
-        print('⚠️ Documento eliminado en Firestore. Eliminando Hive boxes.');
+        print(
+            '$kFirebaseSesionesTag ⚠️ Documento eliminado en Firestore. Eliminando Hive boxes.');
         //await _deleteAllHiveBoxes();
         return null;
       }
     });
 
-    print('📡 Iniciando escucha de cambios en Firestore.');
+    print(
+        '$kFirebaseSesionesTag 📡 Iniciando escucha de cambios en Firestore (estructura nueva).');
     monitorStream(sesionesStream, 'SesionesStream');
     monitorStreamWithUsage(sesionesStream, 'SesionesStream');
     yield* sesionesStream;
@@ -427,110 +435,6 @@ class FirebaseService {
     monitorStreamWithUsage(pedidosStream, 'pedidosStream');
     yield* pedidosStream;
   }
-
-  /*Stream<List<DocumentSnapshot>> getPedidosCumplidosStream() async* {
-    var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0').toString();
-    String usuario = box.get('username', defaultValue: '0').toString();
-    int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
-
-    // Fetch the constant value
-    String showOnlyUser = await getConstantValue('160') ?? '';
-
-    String collectionName = 'Pedidos-$escenarioId';
-    String fechaActualStr = DateTime.now()
-        .toUtc()
-        .subtract(Duration(hours: 3))
-        .toIso8601String()
-        .split('T')[0]
-        .replaceAll('-', '');
-    int fechaActual = int.tryParse(fechaActualStr) ?? 0;
-
-    // Build the query
-    Query pedidosCumplidosQuery = _firestore
-        .collection(collectionName)
-        .where('Movil', isEqualTo: movil)
-        .where('FchPara', isEqualTo: fechaActual)
-        .where('VisibleEnApp', isEqualTo: 'S')
-        .where('EstadoNro', isEqualTo: 2);
-
-    // Conditionally add the where clause
-    if (showOnlyUser == 'S') {
-      pedidosCumplidosQuery = pedidosCumplidosQuery.where(
-        'FleteroAsignadoCuandoSeFinalizo',
-        isEqualTo: usuario,
-      );
-    }
-
-    Stream<List<DocumentSnapshot>> pedidosCumplidosStream =
-        pedidosCumplidosQuery
-            .orderBy(
-              'FchHoraMaxEntComp',
-              descending: true,
-            )
-            .snapshots()
-            .handleError((error) async {
-      if (error is FirebaseException && error.code == 'permission-denied') {
-        await _logFirestorePermissionError(
-          error.message ?? 'Permission denied',
-        );
-      } else {
-        // print('Error fetching pedidos cumplidos: $error');
-        await _logError('Firestore Error', error.toString());
-      }
-      bool isConnected = await checkFirestoreConnectivity();
-      if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
-      }
-    }).map((snapshot) {
-      // print('Fetched ${snapshot.docs.length} pedidos cumplidos');
-      snapshot.docs.forEach((doc) {
-        // print('Pedido cumplido: ${doc.data()}');
-      });
-      return snapshot.docs;
-    });
-
-    monitorStream(
-      pedidosCumplidosStream,
-      'PedidosCumplidosStream',
-    ); // Monitorea el stream
-    yield* pedidosCumplidosStream;
-  }*/
-
-  /*Stream<List<DocumentSnapshot>> getConstantesStream() async* {
-    var box = await Hive.openBox('sessionBox');
-    String escenarioId = box.get('escenario', defaultValue: '0').toString();
-    String collectionName = 'Constantes-1000';
-
-    Stream<List<DocumentSnapshot>> constantesStream = _firestore
-        .collection(collectionName)
-        .snapshots()
-        .handleError((error) async {
-      if (error is FirebaseException && error.code == 'permission-denied') {
-        await _logFirestorePermissionError(
-          error.message ?? 'Permission denied',
-        );
-      } else {
-        // print('Error fetching constantes: $error');
-        await _logError('Firestore Error', error.toString());
-      }
-      bool isConnected = await checkFirestoreConnectivity();
-      if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
-      }
-    }).map((snapshot) {
-      // print('Fetched ${snapshot.docs.length} constantes');
-      snapshot.docs.forEach((doc) {
-        // print('Constante: ${doc.data()}');
-      });
-      return snapshot.docs;
-    });
-
-    monitorStream(constantesStream, 'ConstantesStream'); // Monitorea el stream
-    yield* constantesStream;
-  }*/
 
   Stream<List<DocumentSnapshot>> getMensajesStream() async* {
     try {

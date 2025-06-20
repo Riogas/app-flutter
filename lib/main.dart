@@ -144,16 +144,6 @@ void main() async {
     isLoggedIn = false; // Redirect to login if no active session
   }
 
-  // 🔹 Configurar verificación de cambio de día
-  Timer.periodic(Duration(minutes: 1), (timer) async {
-    bool sessionActiveForToday =
-        await SessionService().isSessionActiveForToday();
-    if (!sessionActiveForToday) {
-      timer.cancel(); // Detener el temporizador
-      runApp(MyApp(isLoggedIn: false)); // Redirigir al login
-    }
-  });
-
   FlutterError.onError = (FlutterErrorDetails details) {
     // Podés registrar esto en logs o mostrar una pantalla de error
     // print("Error crítico atrapado: ${details.exceptionAsString()}");
