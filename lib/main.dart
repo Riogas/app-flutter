@@ -14,6 +14,7 @@ import 'services/auth_service.dart';
 import 'services/notifications_service.dart';
 import 'services/riogas_service.dart';
 import 'services/session_service.dart';
+import 'services/persistent_stream_manager.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa url_launcher
 import 'utils/error_event.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -114,6 +115,9 @@ void main() async {
 
   bool isLoggedIn = await AuthService.checkIsLoggedIn();
 
+  // 🔹 Inicializar sincronización centralizada de Hive (mensajes y pedidos)
+  PersistentStreamManager().initializeHiveSync();
+
   if (isLoggedIn) {
     // 🔹 Verificar y escuchar permisos de GPS
     //await _checkAndListenGpsPermissions();
@@ -146,7 +150,7 @@ void main() async {
 
   FlutterError.onError = (FlutterErrorDetails details) {
     // Podés registrar esto en logs o mostrar una pantalla de error
-    // print("Error crítico atrapado: ${details.exceptionAsString()}");
+    // print("Error crítico atrapado: \\${details.exceptionAsString()}");
     FlutterError.presentError(details); // Muestra el error en consola
   };
 

@@ -28,7 +28,7 @@ import 'package:android_intent_plus/android_intent.dart'; // Import AndroidInten
 import 'package:android_intent_plus/flag.dart'; // Import Flag for AndroidIntent
 import 'package:flutter/services.dart'; // Import SystemNavigator
 import '../utils/stream_manager.dart'; // o el path correcto
-import '../services/stream_manager.dart'; // Import the new StreamManager
+import '../services/persistent_stream_manager.dart';
 
 // Función utilitaria para abrir cajas Hive de forma segura
 dynamic openBoxSafe(String boxName) async {
@@ -51,8 +51,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   final FirebaseService _firebaseService = FirebaseService();
-  final StreamManager _streamManager =
-      StreamManager(); // Add StreamManager instance
+  final PersistentStreamManager _streamManager = PersistentStreamManager();
   StreamSubscription<LatLng>?
       _locationSubscription; // 🔹 Guardamos la suscripción
   final LocationService _locationService =
@@ -60,7 +59,8 @@ class _HomePageState extends State<HomePage>
   int _selectedIndex = 0;
   // 🔹 Use ValueNotifier for message counter to avoid UI rebuilds
   late ValueNotifier<int> _messageCountNotifier;
-  int _newOrders = 0;
+  // 🔹 Use ValueNotifier for pending orders counter
+  late ValueNotifier<int> _pendingOrdersCountNotifier;
   bool _constantsLoaded = false;
   StreamSubscription? _ordersSubscription;
   final Completer<void> _locationServiceCompleter = Completer<void>();
@@ -74,7 +74,7 @@ class _HomePageState extends State<HomePage>
   final ValueNotifier<Map<String, dynamic>> _connectionStatusNotifier =
       ValueNotifier({'network': true, 'firestore': true, 'riogas': true});
   bool showPopup = false; // Add a flag for showing the popup
-  late Box pedidosBox;
+  Box? pedidosBox;
   bool _isFirstLoad = true; // Flag to suppress notifications on first load
   StreamSubscription<bool>? _gpsSubscription;
   final StreamController<bool> _gpsStreamController =
@@ -100,6 +100,8 @@ class _HomePageState extends State<HomePage>
 
     // 🔹 Initialize message counter notifier
     _messageCountNotifier = ValueNotifier<int>(0);
+    // 🔹 Initialize pending orders counter notifier
+    _pendingOrdersCountNotifier = ValueNotifier<int>(0);
 
     _blinkController = AnimationController(
       duration: const Duration(seconds: 1),
@@ -110,7 +112,8 @@ class _HomePageState extends State<HomePage>
     _sesionesStream = _firebaseService.getSesionesStream();
 
     _initializeHomePage();
-    _initPedidosBoxListener();
+    //_initPedidosBoxListener(); // Reemplazado por el nuevo método reactivo
+    _setupPedidosBoxReactiveCounter(); // <-- Nuevo método reactivo
     _initMensajesBoxListener(); // Add this to initialize the listener
 
     // 🔹 Resetear la bandera para futuros chequeos de sesión
@@ -191,6 +194,8 @@ class _HomePageState extends State<HomePage>
   void dispose() {
     _blinkController.dispose(); // Dispose the animation controller
     _messageCountNotifier.dispose(); // 🔹 Dispose message counter notifier
+    _pendingOrdersCountNotifier
+        .dispose(); // 🔹 Dispose pending orders counter notifier
     _counterService.stopCounter(); // Stop the counter when disposing
     _ordersSubscription?.cancel();
     _locationServiceCompleter.future.then((_) {
@@ -272,55 +277,47 @@ class _HomePageState extends State<HomePage>
   }
 
   void _initPedidosBoxListener() async {
-    pedidosBox = await openBoxSafe('pedidosBox');
-    if (pedidosBox == null) return;
-    pedidosBox.watch().listen((BoxEvent event) {
-      if (event.key != null) {
-        int pedidoId;
+    final box = await openBoxSafe('pedidosBox');
+    if (box == null) return;
+    setState(() {
+      pedidosBox = box;
+    });
+    // 🔹 Initialize pending orders counter from existing data (No Leído)
+    int initialCount = _countPedidosNoLeidos(box);
+    _pendingOrdersCountNotifier.value = initialCount;
 
-        // Si la clave es un int, usamos directamente; si es String, intentamos parsear
-        if (event.key is int) {
-          pedidoId = event.key as int;
-        } else {
-          try {
-            pedidoId = int.parse(event.key.toString());
-          } catch (_) {
-            // print('❌ Clave no válida: ${event.key}');
-            return;
-          }
-        }
+    // 🔹 Listen for changes in pedidosBox and update the notifier
+    box.watch().listen((event) {
+      int pendingCount = _countPedidosNoLeidos(box);
+      _pendingOrdersCountNotifier.value = pendingCount;
+    });
+    // Ya no es necesario agregar listeners manuales aquí, la lógica de sincronización está centralizada en PersistentStreamManager
+  }
 
-        String _getPedidoEstado(int pedidoId) {
-          var pedidoEstado = pedidosBox.get(pedidoId);
-          if (pedidoEstado == null) {
-            return 'No Leído';
-          } else if (pedidoEstado == 'Procesando') {
-            return 'Procesando';
-          } else if (pedidoEstado == 'Enviando') {
-            return 'Enviando';
-          }
-          return '';
-        }
-
-        String estado = _getPedidoEstado(pedidoId);
-        // print('🔔 Cambio en pedido $pedidoId. Nuevo estado: $estado');
-
-        // Podés hacer algo dependiendo del estado
-        switch (estado) {
-          case 'Procesando':
-            // print('📦 Pedido $pedidoId está siendo procesado.');
-            _newOrders--;
-            break;
-          case 'Enviando':
-            // print('🚚 Pedido $pedidoId se está enviando.');
-            break;
-          case 'No Leído':
-            // print('🕵️ Pedido $pedidoId aún no ha sido leído.');
-            break;
-          default:
-          // print('⚠️ Estado desconocido para pedido $pedidoId.');
-        }
+// Helper to count pedidos "No Leído" (same logic as PendingOrdersPage)
+  int _countPedidosNoLeidos(Box box) {
+    int count = 0;
+    for (var key in box.keys) {
+      var pedidoEstado = box.get(key);
+      if (pedidoEstado == null || pedidoEstado == 'No Leído') {
+        count++;
       }
+    }
+    return count;
+  }
+
+  // Refresca el contador de pedidos no leídos automáticamente cuando cambie Hive
+  void _setupPedidosBoxReactiveCounter() async {
+    final box = await openBoxSafe('pedidosBox');
+    if (box == null) return;
+    setState(() {
+      pedidosBox = box;
+    });
+    // Inicializa el contador con el valor actual
+    _pendingOrdersCountNotifier.value = _countPedidosNoLeidos(box);
+    // Escucha cambios en Hive y actualiza el contador reactivo
+    box.listenable().addListener(() {
+      _pendingOrdersCountNotifier.value = _countPedidosNoLeidos(box);
     });
   }
 
@@ -354,40 +351,12 @@ class _HomePageState extends State<HomePage>
   }
 
   void _listenToMessages() async {
+    // Ya no se agrega manualmente ningún listener aquí. El ValueListenableBuilder en el build() se encarga de reaccionar a los cambios.
+    // Si necesitas inicializar datos de Hive, hazlo aquí una sola vez si es necesario.
+    // La lógica de actualización de Hive y procesamiento de mensajes debe estar en PersistentStreamManager o en los listeners de Hive.
     var mensajesBox = await openBoxSafe('mensajesBox');
     if (mensajesBox == null) return;
-
-    _streamManager.getMensajesStream().listen((messages) async {
-      // 🔹 Fast path: Only handle message counting and Hive updates
-      List<DocumentSnapshot> newMessages = [];
-
-      for (var message in messages) {
-        var messageData = message.data() as Map<String, dynamic>?;
-
-        // Handle message visibility and Hive updates quickly
-        if (!mensajesBox.containsKey(message.id) &&
-            (messageData == null ||
-                messageData['VisibleEnApp'] == null ||
-                messageData['VisibleEnApp'] == 'S')) {
-          await mensajesBox.put(message.id, 'Descargado');
-          newMessages.add(message); // Queue for background processing
-        } else if (messageData != null &&
-            messageData['VisibleEnApp'] == 'N' &&
-            mensajesBox.containsKey(message.id)) {
-          await mensajesBox.put(message.id, 'Leido');
-        }
-      }
-
-      // 🔹 Update counter immediately using ValueNotifier (no setState, no UI rebuild)
-      int currentCount =
-          mensajesBox.values.where((estado) => estado == 'Descargado').length;
-      _messageCountNotifier.value = currentCount;
-
-      // 🔹 Process expensive operations in background without blocking UI
-      if (newMessages.isNotEmpty) {
-        _processNewMessagesInBackground(newMessages);
-      }
-    });
+    // Lógica de inicialización si es necesaria, pero sin listeners manuales.
   }
 
   // 🔹 Separate method for expensive operations that run in background
@@ -464,40 +433,8 @@ class _HomePageState extends State<HomePage>
   }
 
   void _listenToPendingOrders() {
-    _ordersSubscription =
-        _streamManager.getPedidosStream().listen((orders) async {
-      setState(() {
-        _newOrders = orders.where((order) {
-          var orderData = order.data() as Map<String, dynamic>?;
-          int pedidoId = orderData?['id'] ?? -1;
-          var pedidoEstado = pedidosBox.get(pedidoId);
-          return pedidoEstado != 'Procesando';
-        }).length;
-      });
-      for (var order in orders) {
-        var pedido = order.data() as Map<String, dynamic>;
-        int pedidoId = pedido['id'] ?? -1;
-        var pedidosBox = await openBoxSafe('pedidosBox');
-        if (pedidosBox == null) return;
-        if (!pedidosBox.containsKey(pedidoId.toString())) {
-          await pedidosBox.put(
-            pedidoId.toString(),
-            'Descargado',
-          );
-          // Suppress notifications on first load
-          /*_showNotification(
-            'Nueva Visita',
-            'Tienes un nueva visita pendiente.',
-          );*/
-
-          // Call the download and read routine here
-          await _callDescargaLecturaPedidos(pedido, pedidoId);
-        }
-      }
-    });
-
-    // 🔗 Asignar también a la global
-    ordersSubscription = _ordersSubscription;
+    // Ya no se agrega manualmente ningún listener aquí. El ValueListenableBuilder en el build() se encarga de reaccionar a los cambios.
+    // Si necesitas inicializar datos de Hive, hazlo aquí una sola vez si es necesario.
   }
 
   Future<void> _callDescargaLecturaPedidos(
@@ -879,31 +816,21 @@ class _HomePageState extends State<HomePage>
           ),
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: StreamBuilder<DocumentSnapshot?>(
-              // 🔹 FIX: Use StreamManager instead of direct Firebase service
-              stream: _streamManager.getMovilStream(),
-              builder: (context, movilSnapshot) {
-                if (!movilSnapshot.hasData) {
+            child: ValueListenableBuilder<DocumentSnapshot?>(
+              valueListenable: _streamManager.movilNotifier,
+              builder: (context, movilSnapshot, child) {
+                if (movilSnapshot == null) {
                   return Center(child: CircularProgressIndicator());
                 }
-
                 try {
-                  var movilDoc = movilSnapshot.data!;
-                  var movilData = movilDoc.data() as Map<String, dynamic>;
+                  var movilData = movilSnapshot.data() as Map<String, dynamic>;
                   int estadoNro = movilData['EstadoNro'];
-                  // print('EstadoNro from Movil: $estadoNro'); // Log estadoNro
-
-                  return StreamBuilder<List<Map<String, dynamic>>>(
-                    // 🔹 FIX: Use StreamManager instead of direct Firebase service
-                    stream: _streamManager.getSubEstadoMovilesStream(),
-                    builder: (context, subEstadoSnapshot) {
-                      if (!subEstadoSnapshot.hasData) {
+                  return ValueListenableBuilder<List<Map<String, dynamic>>>(
+                    valueListenable: _streamManager.subEstadoMovilesNotifier,
+                    builder: (context, subEstados, child) {
+                      if (subEstados.isEmpty) {
                         return Center(child: CircularProgressIndicator());
                       }
-
-                      var subEstados = subEstadoSnapshot.data!;
-                      // print('SubEstados fetched: $subEstados'); // Log subEstados
-
                       var subEstado = subEstados.firstWhere(
                         (element) =>
                             int.tryParse(element['SubEstadoCod'].toString()) ==
@@ -913,11 +840,6 @@ class _HomePageState extends State<HomePage>
                           'CodColor': '000000',
                         },
                       );
-
-                      // print(
-                      //   'Matched SubEstado: $subEstado',
-                      // ); // Log matched subEstado
-
                       String estadoText = subEstado['SubEstadoDesc'];
                       String codColor = subEstado['CodColor'];
                       List<String> rgb = codColor.split(',');
@@ -931,7 +853,6 @@ class _HomePageState extends State<HomePage>
                               .join()
                           : '000000';
                       Color estadoColor = Color(int.parse('0xff$hexColor'));
-
                       return GestureDetector(
                         onTap: () {
                           _handleEstadoClick(
@@ -961,7 +882,6 @@ class _HomePageState extends State<HomePage>
                     },
                   );
                 } catch (e) {
-                  // print('Error parsing movil data: $e');
                   return Text('Error al cargar el estado del móvil.');
                 }
               },
@@ -1069,38 +989,44 @@ class _HomePageState extends State<HomePage>
         },
       ),
       bottomNavigationBar: ValueListenableBuilder<int>(
-        valueListenable: _messageCountNotifier,
-        builder: (context, messageCount, child) {
-          return BottomNavigationBar(
-            items: [
-              _buildBottomNavigationBarItem(
-                  Icons.list, 'Pendientes', _newOrders),
-              //_buildBottomNavigationBarItem(Icons.check_circle, 'Finalizados', 0),
-              _buildBottomNavigationBarItem(Icons.map, 'Mapa', 0),
-              _buildBottomNavigationBarItem(
-                Icons.message,
-                'Mensajes',
-                messageCount, // 🔹 Use ValueNotifier value instead of _unreadMessages
-              ),
-              _buildBottomNavigationBarItem(Icons.settings, 'Configuración', 0),
-            ],
-            currentIndex: _selectedIndex,
-            selectedItemColor: Colors.blue,
-            unselectedItemColor: Colors.grey,
-            onTap: _onItemTapped,
-            backgroundColor: Colors.white,
-            type: BottomNavigationBarType.fixed,
-            elevation: 10,
-            selectedLabelStyle: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 10,
-            ),
-            unselectedLabelStyle: TextStyle(
-              fontWeight: FontWeight.normal,
-              fontSize: 10,
-            ),
-            showSelectedLabels: true,
-            showUnselectedLabels: false,
+        valueListenable: _pendingOrdersCountNotifier,
+        builder: (context, pendingOrdersCount, child) {
+          return ValueListenableBuilder<int>(
+            valueListenable: _messageCountNotifier,
+            builder: (context, messageCount, child) {
+              return BottomNavigationBar(
+                items: [
+                  _buildBottomNavigationBarItem(
+                      Icons.list, 'Pendientes', pendingOrdersCount),
+                  //_buildBottomNavigationBarItem(Icons.check_circle, 'Finalizados', 0),
+                  _buildBottomNavigationBarItem(Icons.map, 'Mapa', 0),
+                  _buildBottomNavigationBarItem(
+                    Icons.message,
+                    'Mensajes',
+                    messageCount, // 🔹 Use ValueNotifier value instead of _unreadMessages
+                  ),
+                  _buildBottomNavigationBarItem(
+                      Icons.settings, 'Configuración', 0),
+                ],
+                currentIndex: _selectedIndex,
+                selectedItemColor: Colors.blue,
+                unselectedItemColor: Colors.grey,
+                onTap: _onItemTapped,
+                backgroundColor: Colors.white,
+                type: BottomNavigationBarType.fixed,
+                elevation: 10,
+                selectedLabelStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                ),
+                unselectedLabelStyle: TextStyle(
+                  fontWeight: FontWeight.normal,
+                  fontSize: 10,
+                ),
+                showSelectedLabels: true,
+                showUnselectedLabels: false,
+              );
+            },
           );
         },
       ),

@@ -2,10 +2,83 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'firebase_service.dart';
+import 'package:hive/hive.dart';
 
 /// Optimized stream manager with persistent listeners and ValueNotifiers
 /// This eliminates the constant creation/removal of listeners
 class PersistentStreamManager {
+  // --- Centralized Hive sync for mensajes and pedidos ---
+  bool _hiveSyncInitialized = false;
+  void initializeHiveSync() {
+    if (_hiveSyncInitialized) return;
+    _hiveSyncInitialized = true;
+    // Escucha cambios en mensajesNotifier y sincroniza con Hive
+    _mensajesNotifier.addListener(() async {
+      final mensajes = _mensajesNotifier.value;
+      var mensajesBox = await _openBoxSafe('mensajesBox');
+      if (mensajesBox == null) return;
+      List<DocumentSnapshot> nuevos = [];
+      for (var message in mensajes) {
+        var data = message.data() as Map<String, dynamic>?;
+        if (!mensajesBox.containsKey(message.id) &&
+            (data == null ||
+                data['VisibleEnApp'] == null ||
+                data['VisibleEnApp'] == 'S')) {
+          await mensajesBox.put(message.id, 'Descargado');
+          nuevos.add(message);
+        } else if (data != null &&
+            data['VisibleEnApp'] == 'N' &&
+            mensajesBox.containsKey(message.id)) {
+          await mensajesBox.put(message.id, 'Leido');
+        }
+      }
+      if (nuevos.isNotEmpty) {
+        print(
+            '🟢 [PersistentStreamManager] Nuevos mensajes descargados: ${nuevos.length}');
+      }
+    });
+    // Escucha cambios en pedidosNotifier y sincroniza con Hive
+    _pedidosNotifier.addListener(() async {
+      final pedidos = _pedidosNotifier.value;
+      var pedidosBox = await _openBoxSafe('pedidosBox');
+      if (pedidosBox == null) return;
+      List<DocumentSnapshot> nuevos = [];
+      for (var pedido in pedidos) {
+        var data = pedido.data() as Map<String, dynamic>?;
+        int? pedidoId;
+        if (data != null && data.containsKey('id')) {
+          pedidoId = data['id'] is int
+              ? data['id']
+              : int.tryParse(data['id'].toString());
+        }
+        if (pedidoId == null) continue;
+        if (!pedidosBox.containsKey(pedidoId)) {
+          await pedidosBox.put(pedidoId, 'No Leído');
+          nuevos.add(pedido);
+        }
+        // Si el pedido ya está en Hive, no lo sobreescribimos aquí (solo el usuario lo marca como leído o cambia de estado)
+      }
+      if (nuevos.isNotEmpty) {
+        print(
+            '🟢 [PersistentStreamManager] Nuevos pedidos sincronizados: ${nuevos.length}');
+      }
+    });
+    print(
+        '✅ [PersistentStreamManager] Hive sync for mensajes y pedidos activado');
+  }
+
+  Future<dynamic> _openBoxSafe(String boxName) async {
+    try {
+      if (!await Future.value(Hive.isBoxOpen(boxName))) {
+        return await Hive.openBox(boxName);
+      }
+      return Hive.box(boxName);
+    } catch (e) {
+      print('❌ [PersistentStreamManager] Error abriendo la caja $boxName: $e');
+      return null;
+    }
+  }
+
   static final PersistentStreamManager _instance =
       PersistentStreamManager._internal();
   factory PersistentStreamManager() => _instance;

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/firebase_service.dart';
-import '../services/stream_manager.dart'; // Import StreamManager // Asegúrate de usar la ruta correcta
+import '../services/persistent_stream_manager.dart';
 import '../services/pending_orders_diagnostic.dart'; // Add diagnostic import
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'order_detail_page.dart'; // Importa la nueva página de detalles
 import 'dart:async';
 import '../services/riogas_service.dart'; // Import the RioGasService
@@ -18,13 +19,13 @@ class PendingOrdersPage extends StatefulWidget {
 
 class _PendingOrdersPageState extends State<PendingOrdersPage> {
   final FirebaseService _firebaseService = FirebaseService();
-  final StreamManager _streamManager = StreamManager(); // Add StreamManager
+  final PersistentStreamManager _streamManager = PersistentStreamManager();
   List<String> _readOrderIds = [];
   int _orderCount = 0;
   int _newOrderCount = 0;
   late Stream<List<DocumentSnapshot>> _ordersStream;
   late Box constantBox;
-  late Box pedidosBox;
+  Box? pedidosBox;
   late String username = '';
   late String deviceId = '';
   late Box sesionBox; // Declare the sesionBox variable
@@ -39,27 +40,19 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     super.initState();
     print('🔧 PendingOrdersPage: initState() called - Instance: ${hashCode}');
     _initializeFirebase();
-    _ordersStream = _streamManager.getPedidosStream();
-    print(
-        '🔧 PendingOrdersPage: Stream obtained, hashCode: ${_ordersStream.hashCode}');
     _initializeHive().then((_) {
       print('🔧 PendingOrdersPage: Hive initialization completed');
-      // Don't call setState here - it causes stream recreation
       username = constantBox.get('username', defaultValue: '');
       deviceId = constantBox.get('DeviceID', defaultValue: '');
       movilId = constantBox.get('MovilID', defaultValue: 0);
-      // Remove setState() - not needed since these values aren't used in build()
-      // if (mounted) {
-      //   setState(() {}); // This was causing StreamBuilder to lose state
-      // }
     });
+    _initPersistentStreams();
+  }
 
-    // Remove problematic Timer that causes unnecessary rebuilds
-    // _hiveStateChecker = Timer.periodic(Duration(seconds: 30), (_) {
-    //   if (mounted) {
-    //     setState(() {}); // This was causing StreamBuilder to lose state
-    //   }
-    // });
+  Future<void> _initPersistentStreams() async {
+    await _streamManager.initialize();
+    print('🔄 [PendingOrdersPage] PersistentStreamManager initialized');
+    // No need to add a listener here, as the stream manager handles it);
   }
 
   @override
@@ -75,8 +68,12 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
   Future<void> _initializeHive() async {
     constantBox = await Hive.openBox('constantBox');
-    pedidosBox = await Hive.openBox('pedidosBox');
+    final box = await Hive.openBox('pedidosBox');
+    setState(() {
+      pedidosBox = box;
+    });
     sesionBox = await Hive.openBox('sessionBox');
+    // Ya no es necesario inicializar ni sincronizar pedidosBox aquí, la lógica está centralizada en PersistentStreamManager
   }
 
   Map<String, Color> colorMap = {
@@ -142,6 +139,11 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
       return; // Exit the function if GPS is not enabled
     }
 
+    // Marcar como leído en Hive antes de navegar
+    if (pedidosBox != null) {
+      await pedidosBox!.put(pedidoId, 'Leído');
+    }
+
     // Navegar inmediatamente
     Navigator.push(
       context,
@@ -159,28 +161,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         ),
       ),
     );
-
-    // Realizar operaciones en segundo plano
-    Future.microtask(() async {
-      try {
-        if (pedidosBox.isOpen) {
-          var pedidoEstado = pedidosBox.get(pedidoId);
-          if (pedidoEstado != 'Leido') {
-            await _callDescargaLecturaPedidos(pedido, pedidoId);
-            await pedidosBox.put(pedidoId, 'Leido');
-          }
-        } else {
-          debugPrint('⚠️ pedidosBox is not open. Skipping operation.');
-        }
-      } catch (e, stackTrace) {
-        debugPrint('❌ Error in processing pedidoId $pedidoId: $e');
-        debugPrint('StackTrace: $stackTrace');
-      }
-    });
-
-    //if (mounted) {
-    //  setState(() {}); // Actualiza el estado solo si el widget sigue montado
-    //}
+    // La lógica de marcar como leído y sincronizar con Hive está centralizada en PersistentStreamManager
+    // Si necesitas lógica adicional, implementa solo la llamada a RioGasService aquí si corresponde
   }
 
   Future<void> _callDescargaLecturaPedidos(
@@ -245,10 +227,10 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   @override
   Widget build(BuildContext context) {
     print('🔧 PendingOrdersPage: build() called - Instance: ${hashCode}');
-    print('🔧 PendingOrdersPage: Stream hashCode: ${_ordersStream.hashCode}');
 
-    if (!Hive.isBoxOpen('pedidosBox')) {
-      print('🔧 PendingOrdersPage: pedidosBox not open, showing loading');
+    if (pedidosBox == null) {
+      print(
+          '🔧 PendingOrdersPage: pedidosBox not initialized, showing loading');
       return Scaffold(
         appBar: AppBar(title: Text('Pedidos Pendientes (Cargando...)')),
         body: Center(child: CircularProgressIndicator()),
@@ -259,340 +241,292 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: StreamBuilder<List<DocumentSnapshot>>(
-          stream: _ordersStream,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Text('Visitas (Cargando...)');
-            } else if (snapshot.hasError) {
-              return Text('Visitas (Error)');
-            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Text('Visitas (0)');
-            } else {
-              _orderCount = snapshot.data!.where((order) {
-                var orderData = order.data() as Map<String, dynamic>?;
-                int pedidoId = orderData?['id'] ?? -1;
-                var pedidoEstado = pedidosBox.get(pedidoId);
-                return pedidoEstado != 'Procesando';
-              }).length;
-
-              int newOrderCount = snapshot.data!.where((order) {
-                var orderData = order.data() as Map<String, dynamic>?;
-                int pedidoId = orderData?['id'] ?? -1;
-                var pedidoEstado = pedidosBox.get(pedidoId);
-                return (orderData == null ||
-                        !orderData.containsKey('FechaHoraLeido') ||
-                        orderData['FechaHoraLeido'] == null) &&
-                    pedidoEstado != 'Procesando';
-              }).length;
-
-              return Text('Visitas ($_orderCount)');
-            }
+        title: ValueListenableBuilder<List<DocumentSnapshot>>(
+          valueListenable: _streamManager.pedidosNotifier,
+          builder: (context, pedidos, child) {
+            final count = pedidos.where((order) {
+              var orderData = order.data() as Map<String, dynamic>?;
+              int pedidoId = orderData?['id'] ?? -1;
+              var pedidoEstado = pedidosBox!.get(pedidoId);
+              return pedidoEstado != 'Procesando';
+            }).length;
+            return Text('Visitas ($count)');
           },
         ),
       ),
-      body: StreamBuilder<List<DocumentSnapshot>>(
-        stream: _ordersStream,
-        builder: (context, snapshot) {
-          // Add detailed logging for debugging
-          print('🔍 PendingOrders StreamBuilder state:');
-          print('   Widget Instance: ${hashCode}');
-          print('   Stream hashCode: ${_ordersStream.hashCode}');
-          print('   Connection: ${snapshot.connectionState}');
-          print('   Has error: ${snapshot.hasError}');
-          print('   Has data: ${snapshot.hasData}');
-          if (snapshot.hasData) {
-            print('   Data length: ${snapshot.data!.length}');
-            print(
-                '   Sample data: ${snapshot.data!.isNotEmpty ? snapshot.data!.first.id : "no data"}');
-          }
-          if (snapshot.hasError) {
-            print('   Error: ${snapshot.error}');
-          }
-
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Cargando pedidos...'),
-                  SizedBox(height: 8),
-                  Text(
-                      'Si esto toma mucho tiempo, presiona el botón de diagnóstico',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ),
-            );
-          } else if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error, size: 64, color: Colors.red),
-                  SizedBox(height: 16),
-                  Text('Error al cargar pedidos'),
-                  SizedBox(height: 8),
-                  Text('${snapshot.error}', style: TextStyle(fontSize: 12)),
-                  SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () async {
-                      print('🔧 Running diagnostics...');
-                      await PendingOrdersDiagnostic
-                          .diagnosePendingOrdersIssue();
-                    },
-                    child: Text('Ejecutar Diagnóstico'),
-                  ),
-                ],
-              ),
-            );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.inbox, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No hay pedidos pendientes.'),
-                  SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () async {
-                      print('🔧 Checking why no orders found...');
-                      await PendingOrdersDiagnostic
-                          .diagnosePendingOrdersIssue();
-                    },
-                    child: Text('Verificar Configuración'),
-                  ),
-                ],
-              ),
-            );
-          } else {
-            var orders = snapshot.data!;
-
-            return ListView.builder(
-              itemCount: orders.length,
-              itemBuilder: (context, index) {
-                var pedido = orders[index].data() as Map<String, dynamic>;
-                int pedidoId = pedido['id'] ?? -1;
-
-                // Skip rendering the card if the order state is "Procesando"
-                if (_getPedidoEstado(pedidoId) == 'Procesando') {
-                  return SizedBox.shrink();
-                }
-
-                String tipo = pedido['Tipo'] ?? 'Pedidos';
-                String direccion = pedido['ClienteDireccion'] ?? 'Desconocida';
-                String direccionCorta = direccion.length > 20
-                    ? direccion.substring(0, 20) + '...'
-                    : direccion;
-
-                // Determinar el estado del pedido y la etiqueta correspondiente
-                String etiquetaTexto = _getPedidoEstado(pedidoId);
-                Color etiquetaColor = _getPedidoEstadoColor(pedidoId);
-
-                // Depuración: imprimir el valor de urltelefono
-                // if (pedido.containsKey('urltelefono')) {
-                //   print('urltelefono: ${pedido['urltelefono']}');
-                // }
-
-                return GestureDetector(
-                  onTap: () async {
-                    // Check if GPS is enabled
-                    bool isLocationServiceEnabled =
-                        await Geolocator.isLocationServiceEnabled();
-                    if (!isLocationServiceEnabled) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Por favor, active el GPS para interactuar con los pedidos.',
-                          ),
-                        ),
-                      );
-                      return; // Exit if GPS is not enabled
+      body: pedidosBox == null
+          ? Center(child: CircularProgressIndicator())
+          : ValueListenableBuilder(
+              valueListenable:
+                  (Hive.box('pedidosBox') as Box<dynamic>).listenable(),
+              builder: (context, box, _) {
+                return ValueListenableBuilder<List<DocumentSnapshot>>(
+                  valueListenable: _streamManager.pedidosNotifier,
+                  builder: (context, pedidos, child) {
+                    // Add detailed logging for debugging
+                    print('🔍 PendingOrders pedidosNotifier state:');
+                    print('   Widget Instance: ${hashCode}');
+                    print('   Has data: ${pedidos.isNotEmpty}');
+                    if (pedidos.isNotEmpty) {
+                      print('   Data length: ${pedidos.length}');
+                      print(
+                          '   Sample data: ${pedidos.isNotEmpty ? pedidos.first.id : "no data"}');
                     }
 
-                    if (pedido.containsKey('DetalleHTML') &&
-                        pedido['DetalleHTML'].isNotEmpty) {
-                      await _markAsReadAndNavigate(pedido, pedidoId);
+                    if (pedidos.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.inbox, size: 64, color: Colors.grey),
+                            SizedBox(height: 16),
+                            Text('No hay pedidos pendientes.'),
+                            SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () async {
+                                print('🔧 Checking why no orders found...');
+                                await PendingOrdersDiagnostic
+                                    .diagnosePendingOrdersIssue();
+                              },
+                              child: Text('Verificar Configuración'),
+                            ),
+                          ],
+                        ),
+                      );
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('No hay detalles disponibles')),
+                      var orders = pedidos;
+
+                      return ListView.builder(
+                        itemCount: orders.length,
+                        itemBuilder: (context, index) {
+                          var pedido =
+                              orders[index].data() as Map<String, dynamic>;
+                          int pedidoId = pedido['id'] ?? -1;
+
+                          // Skip rendering the card if the order state is "Procesando"
+                          if (_getPedidoEstado(pedidoId) == 'Procesando') {
+                            return SizedBox.shrink();
+                          }
+
+                          String tipo = pedido['Tipo'] ?? 'Pedidos';
+                          String direccion =
+                              pedido['ClienteDireccion'] ?? 'Desconocida';
+                          String direccionCorta = direccion.length > 20
+                              ? direccion.substring(0, 20) + '...'
+                              : direccion;
+
+                          // Determinar el estado del pedido y la etiqueta correspondiente
+                          String etiquetaTexto = _getPedidoEstado(pedidoId);
+                          Color etiquetaColor = _getPedidoEstadoColor(pedidoId);
+
+                          return GestureDetector(
+                            onTap: () async {
+                              // Check if GPS is enabled
+                              bool isLocationServiceEnabled =
+                                  await Geolocator.isLocationServiceEnabled();
+                              if (!isLocationServiceEnabled) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Por favor, active el GPS para interactuar con los pedidos.'),
+                                  ),
+                                );
+                                return; // Exit if GPS is not enabled
+                              }
+
+                              if (pedido.containsKey('DetalleHTML') &&
+                                  pedido['DetalleHTML'].isNotEmpty) {
+                                await _markAsReadAndNavigate(pedido, pedidoId);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content:
+                                          Text('No hay detalles disponibles')),
+                                );
+                              }
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                                vertical: 4.0,
+                              ),
+                              child: FutureBuilder<bool>(
+                                future: Geolocator.isLocationServiceEnabled(),
+                                builder: (context, snapshot) {
+                                  bool isLocationServiceEnabled =
+                                      snapshot.data ?? false;
+                                  if (isLocationServiceEnabled) {
+                                    textoPermisosGPS =
+                                        'Bloqueado - Sin GPS Activado';
+                                  }
+                                  // Check for changes in sessionBox for _locationPermissionDenied
+                                  if (sesionBox.isOpen) {
+                                    bool locationPermissionDenied = sesionBox
+                                        .get('_locationPermissionDenied',
+                                            defaultValue: true);
+                                    if (locationPermissionDenied) {
+                                      isLocationServiceEnabled = false;
+                                      textoPermisosGPS =
+                                          'Bloqueado - Sin Permisos de GPS activos.';
+                                    }
+                                  }
+
+                                  return Card(
+                                    color: !isLocationServiceEnabled
+                                        ? Colors
+                                            .grey // Gray color if GPS is disabled
+                                        : (_getPedidoEstado(pedidoId) ==
+                                                'No Leído'
+                                            ? (tipo == 'Services'
+                                                ? Colors.deepPurpleAccent
+                                                : Colors.lightBlue)
+                                            : (tipo == 'Services'
+                                                ? Colors.deepPurple
+                                                    .withOpacity(0.7)
+                                                : Colors.blueGrey)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                    ),
+                                    elevation: 5,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          SizedBox(height: 4.0),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                'Número: $pedidoId',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                  fontSize: 14.0,
+                                                ),
+                                              ),
+                                              SizedBox(width: 8.0),
+                                              if (isLocationServiceEnabled)
+                                                Container(
+                                                  padding: EdgeInsets.symmetric(
+                                                    horizontal: 6.0,
+                                                    vertical: 2.0,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: etiquetaColor,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8.0),
+                                                  ),
+                                                  child: etiquetaTexto
+                                                          .isNotEmpty
+                                                      ? Text(
+                                                          etiquetaTexto,
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 12.0,
+                                                          ),
+                                                        )
+                                                      : SizedBox.shrink(),
+                                                ),
+                                              Spacer(),
+                                              Icon(
+                                                tipo == 'Services'
+                                                    ? Icons.build
+                                                    : Icons.local_shipping,
+                                                color: Colors.white,
+                                                size: 20.0,
+                                              ),
+                                            ],
+                                          ),
+                                          SizedBox(height: 4.0),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                'Dirección: ${!isLocationServiceEnabled ? textoPermisosGPS : direccionCorta}',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12.0,
+                                                ),
+                                              ),
+                                              Spacer(),
+                                              if (isLocationServiceEnabled &&
+                                                  pedido.containsKey('WazeURL'))
+                                                Container(
+                                                  child: Icon(
+                                                    Icons.location_on,
+                                                    color: Colors.white,
+                                                    size: 20.0,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          SizedBox(height: 4.0),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                tipo == 'Pedidos'
+                                                    ? 'Servicio: ${!isLocationServiceEnabled ? textoPermisosGPS : (pedido['ServicioNombre'] ?? 'Desconocido')}'
+                                                    : 'Defecto: ${!isLocationServiceEnabled ? textoPermisosGPS : (pedido['Defecto'] ?? 'Desconocido')}',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12.0,
+                                                ),
+                                              ),
+                                              Spacer(),
+                                              if (isLocationServiceEnabled &&
+                                                  pedido.containsKey('Precio'))
+                                                Text(
+                                                  'Importe: ${pedido['Precio']}',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 12.0,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          if (isLocationServiceEnabled &&
+                                              pedido.containsKey('PedidoObs') &&
+                                              pedido['PedidoObs'].isNotEmpty)
+                                            Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                SizedBox(height: 4.0),
+                                                Text(
+                                                  'Observaciones: ${pedido['PedidoObs']}',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 12.0,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          SizedBox(height: 4.0),
+                                          if (isLocationServiceEnabled)
+                                            Row(
+                                              children: [
+                                                _buildMinutesLeftStream(pedido),
+                                                SizedBox(width: 8.0),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          );
+                        },
                       );
                     }
                   },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8.0,
-                      vertical: 4.0,
-                    ),
-                    child: FutureBuilder<bool>(
-                      future: Geolocator.isLocationServiceEnabled(),
-                      builder: (context, snapshot) {
-                        bool isLocationServiceEnabled = snapshot.data ?? false;
-                        if (isLocationServiceEnabled) {
-                          textoPermisosGPS = 'Bloqueado - Sin GPS Activado';
-                        }
-                        // Check for changes in sessionBox for _locationPermissionDenied
-                        if (sesionBox.isOpen) {
-                          bool locationPermissionDenied = sesionBox.get(
-                              '_locationPermissionDenied',
-                              defaultValue: true);
-                          if (locationPermissionDenied) {
-                            isLocationServiceEnabled = false;
-                            textoPermisosGPS =
-                                'Bloqueado - Sin Permisos de GPS activos.';
-                          }
-                        }
-
-                        return Card(
-                          color: !isLocationServiceEnabled
-                              ? Colors.grey // Gray color if GPS is disabled
-                              : (_getPedidoEstado(pedidoId) == 'No Leído'
-                                  ? (tipo == 'Services'
-                                      ? Colors.deepPurpleAccent
-                                      : Colors.lightBlue)
-                                  : (tipo == 'Services'
-                                      ? Colors.deepPurple.withOpacity(0.7)
-                                      : Colors.blueGrey)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10.0),
-                          ),
-                          elevation: 5,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(height: 4.0),
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Número: $pedidoId',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                        fontSize: 14.0,
-                                      ),
-                                    ),
-                                    SizedBox(width: 8.0),
-                                    if (isLocationServiceEnabled)
-                                      Container(
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 6.0,
-                                          vertical: 2.0,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: etiquetaColor,
-                                          borderRadius: BorderRadius.circular(
-                                            8.0,
-                                          ),
-                                        ),
-                                        child: etiquetaTexto.isNotEmpty
-                                            ? Text(
-                                                etiquetaTexto,
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12.0,
-                                                ),
-                                              )
-                                            : SizedBox.shrink(),
-                                      ),
-                                    Spacer(),
-                                    Icon(
-                                      tipo == 'Services'
-                                          ? Icons.build
-                                          : Icons.local_shipping,
-                                      color: Colors.white,
-                                      size: 20.0,
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 4.0),
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Dirección: ${!isLocationServiceEnabled ? textoPermisosGPS : direccionCorta}',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12.0,
-                                      ),
-                                    ),
-                                    Spacer(),
-                                    if (isLocationServiceEnabled &&
-                                        pedido.containsKey('WazeURL'))
-                                      Container(
-                                        child: Icon(
-                                          Icons.location_on,
-                                          color: Colors.white,
-                                          size: 20.0,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                SizedBox(height: 4.0),
-                                Row(
-                                  children: [
-                                    Text(
-                                      tipo == 'Pedidos'
-                                          ? 'Servicio: ${!isLocationServiceEnabled ? textoPermisosGPS : (pedido['ServicioNombre'] ?? 'Desconocido')}'
-                                          : 'Defecto: ${!isLocationServiceEnabled ? textoPermisosGPS : (pedido['Defecto'] ?? 'Desconocido')}',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12.0,
-                                      ),
-                                    ),
-                                    Spacer(),
-                                    if (isLocationServiceEnabled &&
-                                        pedido.containsKey('Precio'))
-                                      Text(
-                                        'Importe: ${pedido['Precio']}',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12.0,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                if (isLocationServiceEnabled &&
-                                    pedido.containsKey('PedidoObs') &&
-                                    pedido['PedidoObs'].isNotEmpty)
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      SizedBox(height: 4.0),
-                                      Text(
-                                        'Observaciones: ${pedido['PedidoObs']}',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12.0,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                SizedBox(height: 4.0),
-                                if (isLocationServiceEnabled)
-                                  Row(
-                                    children: [
-                                      _buildMinutesLeftStream(pedido),
-                                      SizedBox(width: 8.0),
-                                    ],
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
                 );
               },
-            );
-          }
-        },
-      ),
+            ),
     );
   }
 
@@ -654,19 +588,17 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   }
 
   String _getPedidoEstado(int pedidoId) {
-    var pedidoEstado = pedidosBox.get(pedidoId);
+    if (pedidosBox == null) return '';
+    var pedidoEstado = pedidosBox!.get(pedidoId);
     if (pedidoEstado == null) {
       return 'No Leído';
-    } else if (pedidoEstado == 'Procesando') {
-      return 'Procesando';
-    } else if (pedidoEstado == 'Enviando') {
-      return 'Enviando';
     }
-    return '';
+    return pedidoEstado.toString();
   }
 
   Color _getPedidoEstadoColor(int pedidoId) {
-    var pedidoEstado = pedidosBox.get(pedidoId);
+    if (pedidosBox == null) return Colors.transparent;
+    var pedidoEstado = pedidosBox!.get(pedidoId);
     if (pedidoEstado == null) {
       return Colors.black;
     } else if (pedidoEstado == 'Procesando') {
