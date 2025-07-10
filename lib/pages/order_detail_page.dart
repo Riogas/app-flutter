@@ -2,7 +2,8 @@ import 'package:MoveIT/services/location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/firebase_service.dart'; // Import FirebaseService
+import '../services/firebase_service.dart';
+import '../services/stream_manager.dart'; // Import StreamManager // Import FirebaseService
 import 'package:hive/hive.dart';
 import '../services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa para manejar URLs
@@ -36,6 +37,7 @@ class OrderDetailPage extends StatefulWidget {
 class _OrderDetailPageState extends State<OrderDetailPage> {
   late final WebViewController _controller;
   final FirebaseService _firebaseService = FirebaseService();
+  final StreamManager _streamManager = StreamManager(); // Add StreamManager
   List<Map<String, dynamic>> _subEstados = [];
   String? _selectedSubEstado;
   String? _observaciones = '';
@@ -82,7 +84,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       )
       ..loadHtmlString(_getHtmlWithViewport(widget.detalleHtml));
 
-    _firebaseService.getSubEstadoFinalizacionPedidosStream().listen((
+    _streamManager.getSubEstadoFinalizacionPedidosStream().listen((
       subEstados,
     ) {
       if (mounted) {
@@ -94,7 +96,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _calcularDistanciaDesdeUbicacionCliente(); // llamada a función
 
     // Suscribirse al stream de moviles para obtener DistanciaMaxMtsCumpPedidos
-    _movilStream = _firebaseService.getMovilStream();
+    _movilStream = _streamManager.getMovilStream();
     _movilSubscription = _movilStream!.listen((snapshot) {
       if (snapshot != null && snapshot.exists) {
         final data = snapshot.data() as Map<String, dynamic>?;

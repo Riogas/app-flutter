@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
+import '../services/firebase_service.dart';
+import '../services/stream_manager.dart'; // Import StreamManager // Asegúrate de usar la ruta correcta
 import 'dart:async'; // Import the dart:async package for StreamSubscription
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/riogas_service.dart'; // Import the RioGasService
@@ -19,6 +20,7 @@ class MessagePage extends StatefulWidget {
 
 class _MessagePageState extends State<MessagePage> {
   final FirebaseService _firebaseService = FirebaseService();
+  final StreamManager _streamManager = StreamManager(); // Add StreamManager
   final FirebaseMessaging _firebaseMessaging =
       FirebaseMessaging.instance; // Add FirebaseMessaging instance
   List<String> _readMessageIds = [];
@@ -32,10 +34,12 @@ class _MessagePageState extends State<MessagePage> {
   @override
   void initState() {
     super.initState();
+    print('📨 MessagePage: initState() called');
     _checkLocationService();
     _listenToMessages();
     _setupFCM(); // Initialize FCM for background notifications
     _listenToGPSChanges(); // Listen to GPS status changes
+    print('📨 MessagePage: initState() completed');
   }
 
   @override
@@ -62,21 +66,47 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   void _listenToMessages() async {
-    var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
-    _messageSubscription = _firebaseService.getMensajesStream().listen((
-      messages,
-    ) {
-      if (mounted) {
-        setState(() {
-          _readMessageIds = mensajesBox.keys
-              .cast<String>()
-              .where((key) =>
-                  mensajesBox.get(key) !=
-                  'Borrado') // Exclude messages marked as "Borrado"
-              .toList(); // Use Hive data
-        });
-      }
-    });
+    print('📨 MessagePage: _listenToMessages() started');
+
+    try {
+      var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
+      print('📦 MessagePage: mensajesBox opened successfully');
+
+      print('📨 MessagePage: Getting mensajes stream from StreamManager...');
+      var stream = _streamManager.getMensajesStream();
+      print('📨 MessagePage: Stream obtained, hashCode: ${stream.hashCode}');
+      print('📨 MessagePage: Stream runtime type: ${stream.runtimeType}');
+      print('📨 MessagePage: Setting up listener...');
+
+      _messageSubscription = stream.listen((messages) {
+        print('📨 MessagePage: Stream data received!');
+        print('   Messages count: ${messages.length}');
+        if (messages.isNotEmpty) {
+          print('   Sample message: ${messages.first.id}');
+        }
+
+        if (mounted) {
+          setState(() {
+            _readMessageIds = mensajesBox.keys
+                .cast<String>()
+                .where((key) =>
+                    mensajesBox.get(key) !=
+                    'Borrado') // Exclude messages marked as "Borrado"
+                .toList(); // Use Hive data
+          });
+          print(
+              '📨 MessagePage: UI updated with ${_readMessageIds.length} read messages');
+        } else {
+          print('⚠️ MessagePage: Widget not mounted, skipping setState');
+        }
+      }, onError: (error) {
+        print('❌ MessagePage: Stream error: $error');
+      });
+
+      print('📨 MessagePage: Listener setup completed');
+    } catch (e) {
+      print('❌ MessagePage: Error in _listenToMessages: $e');
+    }
   }
 
   void _setupFCM() {
@@ -365,7 +395,7 @@ class _MessagePageState extends State<MessagePage> {
               IconButton(
                 icon: Icon(Icons.delete, color: Colors.black),
                 onPressed: () {
-                  _firebaseService.getMensajesStream().first.then((messages) {
+                  _streamManager.getMensajesStream().first.then((messages) {
                     _deleteAllMessages(messages);
                   });
                 },
@@ -376,112 +406,182 @@ class _MessagePageState extends State<MessagePage> {
       ),
       body: _isLocationServiceEnabled
           ? StreamBuilder<List<DocumentSnapshot>>(
-              stream: _firebaseService.getMensajesStream(),
+              stream: () {
+                var stream = _streamManager.getMensajesStream();
+                print(
+                    '📨 MessagePage StreamBuilder: Using stream hashCode: ${stream.hashCode}');
+                return stream;
+              }(),
               builder: (context, snapshot) {
+                print('📨 MessagePage StreamBuilder state:');
+                print('   Connection: ${snapshot.connectionState}');
+                print('   Has error: ${snapshot.hasError}');
+                print('   Has data: ${snapshot.hasData}');
+                if (snapshot.hasData) {
+                  print('   Messages length: ${snapshot.data!.length}');
+                }
+                if (snapshot.hasError) {
+                  print('   Error: ${snapshot.error}');
+                }
+
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('Cargando mensajes...'),
+                        SizedBox(height: 8),
+                        Text(
+                          'Si esto toma mucho tiempo, verifica la conexión',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            print(
+                                '🔧 MessagePage: Manual stream diagnostics requested');
+                            _streamManager.printStreamDiagnostics();
+                            _streamManager.printReadSummary();
+                          },
+                          child: Text('Diagnosticar Streams'),
+                        ),
+                      ],
+                    ),
+                  );
                 } else if (snapshot.hasError) {
                   return Center(child: Text('Error: ${snapshot.error}'));
                 } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return Center(child: Text('No hay mensajes disponibles.'));
                 } else {
                   var messages = snapshot.data!;
+                  print('📦 Processing ${messages.length} messages...');
+
                   messages.sort((a, b) {
                     var aDate = (a['FchHoraCreado'] as Timestamp).toDate();
                     var bDate = (b['FchHoraCreado'] as Timestamp).toDate();
                     return bDate.compareTo(aDate);
                   });
-                  return ListView.builder(
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      var mensaje =
-                          messages[index].data() as Map<String, dynamic>;
-                      var mensajesBox = Hive.box('mensajesBox');
-                      bool isRead =
-                          mensajesBox.get(messages[index].id) == 'Leido';
-                      bool isDeleted =
-                          mensajesBox.get(messages[index].id) == 'Borrado';
 
-                      if (isDeleted) {
-                        return SizedBox.shrink(); // Skip rendering this card
+                  return FutureBuilder<Box>(
+                    future: Hive.openBox(
+                        'mensajesBox'), // 🔧 Fix: Ensure box is opened
+                    builder: (context, boxSnapshot) {
+                      if (boxSnapshot.connectionState ==
+                          ConnectionState.waiting) {
+                        print('📦 Waiting for mensajesBox to open...');
+                        return Center(child: CircularProgressIndicator());
+                      }
+                      if (boxSnapshot.hasError) {
+                        print(
+                            '❌ Error opening mensajesBox: ${boxSnapshot.error}');
+                        return Center(
+                            child: Text('Error opening message storage'));
                       }
 
-                      String formattedDate = mensaje['FchHoraCreado'] != null
-                          ? DateFormat('dd/MM/yyyy HH:mm').format(
-                              (mensaje['FchHoraCreado'] as Timestamp).toDate(),
-                            )
-                          : '';
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8.0,
-                          vertical: 4.0,
-                        ),
-                        child: Card(
-                          color: isRead ? Colors.grey[300] : Colors.lightBlue,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10.0),
-                          ),
-                          elevation: 5,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                if (!isRead) // Show the button only if the message is not read
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.mark_email_unread,
-                                      color: Colors
-                                          .white, // Color for unread messages
-                                    ),
-                                    onPressed: () {
-                                      _markMessageAsRead(messages[index]);
-                                    },
-                                  ),
-                                SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        mensaje['Mensaje'] ?? 'Sin contenido',
-                                        style: TextStyle(
-                                          fontWeight: isRead
-                                              ? FontWeight.normal
-                                              : FontWeight.bold,
-                                          color: isRead
-                                              ? Colors.black
-                                              : Colors.white, // Updated color
-                                          fontSize: 16.0,
-                                        ),
-                                      ),
-                                      SizedBox(height: 5),
-                                      Text(
-                                        formattedDate,
-                                        style: TextStyle(
-                                          color: isRead
-                                              ? Colors.black
-                                              : Colors.white,
-                                          fontSize: 12.0,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete,
-                                    color: Colors.black,
-                                  ), // Updated color
-                                  onPressed: () {
-                                    _deleteMessage(messages[index]);
-                                  },
-                                ),
-                              ],
+                      var mensajesBox = boxSnapshot.data!;
+                      print(
+                          '📦 mensajesBox opened successfully with ${mensajesBox.length} entries');
+
+                      return ListView.builder(
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          var mensaje =
+                              messages[index].data() as Map<String, dynamic>;
+                          bool isRead =
+                              mensajesBox.get(messages[index].id) == 'Leido';
+                          bool isDeleted =
+                              mensajesBox.get(messages[index].id) == 'Borrado';
+
+                          if (isDeleted) {
+                            return SizedBox
+                                .shrink(); // Skip rendering this card
+                          }
+
+                          String formattedDate =
+                              mensaje['FchHoraCreado'] != null
+                                  ? DateFormat('dd/MM/yyyy HH:mm').format(
+                                      (mensaje['FchHoraCreado'] as Timestamp)
+                                          .toDate(),
+                                    )
+                                  : '';
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8.0,
+                              vertical: 4.0,
                             ),
-                          ),
-                        ),
+                            child: Card(
+                              color:
+                                  isRead ? Colors.grey[300] : Colors.lightBlue,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10.0),
+                              ),
+                              elevation: 5,
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    if (!isRead) // Show the button only if the message is not read
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.mark_email_unread,
+                                          color: Colors
+                                              .white, // Color for unread messages
+                                        ),
+                                        onPressed: () {
+                                          _markMessageAsRead(messages[index]);
+                                        },
+                                      ),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            mensaje['Mensaje'] ??
+                                                'Sin contenido',
+                                            style: TextStyle(
+                                              fontWeight: isRead
+                                                  ? FontWeight.normal
+                                                  : FontWeight.bold,
+                                              color: isRead
+                                                  ? Colors.black
+                                                  : Colors
+                                                      .white, // Updated color
+                                              fontSize: 16.0,
+                                            ),
+                                          ),
+                                          SizedBox(height: 5),
+                                          Text(
+                                            formattedDate,
+                                            style: TextStyle(
+                                              color: isRead
+                                                  ? Colors.black
+                                                  : Colors.white,
+                                              fontSize: 12.0,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.delete,
+                                        color: Colors.black,
+                                      ), // Updated color
+                                      onPressed: () {
+                                        _deleteMessage(messages[index]);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
                   );

@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
+import '../services/firebase_service.dart';
+import '../services/stream_manager.dart'; // Import StreamManager // Asegúrate de usar la ruta correcta
 import 'package:hive/hive.dart'; // Import Hive for Box
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:MoveIT/pages/pending_orders.dart';
@@ -19,6 +20,7 @@ class _MapPageState extends State<MapPage> {
   bool _locationPermissionDenied = false;
   bool _isMapEnabled = false; // Estado inicial del mapa deshabilitado
   final FirebaseService _firebaseService = FirebaseService();
+  final StreamManager _streamManager = StreamManager(); // Add StreamManager
   List<Marker> _markers = [];
   late Box constantBox;
   late Box pedidosBox;
@@ -154,7 +156,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _getPendingOrders() {
-    _firebaseService.getPedidosStream().listen((orders) {
+    _streamManager.getPedidosStream().listen((orders) {
       setState(() {
         _markers = orders
             .map((order) {

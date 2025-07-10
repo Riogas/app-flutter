@@ -29,6 +29,8 @@ dynamic openBoxSafe(String boxName) async {
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   User? _user;
+  static int streamCount = 0;
+  static Map<String, int> streamCounters = {};
 
   Future<void> initializeFirebase() async {
     //WidgetsFlutterBinding.ensureInitialized();
@@ -113,6 +115,10 @@ class FirebaseService {
   }
 
   void monitorStream<T>(Stream<T> stream, String streamName) {
+    streamCount++;
+    streamCounters[streamName] = (streamCounters[streamName] ?? 0) + 1;
+    print(
+        '🔁 Nueva instancia del stream $streamName (${streamCounters[streamName]} de este tipo, $streamCount total)');
     stream.listen(
       (event) async {
         print('✅ Stream "$streamName" received data: $event');
@@ -135,7 +141,10 @@ class FirebaseService {
         }
       },
       onDone: () async {
-        print('⚠ Stream "$streamName" has been closed.');
+        streamCount--;
+        streamCounters[streamName] = (streamCounters[streamName] ?? 1) - 1;
+        print(
+            '⚠ Stream "$streamName" has been closed. (${streamCounters[streamName]} de este tipo, $streamCount total)');
         var conexionBox = await openBoxSafe('conexionBox');
         if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
@@ -177,6 +186,10 @@ class FirebaseService {
   }
 
   void monitorStreamWithUsage<T>(Stream<T> stream, String streamName) {
+    streamCount++;
+    streamCounters[streamName] = (streamCounters[streamName] ?? 0) + 1;
+    print(
+        '🔁 Nueva instancia del stream con uso $streamName (${streamCounters[streamName]} de este tipo, $streamCount total)');
     int totalBytes = 0;
     DateTime startTime = DateTime.now();
     stream.listen(
@@ -235,7 +248,10 @@ class FirebaseService {
         await _logError('Stream Error', error.toString());
       },
       onDone: () async {
-        print('⚠ Stream "$streamName" se ha cerrado.');
+        streamCount--;
+        streamCounters[streamName] = (streamCounters[streamName] ?? 1) - 1;
+        print(
+            '⚠ Stream "$streamName" se ha cerrado. (${streamCounters[streamName]} de este tipo, $streamCount total)');
         var conexionBox = await openBoxSafe('conexionBox');
         if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
@@ -355,7 +371,8 @@ class FirebaseService {
 
     print(
         '$kFirebaseSesionesTag 📡 Iniciando escucha de cambios en Firestore (estructura nueva).');
-    monitorStream(sesionesStream, 'SesionesStream');
+    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // monitorStream(sesionesStream, 'SesionesStream');
     monitorStreamWithUsage(sesionesStream, 'SesionesStream');
     yield* sesionesStream;
   }
@@ -429,10 +446,11 @@ class FirebaseService {
       return snapshot.docs;
     });
 
-    monitorStream(pedidosStream, 'PedidosStream'); // Monitorea el stream
+    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // monitorStream(pedidosStream, 'PedidosStream'); // Monitorea el stream
     print(
         '📡 Iniciando escucha de cambios en Firestore de pedidos antes del tamaño.');
-    monitorStreamWithUsage(pedidosStream, 'pedidosStream');
+    monitorStreamWithUsage(pedidosStream, 'PedidosStream');
     yield* pedidosStream;
   }
 
@@ -480,8 +498,9 @@ class FirebaseService {
           return snapshot.docs;
         });
 
-        monitorStream(mensajesStream, 'MensajesStream'); // Monitorea el stream
-        monitorStreamWithUsage(mensajesStream, 'mensajesStream');
+        // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+        // monitorStream(mensajesStream, 'MensajesStream'); // Monitorea el stream
+        monitorStreamWithUsage(mensajesStream, 'MensajesStream');
         yield* mensajesStream;
       } catch (e, stackTrace) {
         // print('❌ Error setting up Firestore stream: $e');
@@ -592,8 +611,9 @@ class FirebaseService {
       return snapshot;
     });
 
-    monitorStream(movilStream, 'MovilStream'); // Monitorea el stream
-    monitorStreamWithUsage(movilStream, 'movilStream');
+    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // monitorStream(movilStream, 'MovilStream'); // Monitorea el stream
+    monitorStreamWithUsage(movilStream, 'MovilStream');
     yield* movilStream;
   }
 
@@ -657,11 +677,12 @@ class FirebaseService {
       }).toList();
     });
 
-    monitorStream(
-      subEstadoMovilesStream,
-      'SubEstadoMovilesStream',
-    ); // Monitorea el stream
-    monitorStreamWithUsage(subEstadoMovilesStream, 'subEstadoMovilesStream');
+    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // monitorStream(
+    //   subEstadoMovilesStream,
+    //   'SubEstadoMovilesStream',
+    // ); // Monitorea el stream
+    monitorStreamWithUsage(subEstadoMovilesStream, 'SubEstadoMovilesStream');
     // print('SubEstadoMovilesStream: $subEstadoMovilesStream');
     yield* subEstadoMovilesStream;
   }
@@ -704,13 +725,14 @@ class FirebaseService {
       }).toList();
     });
 
-    monitorStream(
-      subEstadoFinalizacionPedidosStream,
-      'SubEstadoFinalizacionPedidosStream',
-    ); // Monitorea el stream
+    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // monitorStream(
+    //   subEstadoFinalizacionPedidosStream,
+    //   'SubEstadoFinalizacionPedidosStream',
+    // ); // Monitorea el stream
     monitorStreamWithUsage(
       subEstadoFinalizacionPedidosStream,
-      'subEstadoFinalizacionPedidosStream',
+      'SubEstadoFinalizacionPedidosStream',
     );
     yield* subEstadoFinalizacionPedidosStream;
   }
@@ -753,13 +775,14 @@ class FirebaseService {
       }).toList();
     });
 
-    monitorStream(
-      SubEstadoFinalizacionServicesStream,
-      'SubEstadoFinalizacionServicesStream',
-    ); // Monitorea el stream
+    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // monitorStream(
+    //   SubEstadoFinalizacionServicesStream,
+    //   'SubEstadoFinalizacionServicesStream',
+    // ); // Monitorea el stream
     monitorStreamWithUsage(
       SubEstadoFinalizacionServicesStream,
-      'subEstadoFinalizacionServicesStream',
+      'SubEstadoFinalizacionServicesStream',
     );
     yield* SubEstadoFinalizacionServicesStream;
   }

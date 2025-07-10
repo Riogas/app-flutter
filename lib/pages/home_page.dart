@@ -1,6 +1,7 @@
 import 'package:MoveIT/main.dart';
 import 'package:flutter/material.dart';
 import 'pending_orders.dart';
+// import 'pending_orders_debug.dart'; // Commented out - not currently used
 import 'completed_orders.dart';
 import 'map_page.dart';
 import 'settings_page.dart';
@@ -27,6 +28,7 @@ import 'package:android_intent_plus/android_intent.dart'; // Import AndroidInten
 import 'package:android_intent_plus/flag.dart'; // Import Flag for AndroidIntent
 import 'package:flutter/services.dart'; // Import SystemNavigator
 import '../utils/stream_manager.dart'; // o el path correcto
+import '../services/stream_manager.dart'; // Import the new StreamManager
 
 // Función utilitaria para abrir cajas Hive de forma segura
 dynamic openBoxSafe(String boxName) async {
@@ -49,12 +51,15 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   final FirebaseService _firebaseService = FirebaseService();
+  final StreamManager _streamManager =
+      StreamManager(); // Add StreamManager instance
   StreamSubscription<LatLng>?
       _locationSubscription; // 🔹 Guardamos la suscripción
   final LocationService _locationService =
       LocationService(); // 🔹 Definimos _locationService
   int _selectedIndex = 0;
-  int _unreadMessages = 0;
+  // 🔹 Use ValueNotifier for message counter to avoid UI rebuilds
+  late ValueNotifier<int> _messageCountNotifier;
   int _newOrders = 0;
   bool _constantsLoaded = false;
   StreamSubscription? _ordersSubscription;
@@ -77,8 +82,11 @@ class _HomePageState extends State<HomePage>
   bool _isDialogVisible =
       false; // Flag to track if the dialog is already visible
 
+  // 🔹 FIX: Create stable stream for session management to prevent child widget rebuilds
+  late Stream<Map<String, dynamic>?> _sesionesStream;
+
   static final List<Widget> _widgetOptions = [
-    PendingOrdersPage(),
+    PendingOrdersPage(), // Back to normal page for testing
     /*CompletedOrdersPage(),*/
     MapPage(),
     MessagePage(),
@@ -90,10 +98,17 @@ class _HomePageState extends State<HomePage>
     super.initState();
     //secureScreen();
 
+    // 🔹 Initialize message counter notifier
+    _messageCountNotifier = ValueNotifier<int>(0);
+
     _blinkController = AnimationController(
       duration: const Duration(seconds: 1),
       vsync: this,
     )..repeat(reverse: true); // Blinking effect
+
+    // 🔹 FIX: Initialize stable session stream to prevent child widget rebuilds
+    _sesionesStream = _firebaseService.getSesionesStream();
+
     _initializeHomePage();
     _initPedidosBoxListener();
     _initMensajesBoxListener(); // Add this to initialize the listener
@@ -111,7 +126,8 @@ class _HomePageState extends State<HomePage>
     _initializeLocationService();
 
     // 🔹 Escuchar cambios en Firestore para pedidos y mensajes
-    _listenToFirestoreChangesWithDelay(); // Usar la nueva función con delay
+    // REMOVED: _listenToFirestoreChangesWithDelay(); // This was creating duplicate direct Firestore subscriptions
+    // The required streams are already handled by _listenToMessages() and _listenToPendingOrders()
 
     // 🔹 Inicializar la verificación de conectividad
     _checkInternetConnectivity();
@@ -174,6 +190,7 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _blinkController.dispose(); // Dispose the animation controller
+    _messageCountNotifier.dispose(); // 🔹 Dispose message counter notifier
     _counterService.stopCounter(); // Stop the counter when disposing
     _ordersSubscription?.cancel();
     _locationServiceCompleter.future.then((_) {
@@ -310,13 +327,19 @@ class _HomePageState extends State<HomePage>
   void _initMensajesBoxListener() async {
     var mensajesBox = await openBoxSafe('mensajesBox');
     if (mensajesBox == null) return;
+
+    // 🔹 Initialize message counter from existing data
+    int initialCount =
+        mensajesBox.values.where((estado) => estado == 'Descargado').length;
+    _messageCountNotifier.value = initialCount;
+
     mensajesBox.watch().listen((event) {
       int unreadCount = mensajesBox.values
           .where((estado) => estado == 'Descargado')
           .length; // Count only 'Descargado' messages
-      setState(() {
-        _unreadMessages = unreadCount; // Update _unreadMessages only once
-      });
+
+      // 🔹 Update ValueNotifier instead of setState to avoid UI rebuilds
+      _messageCountNotifier.value = unreadCount;
     });
   }
 
@@ -333,109 +356,116 @@ class _HomePageState extends State<HomePage>
   void _listenToMessages() async {
     var mensajesBox = await openBoxSafe('mensajesBox');
     if (mensajesBox == null) return;
-    _firebaseService.getMensajesStream().listen((messages) async {
-      int newMessagesCount = 0;
 
-      // print("📦 Contenido de mensajesBox: ${mensajesBox.toMap()}");
+    _streamManager.getMensajesStream().listen((messages) async {
+      // 🔹 Fast path: Only handle message counting and Hive updates
+      List<DocumentSnapshot> newMessages = [];
 
       for (var message in messages) {
-        var messageData =
-            message.data() as Map<String, dynamic>?; // Extract message data
+        var messageData = message.data() as Map<String, dynamic>?;
+
+        // Handle message visibility and Hive updates quickly
         if (!mensajesBox.containsKey(message.id) &&
             (messageData == null ||
                 messageData['VisibleEnApp'] == null ||
                 messageData['VisibleEnApp'] == 'S')) {
-          await mensajesBox.put(message.id, 'Descargado'); // Mark as downloaded
-          newMessagesCount = mensajesBox.values
-              .where((estado) => estado == 'Descargado')
-              .length; // Count only 'Descargado' messages
-
-          // Parse message ID as an integer
-          final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
-          int messageId = int.parse(numericIdMatch!.group(0)!);
-
-          // Call descargaLecturaMensajes for each new message
-          var box = await openBoxSafe('sessionBox');
-          if (box == null) return;
-          String escenario = box.get('escenario', defaultValue: '1000');
-          String movil = box.get('movil') ?? '';
-          String username = box.get('username') ?? '';
-          String deviceId = box.get('deviceId') ?? '';
-          final locationService = LocationService();
-
-          String latitude = '0.0';
-          String longitude = '0.0';
-          String utmX = '0.0';
-          String utmY = '0.0';
-
-          // Invoca el método para obtener la ubicación
-          final locationData = await locationService.getCurrentLocation();
-
-          if (locationData != null) {
-            latitude = locationData['latitude'].toString();
-            longitude = locationData['longitude'].toString();
-            utmX = locationData['utmX'].toString();
-            utmY = locationData['utmY'].toString();
-
-            print('Latitud: $latitude, Longitud: $longitude');
-            print('UTMX: $utmX, UTMY: $utmY');
-          } else {
-            print('No se pudo obtener la ubicación.');
-          }
-
-          // Retrieve speed and distance from Hive
-          var locationBox = await openBoxSafe('locationBox');
-          if (locationBox == null) return;
-          double velocidad = double.parse(locationBox
-              .get('lastSpeed', defaultValue: 0.0)
-              .toStringAsFixed(2));
-          double distanciaRecorrida =
-              locationBox.get('totalDistance', defaultValue: 0.0);
-
-          await RioGasService.descargaLecturaMensajes(
-              int.parse(escenario), // escenarioId
-              int.parse(movil), // movilId
-              messageId, // messageId
-              username, // usuario
-              '', // nroSesion
-              deviceId, // termMobileEquipo
-              'DESCARGA', // lectDesc
-              DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
-              '', // inAux1
-              '', // inAux2
-              latitude, // latitud
-              longitude, // longitud
-              utmX, // utmX
-              utmY, // utmY
-              velocidad, // velocidad
-              distanciaRecorrida // distanciaRecorrida
-              );
+          await mensajesBox.put(message.id, 'Descargado');
+          newMessages.add(message); // Queue for background processing
         } else if (messageData != null &&
             messageData['VisibleEnApp'] == 'N' &&
             mensajesBox.containsKey(message.id)) {
-          await mensajesBox.put(message.id, 'Leido'); // Mark as read
-          // print('📨 Mensaje ${message.id} marcado como "Leido" en Hive.');
+          await mensajesBox.put(message.id, 'Leido');
         }
       }
 
-      /*if (newMessagesCount > 0) {
-        _showNotification(
-          'Nuevo Mensaje',
-          'Tienes $newMessagesCount mensajes nuevos.',
-        );
-      }*/
+      // 🔹 Update counter immediately using ValueNotifier (no setState, no UI rebuild)
+      int currentCount =
+          mensajesBox.values.where((estado) => estado == 'Descargado').length;
+      _messageCountNotifier.value = currentCount;
 
-      setState(() {
-        _unreadMessages = mensajesBox.values
-            .where((estado) => estado == 'Descargado')
-            .length; // Count only 'Descargado' messages
-      });
+      // 🔹 Process expensive operations in background without blocking UI
+      if (newMessages.isNotEmpty) {
+        _processNewMessagesInBackground(newMessages);
+      }
+    });
+  }
+
+  // 🔹 Separate method for expensive operations that run in background
+  void _processNewMessagesInBackground(
+      List<DocumentSnapshot> newMessages) async {
+    // Run expensive operations without blocking the UI
+    Future.microtask(() async {
+      try {
+        var box = await openBoxSafe('sessionBox');
+        if (box == null) return;
+
+        String escenario = box.get('escenario', defaultValue: '1000');
+        String movil = box.get('movil') ?? '';
+        String username = box.get('username') ?? '';
+        String deviceId = box.get('deviceId') ?? '';
+
+        final locationService = LocationService();
+        var locationBox = await openBoxSafe('locationBox');
+        if (locationBox == null) return;
+
+        // Get location and speed data once for all messages
+        final locationData = await locationService.getCurrentLocation();
+        double velocidad = double.parse(
+            locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2));
+        double distanciaRecorrida =
+            locationBox.get('totalDistance', defaultValue: 0.0);
+
+        // Process each new message
+        for (var message in newMessages) {
+          try {
+            final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
+            if (numericIdMatch == null) continue;
+
+            int messageId = int.parse(numericIdMatch.group(0)!);
+
+            String latitude = '0.0';
+            String longitude = '0.0';
+            String utmX = '0.0';
+            String utmY = '0.0';
+
+            if (locationData != null) {
+              latitude = locationData['latitude'].toString();
+              longitude = locationData['longitude'].toString();
+              utmX = locationData['utmX'].toString();
+              utmY = locationData['utmY'].toString();
+            }
+
+            // Call RioGasService in background
+            await RioGasService.descargaLecturaMensajes(
+                int.parse(escenario),
+                int.parse(movil),
+                messageId,
+                username,
+                '',
+                deviceId,
+                'DESCARGA',
+                DateTime.now().toUtc().toIso8601String(),
+                '',
+                '',
+                latitude,
+                longitude,
+                utmX,
+                utmY,
+                velocidad,
+                distanciaRecorrida);
+          } catch (e) {
+            print('❌ Error processing message ${message.id}: $e');
+          }
+        }
+      } catch (e) {
+        print('❌ Error in background message processing: $e');
+      }
     });
   }
 
   void _listenToPendingOrders() {
     _ordersSubscription =
-        _firebaseService.getPedidosStream().listen((orders) async {
+        _streamManager.getPedidosStream().listen((orders) async {
       setState(() {
         _newOrders = orders.where((order) {
           var orderData = order.data() as Map<String, dynamic>?;
@@ -536,37 +566,9 @@ class _HomePageState extends State<HomePage>
         );
   }
 
-  void _listenToFirestoreChanges() {
-    FirebaseFirestore.instance.collection('Pedidos').snapshots().listen((
-      snapshot,
-    ) {
-      for (var doc in snapshot.docChanges) {
-        if (doc.type == DocumentChangeType.added) {
-          _showNotification(
-            'Nueva Visita',
-            'Tienes un nueva visita pendiente.',
-          );
-        }
-      }
-    });
-
-    FirebaseFirestore.instance.collection('Mensajes').snapshots().listen((
-      snapshot,
-    ) {
-      for (var doc in snapshot.docChanges) {
-        if (doc.type == DocumentChangeType.added) {
-          _showNotification('Nuevo Mensaje', 'Tienes un nuevo mensaje.');
-        }
-      }
-    });
-  }
-
-  void _listenToFirestoreChangesWithDelay() {
-    // Esperar un período inicial antes de activar notificaciones
-    Future.delayed(Duration(seconds: 10), () {
-      _listenToFirestoreChanges(); // Llamar a la función original después del delay
-    });
-  }
+  // REMOVED: _listenToFirestoreChanges() and _listenToFirestoreChangesWithDelay()
+  // These methods were creating duplicate direct Firestore subscriptions
+  // Stream management is now handled by the StreamManager singleton
 
   Future<void> _showNotification(String title, String body) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
@@ -878,8 +880,8 @@ class _HomePageState extends State<HomePage>
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: StreamBuilder<DocumentSnapshot?>(
-              // Existing stream for Movil
-              stream: _firebaseService.getMovilStream(),
+              // 🔹 FIX: Use StreamManager instead of direct Firebase service
+              stream: _streamManager.getMovilStream(),
               builder: (context, movilSnapshot) {
                 if (!movilSnapshot.hasData) {
                   return Center(child: CircularProgressIndicator());
@@ -892,8 +894,8 @@ class _HomePageState extends State<HomePage>
                   // print('EstadoNro from Movil: $estadoNro'); // Log estadoNro
 
                   return StreamBuilder<List<Map<String, dynamic>>>(
-                    // New stream for SubEstadoMoviles
-                    stream: _firebaseService.getSubEstadoMovilesStream(),
+                    // 🔹 FIX: Use StreamManager instead of direct Firebase service
+                    stream: _streamManager.getSubEstadoMovilesStream(),
                     builder: (context, subEstadoSnapshot) {
                       if (!subEstadoSnapshot.hasData) {
                         return Center(child: CircularProgressIndicator());
@@ -996,7 +998,8 @@ class _HomePageState extends State<HomePage>
                     '[HOME_SESSION] Chequeando logout forzado en Firestore...');
                 // ✅ Si no es el primer login, proceder con la validación en Firestore
                 return StreamBuilder<Map<String, dynamic>?>(
-                  stream: _firebaseService.getSesionesStream(),
+                  stream:
+                      _sesionesStream, // 🔹 FIX: Use stable stream to prevent rebuilds
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       print(
@@ -1065,35 +1068,41 @@ class _HomePageState extends State<HomePage>
           }
         },
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: [
-          _buildBottomNavigationBarItem(Icons.list, 'Pendientes', _newOrders),
-          //_buildBottomNavigationBarItem(Icons.check_circle, 'Finalizados', 0),
-          _buildBottomNavigationBarItem(Icons.map, 'Mapa', 0),
-          _buildBottomNavigationBarItem(
-            Icons.message,
-            'Mensajes',
-            _unreadMessages,
-          ),
-          _buildBottomNavigationBarItem(Icons.settings, 'Configuración', 0),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        onTap: _onItemTapped,
-        backgroundColor: Colors.white,
-        type: BottomNavigationBarType.fixed,
-        elevation: 10,
-        selectedLabelStyle: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 10,
-        ),
-        unselectedLabelStyle: TextStyle(
-          fontWeight: FontWeight.normal,
-          fontSize: 10,
-        ),
-        showSelectedLabels: true,
-        showUnselectedLabels: false,
+      bottomNavigationBar: ValueListenableBuilder<int>(
+        valueListenable: _messageCountNotifier,
+        builder: (context, messageCount, child) {
+          return BottomNavigationBar(
+            items: [
+              _buildBottomNavigationBarItem(
+                  Icons.list, 'Pendientes', _newOrders),
+              //_buildBottomNavigationBarItem(Icons.check_circle, 'Finalizados', 0),
+              _buildBottomNavigationBarItem(Icons.map, 'Mapa', 0),
+              _buildBottomNavigationBarItem(
+                Icons.message,
+                'Mensajes',
+                messageCount, // 🔹 Use ValueNotifier value instead of _unreadMessages
+              ),
+              _buildBottomNavigationBarItem(Icons.settings, 'Configuración', 0),
+            ],
+            currentIndex: _selectedIndex,
+            selectedItemColor: Colors.blue,
+            unselectedItemColor: Colors.grey,
+            onTap: _onItemTapped,
+            backgroundColor: Colors.white,
+            type: BottomNavigationBarType.fixed,
+            elevation: 10,
+            selectedLabelStyle: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 10,
+            ),
+            unselectedLabelStyle: TextStyle(
+              fontWeight: FontWeight.normal,
+              fontSize: 10,
+            ),
+            showSelectedLabels: true,
+            showUnselectedLabels: false,
+          );
+        },
       ),
     );
   }

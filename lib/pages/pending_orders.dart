@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../services/firebase_service.dart'; // Asegúrate de usar la ruta correcta
+import '../services/firebase_service.dart';
+import '../services/stream_manager.dart'; // Import StreamManager // Asegúrate de usar la ruta correcta
+import '../services/pending_orders_diagnostic.dart'; // Add diagnostic import
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hive/hive.dart';
@@ -16,6 +18,7 @@ class PendingOrdersPage extends StatefulWidget {
 
 class _PendingOrdersPageState extends State<PendingOrdersPage> {
   final FirebaseService _firebaseService = FirebaseService();
+  final StreamManager _streamManager = StreamManager(); // Add StreamManager
   List<String> _readOrderIds = [];
   int _orderCount = 0;
   int _newOrderCount = 0;
@@ -34,22 +37,29 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   @override
   void initState() {
     super.initState();
+    print('🔧 PendingOrdersPage: initState() called - Instance: ${hashCode}');
     _initializeFirebase();
-    _ordersStream = _firebaseService.getPedidosStream().asBroadcastStream();
+    _ordersStream = _streamManager.getPedidosStream();
+    print(
+        '🔧 PendingOrdersPage: Stream obtained, hashCode: ${_ordersStream.hashCode}');
     _initializeHive().then((_) {
-      setState(() {
-        username = constantBox.get('username', defaultValue: '');
-        deviceId = constantBox.get('DeviceID', defaultValue: '');
-        movilId = constantBox.get('MovilID', defaultValue: 0);
-      });
+      print('🔧 PendingOrdersPage: Hive initialization completed');
+      // Don't call setState here - it causes stream recreation
+      username = constantBox.get('username', defaultValue: '');
+      deviceId = constantBox.get('DeviceID', defaultValue: '');
+      movilId = constantBox.get('MovilID', defaultValue: 0);
+      // Remove setState() - not needed since these values aren't used in build()
+      // if (mounted) {
+      //   setState(() {}); // This was causing StreamBuilder to lose state
+      // }
     });
 
-    // Initialize the Timer
-    _hiveStateChecker = Timer.periodic(Duration(seconds: 30), (_) {
-      if (mounted) {
-        setState(() {}); // Update the UI periodically
-      }
-    });
+    // Remove problematic Timer that causes unnecessary rebuilds
+    // _hiveStateChecker = Timer.periodic(Duration(seconds: 30), (_) {
+    //   if (mounted) {
+    //     setState(() {}); // This was causing StreamBuilder to lose state
+    //   }
+    // });
   }
 
   @override
@@ -168,9 +178,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
       }
     });
 
-    if (mounted) {
-      setState(() {}); // Actualiza el estado solo si el widget sigue montado
-    }
+    //if (mounted) {
+    //  setState(() {}); // Actualiza el estado solo si el widget sigue montado
+    //}
   }
 
   Future<void> _callDescargaLecturaPedidos(
@@ -234,12 +244,18 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
   @override
   Widget build(BuildContext context) {
+    print('🔧 PendingOrdersPage: build() called - Instance: ${hashCode}');
+    print('🔧 PendingOrdersPage: Stream hashCode: ${_ordersStream.hashCode}');
+
     if (!Hive.isBoxOpen('pedidosBox')) {
+      print('🔧 PendingOrdersPage: pedidosBox not open, showing loading');
       return Scaffold(
         appBar: AppBar(title: Text('Pedidos Pendientes (Cargando...)')),
         body: Center(child: CircularProgressIndicator()),
       );
     }
+
+    print('🔧 PendingOrdersPage: Building main scaffold');
 
     return Scaffold(
       appBar: AppBar(
@@ -278,12 +294,79 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
       body: StreamBuilder<List<DocumentSnapshot>>(
         stream: _ordersStream,
         builder: (context, snapshot) {
+          // Add detailed logging for debugging
+          print('🔍 PendingOrders StreamBuilder state:');
+          print('   Widget Instance: ${hashCode}');
+          print('   Stream hashCode: ${_ordersStream.hashCode}');
+          print('   Connection: ${snapshot.connectionState}');
+          print('   Has error: ${snapshot.hasError}');
+          print('   Has data: ${snapshot.hasData}');
+          if (snapshot.hasData) {
+            print('   Data length: ${snapshot.data!.length}');
+            print(
+                '   Sample data: ${snapshot.data!.isNotEmpty ? snapshot.data!.first.id : "no data"}');
+          }
+          if (snapshot.hasError) {
+            print('   Error: ${snapshot.error}');
+          }
+
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Cargando pedidos...'),
+                  SizedBox(height: 8),
+                  Text(
+                      'Si esto toma mucho tiempo, presiona el botón de diagnóstico',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+            );
           } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error, size: 64, color: Colors.red),
+                  SizedBox(height: 16),
+                  Text('Error al cargar pedidos'),
+                  SizedBox(height: 8),
+                  Text('${snapshot.error}', style: TextStyle(fontSize: 12)),
+                  SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      print('🔧 Running diagnostics...');
+                      await PendingOrdersDiagnostic
+                          .diagnosePendingOrdersIssue();
+                    },
+                    child: Text('Ejecutar Diagnóstico'),
+                  ),
+                ],
+              ),
+            );
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text('No hay pedidos pendientes.'));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inbox, size: 64, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text('No hay pedidos pendientes.'),
+                  SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      print('🔧 Checking why no orders found...');
+                      await PendingOrdersDiagnostic
+                          .diagnosePendingOrdersIssue();
+                    },
+                    child: Text('Verificar Configuración'),
+                  ),
+                ],
+              ),
+            );
           } else {
             var orders = snapshot.data!;
 
