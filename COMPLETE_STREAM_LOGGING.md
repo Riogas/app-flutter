@@ -7,12 +7,14 @@ Ahora el StreamManager incluye **TODOS** los streams disponibles en tu app con l
 ## 📋 Streams Monitoreados
 
 ### 1. **Streams Principales**
+
 - ✅ **Pedidos** - Órdenes/pedidos del día
-- ✅ **Mensajes** - Mensajes para el móvil  
+- ✅ **Mensajes** - Mensajes para el móvil
 - ✅ **Movil** - Estado del móvil/vehículo
 - ✅ **Sesiones** - Información de sesión de usuario
 
 ### 2. **Streams de Sub-Estados** (NUEVOS)
+
 - ✅ **SubEstados** - Sub-estados de finalización de pedidos
 - ✅ **SubEstadoMoviles** - Sub-estados específicos de móviles
 - ✅ **SubEstadoServices** - Sub-estados de servicios de finalización
@@ -20,6 +22,7 @@ Ahora el StreamManager incluye **TODOS** los streams disponibles en tu app con l
 ## 🔍 Logs Detallados por Stream
 
 ### Logs de Creación
+
 ```
 🔄 StreamManager: Created new Pedidos broadcast stream
 🔄 StreamManager: Created new Mensajes broadcast stream
@@ -31,6 +34,7 @@ Ahora el StreamManager incluye **TODOS** los streams disponibles en tu app con l
 ```
 
 ### Logs de Listeners
+
 ```
 📊 StreamManager: Pedidos listeners: 1
 📊 StreamManager: Mensajes listeners: 2
@@ -38,6 +42,7 @@ Ahora el StreamManager incluye **TODOS** los streams disponibles en tu app con l
 ```
 
 ### Logs de Lecturas MEJORADOS
+
 ```
 📖 StreamManager: Pedidos read #1
    📦 Documents received: 4
@@ -61,6 +66,7 @@ Ahora el StreamManager incluye **TODOS** los streams disponibles en tu app con l
 ```
 
 ### Logs de Errores
+
 ```
 ❌ StreamManager: Pedidos error: FirebaseException: Permission denied
 ❌ StreamManager: SubEstadoMoviles error: NetworkException: Connection timeout
@@ -69,12 +75,14 @@ Ahora el StreamManager incluye **TODOS** los streams disponibles en tu app con l
 ## 🛠️ Métodos de Diagnóstico
 
 ### 1. **Diagnóstico Completo**
+
 ```dart
 final streamManager = StreamManager();
 streamManager.printStreamDiagnostics();
 ```
 
 **Output esperado:**
+
 ```
 🔍 StreamManager Comprehensive Diagnostics:
 ==================================================
@@ -100,11 +108,13 @@ streamManager.printStreamDiagnostics();
 ```
 
 ### 2. **Resumen de Lecturas**
+
 ```dart
 streamManager.printReadSummary();
 ```
 
 **Output:**
+
 ```
 📊 StreamManager Read Summary:
   📖 Pedidos: 5 reads
@@ -118,6 +128,7 @@ streamManager.printReadSummary();
 ```
 
 ### 3. **Información de Debug Programática**
+
 ```dart
 final debugInfo = streamManager.getDebugInfo();
 print('Streams activos: ${debugInfo['activeStreams']}');
@@ -126,6 +137,7 @@ print('Lecturas por stream: ${debugInfo['reads']}');
 ```
 
 ### 4. **Contadores de Lecturas**
+
 ```dart
 final counters = streamManager.getReadCounters();
 print('Lecturas de Pedidos: ${counters['pedidos']}');
@@ -137,16 +149,19 @@ print('Lecturas de Mensajes: ${counters['mensajes']}');
 El diagnóstico incluye alertas automáticas:
 
 ### ✅ **Saludable** (< 50 lecturas)
+
 ```
 ✅ Read count looks healthy
 ```
 
 ### 🔶 **Moderado** (50-100 lecturas)
+
 ```
 🔶 Moderate read count - monitor closely
 ```
 
 ### ⚠️ **Alto** (> 100 lecturas)
+
 ```
 ⚠️ High read count detected - consider optimization
 ```
@@ -154,6 +169,7 @@ El diagnóstico incluye alertas automáticas:
 ## 🕐 Logs de Limpieza
 
 Cuando los streams se cierran:
+
 ```
 🧹 StreamManager: Cleaning up Pedidos stream (no more listeners)
 📊 StreamManager: Pedidos total reads: 12
@@ -165,6 +181,7 @@ Cuando los streams se cierran:
 ## 🎯 Uso Recomendado para Debugging
 
 ### 1. **Al Inicio de Sesión**
+
 ```dart
 // Resetear contadores para una sesión limpia
 streamManager.resetReadCounters();
@@ -172,6 +189,7 @@ print('🔄 Empezando nueva sesión de monitoreo');
 ```
 
 ### 2. **Durante Desarrollo**
+
 ```dart
 // Cada 5 minutos o después de operaciones importantes
 Timer.periodic(Duration(minutes: 5), (timer) {
@@ -180,6 +198,7 @@ Timer.periodic(Duration(minutes: 5), (timer) {
 ```
 
 ### 3. **Al Detectar Problemas**
+
 ```dart
 // Si sospechas problemas de rendimiento
 final counters = streamManager.getReadCounters();
@@ -191,6 +210,7 @@ counters.forEach((stream, reads) {
 ```
 
 ### 4. **Al Final de Sesión**
+
 ```dart
 // Antes de cerrar la app o cambiar de usuario
 streamManager.printReadSummary();
@@ -200,18 +220,21 @@ print('📊 Resumen final de la sesión');
 ## 🔍 Qué Buscar en los Logs
 
 ### ✅ **Comportamiento Normal**
+
 - Solo 1 stream de cada tipo se crea
 - Listeners aumentan/disminuyen según navegación
 - Lecturas aumentan gradualmente
 - Cleanup automático cuando no hay listeners
 
 ### ⚠️ **Posibles Problemas**
+
 - Múltiples streams del mismo tipo creándose
 - Listeners que no disminuyen al salir de páginas
 - Lecturas excesivas (> 10 por minuto para un stream)
 - Streams que no se limpian automáticamente
 
 ### 🚨 **Problemas Críticos**
+
 - Errores repetidos en los logs
 - Streams que se crean y destruyen constantemente
 - Memoria aumentando sin control

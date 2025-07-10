@@ -1,7 +1,7 @@
 name: MoveIT
 description: A new Flutter project.
 
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 version: 1.0.2+3
 
@@ -54,7 +54,6 @@ dependencies:
   firebase_crashlytics: ^4.3.5
   firebase_analytics: ^11.4.5
   video_player: ^2.7.0 # Verificá que sea la última versión
-  
 
 flutter_launcher_icons:
   android: true
@@ -63,13 +62,8 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/icon/RGDeliveryIcon.png"
   adaptive_icon_background: "#FF0000"
 
-
-
-
-  
-
 dev_dependencies:
-  flutter_test: 
+  flutter_test:
     sdk: flutter
   hive_generator: ^2.0.1
   build_runner: ^2.3.3
@@ -82,7 +76,7 @@ flutter:
     - assets/garrafa.png
     - assets/icon/RGDeliveryIcon.png
     - assets/logo-riogas.png
-    - assets/moveit_background.png   # 👈 esta línea debe tener 4 espacios en total   
-    - assets/back_video.mp4 
+    - assets/moveit_background.png # 👈 esta línea debe tener 4 espacios en total
+    - assets/back_video.mp4
     - assets/video_back_2.mp4
     - assets/manual/RiogasDeliveryAPP.pdf

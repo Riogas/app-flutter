@@ -7,7 +7,9 @@ El `StreamManager` ahora incluye contadores detallados de lecturas por cada tipo
 ## 📊 Contadores de Lecturas
 
 ### Logs Automáticos
+
 Cada vez que un stream recibe datos, verás logs como estos:
+
 ```
 📖 StreamManager: Pedidos read #1 (5 documents)
 📖 StreamManager: Mensajes read #3 (2 documents)
@@ -17,7 +19,9 @@ Cada vez que un stream recibe datos, verás logs como estos:
 ```
 
 ### Resumen al Cerrar Streams
+
 Cuando un stream se cierra, verás un resumen total:
+
 ```
 🧹 StreamManager: Cleaning up Pedidos stream (no more listeners)
 📊 StreamManager: Pedidos total reads: 12
@@ -26,6 +30,7 @@ Cuando un stream se cierra, verás un resumen total:
 ## 🛠️ Métodos de Utilidad
 
 ### 1. Obtener Contadores Actuales
+
 ```dart
 final streamManager = StreamManager();
 final readCounters = streamManager.getReadCounters();
@@ -34,11 +39,13 @@ print('Lecturas de Mensajes: ${readCounters['mensajes']}');
 ```
 
 ### 2. Imprimir Resumen Completo
+
 ```dart
 streamManager.printReadSummary();
 ```
 
 Salida esperada:
+
 ```
 📊 StreamManager Read Summary:
   📖 Pedidos: 12 reads
@@ -50,11 +57,13 @@ Salida esperada:
 ```
 
 ### 3. Resetear Contadores (Para Testing)
+
 ```dart
 streamManager.resetReadCounters();
 ```
 
 ### 4. Información Completa de Debug
+
 ```dart
 final debugInfo = streamManager.getDebugInfo();
 print('Listeners activos: ${debugInfo['listeners']}');
@@ -65,6 +74,7 @@ print('Streams activos: ${debugInfo['activeStreams']}');
 ## 📈 Interpretación de los Datos
 
 ### Qué Indican los Contadores
+
 - **Lectura por Stream**: Cada vez que Firestore envía datos (cambios detectados)
 - **Alto número de lecturas**: Puede indicar datos que cambian frecuentemente
 - **Lecturas consistentes**: Datos estables, solo actualizaciones necesarias
@@ -72,6 +82,7 @@ print('Streams activos: ${debugInfo['activeStreams']}');
 ### Ejemplos de Interpretación
 
 #### Escenario Normal ✅
+
 ```
 📖 Pedidos: 5 reads    (Pocos pedidos nuevos durante el día)
 📖 Mensajes: 2 reads   (Mensajes ocasionales)
@@ -79,6 +90,7 @@ print('Streams activos: ${debugInfo['activeStreams']}');
 ```
 
 #### Posible Problema ⚠️
+
 ```
 📖 Pedidos: 150 reads  (Demasiadas actualizaciones, posible problema)
 📖 Mensajes: 200 reads (Stream muy activo, verificar lógica)
@@ -87,12 +99,14 @@ print('Streams activos: ${debugInfo['activeStreams']}');
 ## 🎯 Uso Recomendado
 
 ### Para Monitoreo Diario
+
 ```dart
 // Al final del día o sesión de trabajo
 streamManager.printReadSummary();
 ```
 
 ### Para Debugging
+
 ```dart
 // Resetear al inicio de una sesión de debug
 streamManager.resetReadCounters();
@@ -107,6 +121,7 @@ if (counters['pedidos']! > 50) {
 ```
 
 ### Para Optimización
+
 ```dart
 // Verificar qué streams son más activos
 final debugInfo = streamManager.getDebugInfo();
@@ -128,18 +143,22 @@ print('Stream más activo: $maxStream con $maxReads lecturas');
 ## 🔍 Comparación Antes vs Después
 
 ### Antes de la Optimización
+
 Con múltiples suscripciones duplicadas, cada lectura se multiplicaba:
+
 ```
-Stream Pedidos: 
+Stream Pedidos:
 - HomePage: 1 lectura
-- PendingOrdersPage: 1 lectura  
+- PendingOrdersPage: 1 lectura
 - MapPage: 1 lectura
 - Direct Firestore: 1 lectura
 = 4 lecturas por cada cambio de datos
 ```
 
 ### Después de la Optimización
+
 Con StreamManager, solo una lectura es compartida:
+
 ```
 Stream Pedidos:
 - StreamManager: 1 lectura

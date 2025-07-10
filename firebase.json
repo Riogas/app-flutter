@@ -1,1 +1,29 @@
-{"emulators":{"dataconnect":{"dataDir":"dataconnect/.dataconnect/pgliteData"}},"dataconnect":{"source":"dataconnect"},"flutter":{"platforms":{"android":{"default":{"projectId":"riogas-pedidos","appId":"1:581291310412:android:9ab960ac4b55a1f71023e9","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"riogas-pedidos","configurations":{"android":"1:581291310412:android:9ab960ac4b55a1f71023e9","ios":"1:581291310412:ios:249f949e4077fee61023e9","macos":"1:581291310412:ios:249f949e4077fee61023e9","web":"1:581291310412:web:60a61e86c76256ab1023e9","windows":"1:581291310412:web:dfc59101f189d4cd1023e9"}}}}}}
+{
+  "emulators": {
+    "dataconnect": { "dataDir": "dataconnect/.dataconnect/pgliteData" }
+  },
+  "dataconnect": { "source": "dataconnect" },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "riogas-pedidos",
+          "appId": "1:581291310412:android:9ab960ac4b55a1f71023e9",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "riogas-pedidos",
+          "configurations": {
+            "android": "1:581291310412:android:9ab960ac4b55a1f71023e9",
+            "ios": "1:581291310412:ios:249f949e4077fee61023e9",
+            "macos": "1:581291310412:ios:249f949e4077fee61023e9",
+            "web": "1:581291310412:web:60a61e86c76256ab1023e9",
+            "windows": "1:581291310412:web:dfc59101f189d4cd1023e9"
+          }
+        }
+      }
+    }
+  }
+}

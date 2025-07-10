@@ -1,12 +1,15 @@
 # Firestore Stream Optimization - Summary of Changes
 
 ## Overview
+
 This document outlines the optimizations made to reduce excessive Firestore read operations by eliminating duplicate stream subscriptions and implementing a centralized stream management system.
 
 ## Problem Identified
+
 The app was creating multiple duplicate subscriptions to the same Firestore streams across different pages:
 
 1. **HomePage** had FOUR separate subscriptions for the same data:
+
    - `_listenToMessages()` → `getMensajesStream()`
    - `_listenToPendingOrders()` → `getPedidosStream()`
    - `_listenToFirestoreChanges()` → Direct Firestore collection 'Pedidos'
@@ -14,13 +17,14 @@ The app was creating multiple duplicate subscriptions to the same Firestore stre
 
 2. **Multiple pages** subscribing to the same streams:
    - `PendingOrdersPage` → `getPedidosStream()`
-   - `MapPage` → `getPedidosStream()` 
+   - `MapPage` → `getPedidosStream()`
    - `MessagePage` → `getMensajesStream()` (3 separate subscriptions!)
    - `OrderDetailPage` → `getMovilStream()` + `getSubEstadoFinalizacionPedidosStream()`
 
 ## Solution Implemented
 
 ### 1. Created StreamManager Singleton (`lib/services/stream_manager.dart`)
+
 - **Purpose**: Centralized management of all Firestore streams
 - **Pattern**: Singleton with broadcast streams to allow multiple listeners
 - **Features**:
@@ -31,29 +35,28 @@ The app was creating multiple duplicate subscriptions to the same Firestore stre
   - Listener counting for monitoring
 
 ### 2. Updated All UI Pages
+
 **Before**: Each page directly subscribed to `FirebaseService` methods
 **After**: All pages now use `StreamManager` for shared stream access
 
 #### Changes Made:
-- **HomePage**: 
+
+- **HomePage**:
   - Removed duplicate `_listenToFirestoreChanges()` methods
   - Updated stream subscriptions to use `StreamManager`
-  
-- **PendingOrdersPage**: 
-  - Replaced `_firebaseService.getPedidosStream().asBroadcastStream()` 
+- **PendingOrdersPage**:
+  - Replaced `_firebaseService.getPedidosStream().asBroadcastStream()`
   - With `_streamManager.getPedidosStream()`
-  
-- **MapPage**: 
+- **MapPage**:
   - Updated `getPedidosStream().listen()` to use `StreamManager`
-  
-- **MessagePage**: 
+- **MessagePage**:
   - Consolidated all 3 `getMensajesStream()` calls to use `StreamManager`
   - Updated StreamBuilder and `.first` usages
-  
-- **OrderDetailPage**: 
+- **OrderDetailPage**:
   - Updated both stream subscriptions to use `StreamManager`
 
 ### 3. Enhanced Logging in FirebaseService
+
 - Maintained existing stream monitoring with counters
 - Added per-stream-type counters in addition to total stream count
 - Detailed logging shows exactly how many streams of each type are active
@@ -61,16 +64,19 @@ The app was creating multiple duplicate subscriptions to the same Firestore stre
 ## Expected Benefits
 
 ### 🔥 **Firestore Read Reduction**
+
 - **Before**: 7+ separate stream subscriptions for the same data
 - **After**: 1 subscription per stream type (max 5 total streams)
 - **Reduction**: ~70% fewer Firestore reads
 
 ### 📊 **Improved Performance**
+
 - Reduced memory usage from fewer stream controllers
 - Faster app response due to less network overhead
 - Shared stream data reduces redundant processing
 
 ### 🛠️ **Better Maintainability**
+
 - Centralized stream management
 - Easier debugging with detailed logging
 - Clear separation of concerns
@@ -78,6 +84,7 @@ The app was creating multiple duplicate subscriptions to the same Firestore stre
 ## Monitoring & Debugging
 
 ### StreamManager Debug Info
+
 ```dart
 // Get current stream usage information
 final debugInfo = _streamManager.getDebugInfo();
@@ -86,6 +93,7 @@ print('Listeners per stream: ${debugInfo}');
 ```
 
 ### Console Logs to Watch For
+
 - `🔄 StreamManager: Created new [StreamType] broadcast stream`
 - `📊 StreamManager: [StreamType] listeners: X`
 - `🧹 StreamManager: Cleaning up [StreamType] stream (no more listeners)`
@@ -94,6 +102,7 @@ print('Listeners per stream: ${debugInfo}');
 ## Usage Guidelines
 
 ### ✅ **Do This**
+
 ```dart
 // Use StreamManager for shared stream access
 final streamManager = StreamManager();
@@ -103,6 +112,7 @@ streamManager.getPedidosStream().listen((data) {
 ```
 
 ### ❌ **Don't Do This**
+
 ```dart
 // Don't create direct FirebaseService subscriptions
 final firebaseService = FirebaseService();
@@ -117,6 +127,7 @@ FirebaseFirestore.instance.collection('Pedidos').snapshots().listen((data) {
 ```
 
 ### 🔧 **Stream Disposal**
+
 The StreamManager automatically handles cleanup when listeners are removed. However, always cancel your subscriptions in `dispose()`:
 
 ```dart
@@ -132,7 +143,7 @@ void dispose() {
 1. **New File**: `lib/services/stream_manager.dart` (StreamManager singleton)
 2. **Updated**: `lib/pages/home_page.dart` (removed duplicate subscriptions)
 3. **Updated**: `lib/pages/pending_orders.dart` (use StreamManager)
-4. **Updated**: `lib/pages/map_page.dart` (use StreamManager) 
+4. **Updated**: `lib/pages/map_page.dart` (use StreamManager)
 5. **Updated**: `lib/pages/message_page.dart` (use StreamManager)
 6. **Updated**: `lib/pages/order_detail_page.dart` (use StreamManager)
 

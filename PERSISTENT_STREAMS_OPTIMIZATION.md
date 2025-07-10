@@ -21,9 +21,10 @@ En el patrón actual, cada vez que navegas a una página que usa streams de Fire
 ### 📊 Comparación de Patrones
 
 #### Patrón Actual (StreamBuilder/listen)
+
 ```
 HomePage (entrada) → +2 listeners
-HomePage (salida)  → -2 listeners  
+HomePage (salida)  → -2 listeners
 PendingOrders (entrada) → +3 listeners
 PendingOrders (salida)  → -3 listeners
 MessagePage (entrada) → +2 listeners
@@ -33,10 +34,11 @@ Total: 8-12 operaciones de listener por navegación
 ```
 
 #### Patrón Optimizado (Persistent + ValueNotifier)
+
 ```
 App startup → +6 listeners (una sola vez)
 HomePage (entrada/salida) → 0 operaciones de listener
-PendingOrders (entrada/salida) → 0 operaciones de listener  
+PendingOrders (entrada/salida) → 0 operaciones de listener
 MessagePage (entrada/salida) → 0 operaciones de listener
 
 Total: 6 listeners permanentes, 0 operaciones por navegación
@@ -49,15 +51,15 @@ Total: 6 listeners permanentes, 0 operaciones por navegación
 ```dart
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Hive, Firebase, etc.
   await Firebase.initializeApp();
   await Hive.initFlutter();
-  
+
   // Initialize persistent stream manager
   final persistentManager = PersistentStreamManager();
   await persistentManager.initialize();
-  
+
   runApp(MyApp());
 }
 ```
@@ -74,19 +76,19 @@ class MyPage extends StatefulWidget {
 
 class _MyPageState extends State<MyPage> {
   final PersistentStreamManager _streamManager = PersistentStreamManager();
-  
+
   @override
   void initState() {
     super.initState();
     // No crear listeners aquí - ya están creados!
   }
-  
+
   @override
   void dispose() {
     // No cancelar listeners aquí - son persistentes!
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -122,9 +124,10 @@ ValueNotifier<List<DocumentSnapshot>> pedidosNotifier = _streamManager.pedidosNo
 ## Comparación de Logs
 
 ### Antes (Patrón Actual)
+
 ```
 👂 ADDED listener for PedidosStream (total: 3)
-👂 ADDED listener for MensajesStream (total: 4)  
+👂 ADDED listener for MensajesStream (total: 4)
 👂 ADDED listener for MovilStream (total: 5)
 🚫 REMOVED listener for PedidosStream (total: 2)
 🚫 REMOVED listener for MensajesStream (total: 3)
@@ -134,15 +137,16 @@ ValueNotifier<List<DocumentSnapshot>> pedidosNotifier = _streamManager.pedidosNo
 ```
 
 ### Después (Patrón Optimizado)
+
 ```
 🔄 [PersistentStreamManager] Initializing persistent listeners...
 🔄 [PersistentStreamManager] Pedidos persistent listener started
-🔄 [PersistentStreamManager] Mensajes persistent listener started  
+🔄 [PersistentStreamManager] Mensajes persistent listener started
 🔄 [PersistentStreamManager] Movil persistent listener started
 ✅ [PersistentStreamManager] All persistent listeners initialized
 
 📊 Active Stream Listeners: 6 (persistent)
-📊 Widget Listeners: 3 
+📊 Widget Listeners: 3
 📊 Total Reads: 12
 
 ...navegación sin crear/cancelar listeners...
@@ -162,36 +166,42 @@ Puedes migrar gradualmente:
 ### 📱 Filtros de Logs para Persistent Streams
 
 #### 1. Ver Inicialización de Listeners Persistentes
+
 ```powershell
 # Ver solo la inicialización del sistema
 adb logcat -s flutter:I | Select-String "PersistentStreamManager"
 ```
 
 #### 2. Monitorear Listeners Activos y Contadores
+
 ```powershell
 # Ver listeners activos y contadores globales
 adb logcat -s flutter:I | Select-String "(persistent|Active Stream|Widget Listeners|Total Reads)"
 ```
 
 #### 3. Monitorear Actualizaciones de Datos
+
 ```powershell
 # Ver cuando se actualizan los datos en los streams
 adb logcat -s flutter:I | Select-String "(Pedidos updated|Mensajes updated|Movil updated)"
 ```
 
 #### 4. Monitorear Suscripciones de Widgets
+
 ```powershell
 # Ver cuando los widgets se suscriben a los notifiers
 adb logcat -s flutter:I | Select-String "(listener added|total:)"
 ```
 
 #### 5. Ver Diagnósticos Completos
+
 ```powershell
 # Ver información completa de diagnóstico
 adb logcat -s flutter:I | Select-String "(DIAGNOSTICS|Active Stream|Widget Listeners|Total Reads|breakdown|widgets|reads)"
 ```
 
 #### 6. Comparar con Sistema Actual (si usas ambos)
+
 ```powershell
 # Ver diferencia entre sistemas
 adb logcat -s flutter:I | Select-String "(ADDED|REMOVED|PersistentStreamManager|persistent)"
@@ -200,6 +210,7 @@ adb logcat -s flutter:I | Select-String "(ADDED|REMOVED|PersistentStreamManager|
 ### 📊 Logs Esperados con Persistent Streams
 
 #### Al Inicializar la App:
+
 ```
 🔄 [PersistentStreamManager] Initializing persistent listeners...
 🔄 [PersistentStreamManager] Pedidos persistent listener started
@@ -212,6 +223,7 @@ adb logcat -s flutter:I | Select-String "(ADDED|REMOVED|PersistentStreamManager|
 ```
 
 #### Al Recibir Datos:
+
 ```
 📦 [PersistentStreamManager] Pedidos updated: 5 items (reads: 1)
 💬 [PersistentStreamManager] Mensajes updated: 3 items (reads: 1)
@@ -220,6 +232,7 @@ adb logcat -s flutter:I | Select-String "(ADDED|REMOVED|PersistentStreamManager|
 ```
 
 #### Al Navegar a Páginas:
+
 ```
 👂 [PersistentStreamManager] Pedidos listener added (total: 1)
 👂 [PersistentStreamManager] Mensajes listener added (total: 1)
@@ -227,6 +240,7 @@ adb logcat -s flutter:I | Select-String "(ADDED|REMOVED|PersistentStreamManager|
 ```
 
 #### Al Usar Diagnósticos:
+
 ```
 🔍 [PersistentStreamManager] DIAGNOSTICS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -247,18 +261,21 @@ Per Stream Breakdown:
 ### 🔄 Comandos de Monitoreo Continuo
 
 #### Monitoreo en Tiempo Real:
+
 ```powershell
 # Stream continuo de todos los logs relevantes
 adb logcat -s flutter:I | Select-String "(PersistentStreamManager|persistent|DIAGNOSTICS|Active Stream|Widget Listeners|Total Reads)"
 ```
 
 #### Monitoreo Solo de Cambios:
+
 ```powershell
 # Solo cambios en datos y contadores
 adb logcat -s flutter:I | Select-String "(updated|listener added|reads:)"
 ```
 
 #### Monitoreo de Performance:
+
 ```powershell
 # Enfocado en performance y contadores
 adb logcat -s flutter:I | Select-String "(Active Stream|Widget Listeners|Total Reads|reads:)"
@@ -267,12 +284,14 @@ adb logcat -s flutter:I | Select-String "(Active Stream|Widget Listeners|Total R
 ### 🆚 Comparación de Logs: Antes vs Después
 
 #### Comando para Ver Diferencia:
+
 ```powershell
 # Ver ambos sistemas si los usas en paralelo
 adb logcat -s flutter:I | Select-String "(ADDED|REMOVED|Global Listeners|PersistentStreamManager|persistent|Active Stream)"
 ```
 
 #### Logs Esperados - Sistema Actual:
+
 ```
 👂 ADDED listener | Stream: Pedidos | Global Listeners: 3
 👂 ADDED listener | Stream: Mensajes | Global Listeners: 4
@@ -281,6 +300,7 @@ adb logcat -s flutter:I | Select-String "(ADDED|REMOVED|Global Listeners|Persist
 ```
 
 #### Logs Esperados - Sistema Persistente:
+
 ```
 📊 Active Stream Listeners: 6 (persistent)
 📊 Widget Listeners: 2

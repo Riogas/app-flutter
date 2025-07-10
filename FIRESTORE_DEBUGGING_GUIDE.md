@@ -45,6 +45,7 @@ StreamManager.debug();
 ```
 
 **Output Example:**
+
 ```
 🔍 StreamManager Comprehensive Diagnostics:
 ==================================================
@@ -79,7 +80,7 @@ import 'services/stream_monitor.dart';
 
 void main() {
   runApp(MyApp());
-  
+
   // Start monitoring in debug mode
   if (kDebugMode) {
     StreamMonitor.startPeriodicMonitoring(intervalSeconds: 30);
@@ -120,6 +121,7 @@ StreamMonitor.healthCheck();
 ```
 
 **Example Output:**
+
 ```
 🏥 StreamMonitor: Performing health check...
 🏥 HEALTH CHECK RESULTS:
@@ -135,6 +137,7 @@ StreamMonitor.healthCheck();
 
 **Symptoms:** High read counts, performance issues
 **Diagnosis:**
+
 ```dart
 StreamManager.debug();
 // Look for high read counts in output
@@ -146,6 +149,7 @@ StreamManager.debug();
 
 **Symptoms:** Streams not cleaning up, listener counts never decrease
 **Diagnosis:**
+
 ```dart
 // Monitor over time
 StreamMonitor.startPeriodicMonitoring();
@@ -158,6 +162,7 @@ StreamMonitor.startPeriodicMonitoring();
 
 **Symptoms:** Multiple active streams of the same type
 **Diagnosis:**
+
 ```dart
 StreamManager.debug();
 // Check if same stream type appears multiple times as ACTIVE
@@ -169,6 +174,7 @@ StreamManager.debug();
 
 **Symptoms:** Listeners > 0 but reads = 0
 **Diagnosis:**
+
 ```dart
 StreamMonitor.healthCheck();
 // Will warn about streams with listeners but no reads
@@ -179,16 +185,19 @@ StreamMonitor.healthCheck();
 ## Logging Format Reference
 
 ### Stream Creation Logs
+
 ```
 🔄 StreamManager: Created new Pedidos broadcast stream
 ```
 
 ### Listener Changes
+
 ```
 📊 StreamManager: Pedidos listeners: 2
 ```
 
 ### Read Operations
+
 ```
 📖 StreamManager: Pedidos read #15 (5 documents)
    📄 Sample document IDs: [doc1, doc2, doc3, ...]
@@ -196,12 +205,14 @@ StreamMonitor.healthCheck();
 ```
 
 ### Stream Cleanup
+
 ```
 🧹 StreamManager: Cleaning up Pedidos stream (no more listeners)
 📊 StreamManager: Pedidos total reads: 15
 ```
 
 ### Error Logging
+
 ```
 ❌ StreamManager: Pedidos error: [error details]
 ```
@@ -235,13 +246,17 @@ if (kReleaseMode) {
 ## Troubleshooting Common Issues
 
 ### Issue: StreamManager singleton not working
+
 **Solution:** Ensure all imports use the correct path:
+
 ```dart
 import '../services/stream_manager.dart';
 ```
 
 ### Issue: Streams not cleaning up
+
 **Solution:** Check widget disposal:
+
 ```dart
 @override
 void dispose() {
@@ -251,6 +266,7 @@ void dispose() {
 ```
 
 ### Issue: High read counts
+
 **Solution:** Review and optimize query patterns, ensure proper stream sharing
 
 ---
@@ -258,6 +274,7 @@ void dispose() {
 ## Summary
 
 The StreamManager and StreamMonitor provide comprehensive tools for:
+
 - ✅ Preventing duplicate Firestore subscriptions
 - ✅ Monitoring read operations in real-time
 - ✅ Debugging stream lifecycle issues
