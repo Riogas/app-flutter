@@ -19,6 +19,7 @@ class MessagePage extends StatefulWidget {
 }
 
 class _MessagePageState extends State<MessagePage> {
+  bool _isDeletingAll = false;
   final FirebaseService _firebaseService = FirebaseService();
   final PersistentStreamManager _streamManager = PersistentStreamManager();
   final FirebaseMessaging _firebaseMessaging =
@@ -302,6 +303,24 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   void _deleteAllMessages(List<DocumentSnapshot> messages) async {
+    setState(() {
+      _isDeletingAll = true;
+    });
+    // Mostrar diálogo de loading modal
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Procesando...'),
+          ],
+        ),
+      ),
+    );
+
     // Marcar todos como borrado en Hive primero
     var mensajesBox = await Hive.openBox('mensajesBox');
     for (var message in messages) {
@@ -312,10 +331,14 @@ class _MessagePageState extends State<MessagePage> {
     // Ejecutar todas las llamadas al servicio en paralelo
     await Future.wait(
         messages.map((message) => _descargaLecturaMensajeService(message)));
+
     if (mounted) {
       setState(() {
         _readMessageIds.clear();
+        _isDeletingAll = false;
       });
+      // Cerrar el diálogo de loading
+      Navigator.of(context, rootNavigator: true).pop();
     }
   }
 
@@ -392,181 +415,193 @@ class _MessagePageState extends State<MessagePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            IconButton(
-              icon: Icon(Icons.headset_mic, color: Colors.black),
-              onPressed: () async {
-                final phoneNumber = await getConstantValue('170') ?? '';
-                if (phoneNumber.isNotEmpty) {
-                  final Uri callUri = Uri(scheme: 'tel', path: phoneNumber);
-                  if (await canLaunchUrl(callUri)) {
-                    await launchUrl(callUri);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                          content: Text('No se pudo realizar la llamada.')),
-                    );
-                  }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text('Número de teléfono no disponible.')),
-                  );
-                }
-              },
-            ),
-            SizedBox(width: 8),
-            Text('Despacho',
-                style: TextStyle(color: Colors.black, fontSize: 18)),
-          ],
-        ),
-        actions: [
-          GestureDetector(
-            onTap: () {
-              final mensajes = _streamManager.mensajesNotifier.value;
-              _deleteAllMessages(mensajes);
-            },
-            child: Row(
+    return AbsorbPointer(
+        absorbing: _isDeletingAll,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Row(
               children: [
-                Text('Borrar Todo', style: TextStyle(color: Colors.black)),
-                SizedBox(width: 4),
-                Icon(Icons.delete, color: Colors.black),
-                SizedBox(width: 12),
+                IconButton(
+                  icon: Icon(Icons.headset_mic, color: Colors.black),
+                  onPressed: () async {
+                    final phoneNumber = await getConstantValue('170') ?? '';
+                    if (phoneNumber.isNotEmpty) {
+                      final Uri callUri = Uri(scheme: 'tel', path: phoneNumber);
+                      if (await canLaunchUrl(callUri)) {
+                        await launchUrl(callUri);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text('No se pudo realizar la llamada.')),
+                        );
+                      }
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text('Número de teléfono no disponible.')),
+                      );
+                    }
+                  },
+                ),
+                SizedBox(width: 8),
+                Text('Despacho',
+                    style: TextStyle(color: Colors.black, fontSize: 18)),
               ],
             ),
+            actions: [
+              GestureDetector(
+                onTap: _isDeletingAll
+                    ? null
+                    : () {
+                        final mensajes = _streamManager.mensajesNotifier.value;
+                        _deleteAllMessages(mensajes);
+                      },
+                child: Row(
+                  children: [
+                    Text('Borrar Todo', style: TextStyle(color: Colors.black)),
+                    SizedBox(width: 4),
+                    Icon(Icons.delete, color: Colors.black),
+                    SizedBox(width: 12),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: _isLocationServiceEnabled
-          ? ValueListenableBuilder<List<DocumentSnapshot>>(
-              valueListenable: _streamManager.mensajesNotifier,
-              builder: (context, mensajes, child) {
-                if (mensajes.isEmpty) {
-                  return Center(child: Text('No hay mensajes disponibles.'));
-                }
-
-                mensajes.sort((a, b) {
-                  var aDate = (a['FchHoraCreado'] as Timestamp).toDate();
-                  var bDate = (b['FchHoraCreado'] as Timestamp).toDate();
-                  return bDate.compareTo(aDate);
-                });
-
-                return FutureBuilder<Box>(
-                  future: Hive.openBox(
-                      'mensajesBox'), // 🔧 Fix: Ensure box is opened
-                  builder: (context, boxSnapshot) {
-                    if (boxSnapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      print('📦 Waiting for mensajesBox to open...');
-                      return Center(child: CircularProgressIndicator());
-                    }
-                    if (boxSnapshot.hasError) {
-                      print(
-                          '❌ Error opening mensajesBox: ${boxSnapshot.error}');
+          body: _isLocationServiceEnabled
+              ? ValueListenableBuilder<List<DocumentSnapshot>>(
+                  valueListenable: _streamManager.mensajesNotifier,
+                  builder: (context, mensajes, child) {
+                    if (mensajes.isEmpty) {
                       return Center(
-                          child: Text('Error opening message storage'));
+                          child: Text('No hay mensajes disponibles.'));
                     }
 
-                    var mensajesBox = boxSnapshot.data!;
-                    print(
-                        '📦 mensajesBox opened successfully with ${mensajesBox.length} entries');
+                    mensajes.sort((a, b) {
+                      var aDate = (a['FchHoraCreado'] as Timestamp).toDate();
+                      var bDate = (b['FchHoraCreado'] as Timestamp).toDate();
+                      return bDate.compareTo(aDate);
+                    });
 
-                    return ListView.builder(
-                      itemCount: mensajes.length,
-                      itemBuilder: (context, index) {
-                        var mensaje =
-                            mensajes[index].data() as Map<String, dynamic>;
-                        bool isRead =
-                            mensajesBox.get(mensajes[index].id) == 'Leido';
-                        bool isDeleted =
-                            mensajesBox.get(mensajes[index].id) == 'Borrado';
-
-                        if (isDeleted) {
-                          return SizedBox.shrink(); // Skip rendering this card
+                    return FutureBuilder<Box>(
+                      future: Hive.openBox(
+                          'mensajesBox'), // 🔧 Fix: Ensure box is opened
+                      builder: (context, boxSnapshot) {
+                        if (boxSnapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          print('📦 Waiting for mensajesBox to open...');
+                          return Center(child: CircularProgressIndicator());
+                        }
+                        if (boxSnapshot.hasError) {
+                          print(
+                              '❌ Error opening mensajesBox: ${boxSnapshot.error}');
+                          return Center(
+                              child: Text('Error opening message storage'));
                         }
 
-                        String formattedDate = mensaje['FchHoraCreado'] != null
-                            ? DateFormat('dd/MM/yyyy HH:mm').format(
-                                (mensaje['FchHoraCreado'] as Timestamp)
-                                    .toDate(),
-                              )
-                            : '';
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8.0,
-                            vertical: 4.0,
-                          ),
-                          child: Card(
-                            color: isRead ? Colors.grey[300] : Colors.lightBlue,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10.0),
-                            ),
-                            elevation: 5,
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  // Eliminado el sobre de marcar como leído
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          mensaje['Mensaje'] ?? 'Sin contenido',
-                                          style: TextStyle(
-                                            fontWeight: isRead
-                                                ? FontWeight.normal
-                                                : FontWeight.bold,
-                                            color: isRead
-                                                ? Colors.black
-                                                : Colors.white,
-                                            fontSize: 16.0,
-                                          ),
-                                        ),
-                                        SizedBox(height: 5),
-                                        Text(
-                                          formattedDate,
-                                          style: TextStyle(
-                                            color: isRead
-                                                ? Colors.black
-                                                : Colors.white,
-                                            fontSize: 12.0,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.delete,
-                                      color: Colors.black,
-                                    ),
-                                    onPressed: () {
-                                      _deleteMessage(mensajes[index]);
-                                    },
-                                  ),
-                                ],
+                        var mensajesBox = boxSnapshot.data!;
+                        print(
+                            '📦 mensajesBox opened successfully with ${mensajesBox.length} entries');
+
+                        return ListView.builder(
+                          itemCount: mensajes.length,
+                          itemBuilder: (context, index) {
+                            var mensaje =
+                                mensajes[index].data() as Map<String, dynamic>;
+                            bool isRead =
+                                mensajesBox.get(mensajes[index].id) == 'Leido';
+                            bool isDeleted =
+                                mensajesBox.get(mensajes[index].id) ==
+                                    'Borrado';
+
+                            if (isDeleted) {
+                              return SizedBox
+                                  .shrink(); // Skip rendering this card
+                            }
+
+                            String formattedDate =
+                                mensaje['FchHoraCreado'] != null
+                                    ? DateFormat('dd/MM/yyyy HH:mm').format(
+                                        (mensaje['FchHoraCreado'] as Timestamp)
+                                            .toDate(),
+                                      )
+                                    : '';
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                                vertical: 4.0,
                               ),
-                            ),
-                          ),
+                              child: Card(
+                                color: isRead
+                                    ? Colors.grey[300]
+                                    : Colors.lightBlue,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                ),
+                                elevation: 5,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      // Eliminado el sobre de marcar como leído
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              mensaje['Mensaje'] ??
+                                                  'Sin contenido',
+                                              style: TextStyle(
+                                                fontWeight: isRead
+                                                    ? FontWeight.normal
+                                                    : FontWeight.bold,
+                                                color: isRead
+                                                    ? Colors.black
+                                                    : Colors.white,
+                                                fontSize: 16.0,
+                                              ),
+                                            ),
+                                            SizedBox(height: 5),
+                                            Text(
+                                              formattedDate,
+                                              style: TextStyle(
+                                                color: isRead
+                                                    ? Colors.black
+                                                    : Colors.white,
+                                                fontSize: 12.0,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.delete,
+                                          color: Colors.black,
+                                        ),
+                                        onPressed: () {
+                                          _deleteMessage(mensajes[index]);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
                         );
                       },
                     );
                   },
-                );
-              },
-            )
-          : Center(
-              child: Text(
-                'Bloqueado - Sin GPS Activado',
-                style: TextStyle(color: Colors.grey, fontSize: 18),
-              ),
-            ),
-    );
+                )
+              : Center(
+                  child: Text(
+                    'Bloqueado - Sin GPS Activado',
+                    style: TextStyle(color: Colors.grey, fontSize: 18),
+                  ),
+                ),
+        ));
   }
 }

@@ -310,7 +310,7 @@ class _HomePageState extends State<HomePage>
     return count;
   }
 
-  // Refresca el contador de pedidos no leídos automáticamente cuando cambie Hive
+  // Refresca el contador de pedidos no leídos basado en los pedidos actuales del stream y su estado en Hive
   void _setupPedidosBoxReactiveCounter() async {
     final box = await openBoxSafe('pedidosBox');
     if (box == null) {
@@ -321,36 +321,67 @@ class _HomePageState extends State<HomePage>
       pedidosBox = box;
     });
     print('[PEDIDOS] pedidosBox inicializado para contador reactivo');
+
+    // Escucha cambios en el stream de pedidos y en Hive
+    void updatePedidosCount() async {
+      // Obtén los pedidos actuales del stream manager
+      final pedidos = _streamManager.pedidos;
+      int count = 0;
+      for (var pedido in pedidos) {
+        var estado = box.get(pedido.id);
+        if (estado == null || estado == 'No Leído') {
+          count++;
+        }
+      }
+      print('[PEDIDOS][SMART COUNT] Total de pedidos no leídos: $count');
+      _pendingOrdersCountNotifier.value = count;
+    }
+
     // Inicializa el contador con el valor actual
-    int initialCount = _countPedidosNoLeidos(box);
-    print('[PEDIDOS] Valor inicial del contador: $initialCount');
-    _pendingOrdersCountNotifier.value = initialCount;
-    // Usa box.watch() para escuchar cambios en Hive y actualizar el contador reactivo
+    updatePedidosCount();
+
+    // Escucha cambios en Hive
     box.watch().listen((event) {
       print(
           '[PEDIDOS][WATCH] Evento en pedidosBox: key=${event.key}, value=${event.value}, deleted=${event.deleted}');
-      int newCount = _countPedidosNoLeidos(box);
-      print('[PEDIDOS][WATCH] Nuevo valor del contador: $newCount');
-      _pendingOrdersCountNotifier.value = newCount;
+      updatePedidosCount();
+    });
+
+    // Escucha cambios en el stream de pedidos
+    _streamManager.pedidosNotifier.addListener(() {
+      updatePedidosCount();
     });
   }
 
+  // Refresca el contador de mensajes no leídos basado en los mensajes actuales del stream y su estado en Hive
   void _initMensajesBoxListener() async {
     var mensajesBox = await openBoxSafe('mensajesBox');
     if (mensajesBox == null) return;
 
-    // 🔹 Initialize message counter from existing data
-    int initialCount =
-        mensajesBox.values.where((estado) => estado == 'Descargado').length;
-    _messageCountNotifier.value = initialCount;
+    void updateMensajesCount() async {
+      final mensajes = _streamManager.mensajes;
+      int count = 0;
+      for (var mensaje in mensajes) {
+        var estado = mensajesBox.get(mensaje.id);
+        if (estado == null || estado == 'Descargado') {
+          count++;
+        }
+      }
+      print('[MENSAJES][SMART COUNT] Total de mensajes no leídos: $count');
+      _messageCountNotifier.value = count;
+    }
 
+    // Inicializa el contador con el valor actual
+    updateMensajesCount();
+
+    // Escucha cambios en Hive
     mensajesBox.watch().listen((event) {
-      int unreadCount = mensajesBox.values
-          .where((estado) => estado == 'Descargado')
-          .length; // Count only 'Descargado' messages
+      updateMensajesCount();
+    });
 
-      // 🔹 Update ValueNotifier instead of setState to avoid UI rebuilds
-      _messageCountNotifier.value = unreadCount;
+    // Escucha cambios en el stream de mensajes
+    _streamManager.mensajesNotifier.addListener(() {
+      updateMensajesCount();
     });
   }
 
