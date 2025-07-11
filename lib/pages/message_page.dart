@@ -395,11 +395,9 @@ class _MessagePageState extends State<MessagePage> {
         title: Row(
           children: [
             IconButton(
-              icon:
-                  Icon(Icons.headset_mic, color: Colors.black), // Headset icon
+              icon: Icon(Icons.headset_mic, color: Colors.black),
               onPressed: () async {
-                final phoneNumber = await getConstantValue('170') ??
-                    ''; // Retrieve phone number
+                final phoneNumber = await getConstantValue('170') ?? '';
                 if (phoneNumber.isNotEmpty) {
                   final Uri callUri = Uri(scheme: 'tel', path: phoneNumber);
                   if (await canLaunchUrl(callUri)) {
@@ -418,25 +416,25 @@ class _MessagePageState extends State<MessagePage> {
                 }
               },
             ),
-            SizedBox(width: 8), // Add spacing between icon and text
-            Text(
-              'Despacho',
-              style: TextStyle(color: Colors.black, fontSize: 18),
-            ),
+            SizedBox(width: 8),
+            Text('Despacho',
+                style: TextStyle(color: Colors.black, fontSize: 18)),
           ],
         ),
         actions: [
-          Row(
-            children: [
-              Text('Borrar Todo', style: TextStyle(color: Colors.black)),
-              IconButton(
-                icon: Icon(Icons.delete, color: Colors.black),
-                onPressed: () {
-                  final mensajes = _streamManager.mensajesNotifier.value;
-                  _deleteAllMessages(mensajes);
-                },
-              ),
-            ],
+          GestureDetector(
+            onTap: () {
+              final mensajes = _streamManager.mensajesNotifier.value;
+              _deleteAllMessages(mensajes);
+            },
+            child: Row(
+              children: [
+                Text('Borrar Todo', style: TextStyle(color: Colors.black)),
+                SizedBox(width: 4),
+                Icon(Icons.delete, color: Colors.black),
+                SizedBox(width: 12),
+              ],
+            ),
           ),
         ],
       ),
@@ -510,18 +508,7 @@ class _MessagePageState extends State<MessagePage> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  if (!isRead) // Show the button only if the message is not read
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.mark_email_unread,
-                                        color: Colors
-                                            .white, // Color for unread messages
-                                      ),
-                                      onPressed: () {
-                                        _markMessageAsRead(mensajes[index]);
-                                      },
-                                    ),
-                                  SizedBox(width: 10),
+                                  // Eliminado el sobre de marcar como leído
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
@@ -535,7 +522,7 @@ class _MessagePageState extends State<MessagePage> {
                                                 : FontWeight.bold,
                                             color: isRead
                                                 ? Colors.black
-                                                : Colors.white, // Updated color
+                                                : Colors.white,
                                             fontSize: 16.0,
                                           ),
                                         ),
@@ -556,7 +543,7 @@ class _MessagePageState extends State<MessagePage> {
                                     icon: Icon(
                                       Icons.delete,
                                       color: Colors.black,
-                                    ), // Updated color
+                                    ),
                                     onPressed: () {
                                       _deleteMessage(mensajes[index]);
                                     },
