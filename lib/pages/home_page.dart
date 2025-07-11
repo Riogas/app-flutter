@@ -325,12 +325,12 @@ class _HomePageState extends State<HomePage>
     int initialCount = _countPedidosNoLeidos(box);
     print('[PEDIDOS] Valor inicial del contador: $initialCount');
     _pendingOrdersCountNotifier.value = initialCount;
-    // Escucha cambios en Hive y actualiza el contador reactivo
-    box.listenable().addListener(() {
+    // Usa box.watch() para escuchar cambios en Hive y actualizar el contador reactivo
+    box.watch().listen((event) {
       print(
-          '[PEDIDOS] Cambio detectado en pedidosBox, refrescando contador...');
+          '[PEDIDOS][WATCH] Evento en pedidosBox: key=${event.key}, value=${event.value}, deleted=${event.deleted}');
       int newCount = _countPedidosNoLeidos(box);
-      print('[PEDIDOS] Nuevo valor del contador: $newCount');
+      print('[PEDIDOS][WATCH] Nuevo valor del contador: $newCount');
       _pendingOrdersCountNotifier.value = newCount;
     });
   }
