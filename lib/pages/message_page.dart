@@ -300,15 +300,16 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   void _deleteAllMessages(List<DocumentSnapshot> messages) async {
+    // Marcar todos como borrado en Hive primero
+    var mensajesBox = await Hive.openBox('mensajesBox');
     for (var message in messages) {
-      // Marcar como borrado en Hive
-      var mensajesBox = await Hive.openBox('mensajesBox');
       if (mensajesBox.containsKey(message.id)) {
         await mensajesBox.put(message.id, 'Borrado');
       }
-      // Invocar el servicio de descargaLecturaMensajes igual que al marcar como leído
-      await _descargaLecturaMensajeService(message);
     }
+    // Ejecutar todas las llamadas al servicio en paralelo
+    await Future.wait(
+        messages.map((message) => _descargaLecturaMensajeService(message)));
     if (mounted) {
       setState(() {
         _readMessageIds.clear();

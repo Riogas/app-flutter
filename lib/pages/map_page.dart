@@ -8,6 +8,7 @@ import '../services/stream_manager.dart'; // Import StreamManager // Asegúrate 
 import 'package:hive/hive.dart'; // Import Hive for Box
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:MoveIT/pages/pending_orders.dart';
+import '../services/persistent_stream_manager.dart';
 
 class MapPage extends StatefulWidget {
   @override
@@ -20,7 +21,7 @@ class _MapPageState extends State<MapPage> {
   bool _locationPermissionDenied = false;
   bool _isMapEnabled = false; // Estado inicial del mapa deshabilitado
   final FirebaseService _firebaseService = FirebaseService();
-  final StreamManager _streamManager = StreamManager(); // Add StreamManager
+  // Eliminado: final StreamManager _streamManager = StreamManager(); // Usar PersistentStreamManager singleton
   List<Marker> _markers = [];
   late Box constantBox;
   late Box pedidosBox;
@@ -34,7 +35,7 @@ class _MapPageState extends State<MapPage> {
     _initializeHive().then((_) {
       _checkMapState(); // Verificar el estado del mapa después de inicializar Hive
       _getCurrentLocation();
-      _getPendingOrders();
+      // Ya no llamamos a _getPendingOrders, usamos el notifier global
     });
   }
 
@@ -155,80 +156,7 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
-  void _getPendingOrders() {
-    _streamManager.getPedidosStream().listen((orders) {
-      setState(() {
-        _markers = orders
-            .map((order) {
-              var data = order.data() as Map<String, dynamic>;
-
-              // Check if 'ubicacion' field exists
-              if (!data.containsKey('ubicacion') || data['ubicacion'] == null) {
-                return null; // Skip orders without 'ubicacion'
-              }
-
-              var location = data['ubicacion'] as GeoPoint;
-              var pedidoId = data['id'];
-
-              // Check the order state in Hive
-              var pedidoEstado = pedidosBox.get(pedidoId);
-              if (pedidoEstado == 'Procesando') {
-                return null; // Skip orders with "Procesando" state
-              }
-
-              // Calculate delay in minutes
-              DateTime now = DateTime.now();
-              DateTime fchHoraPara =
-                  (data['FchHoraMaxEntComp'] as Timestamp).toDate();
-              int delayMinutes = fchHoraPara.difference(now).inMinutes;
-
-              // Get delay info (color and label)
-              var delayInfo = getDelayInfo(delayMinutes);
-              Color pinColor =
-                  delayInfo?["Color"] ?? Colors.red; // Default to red
-
-              return Marker(
-                width: 80.0,
-                height: 80.0,
-                point: LatLng(location.latitude, location.longitude),
-                child: IconButton(
-                  icon: Icon(Icons.location_on),
-                  color: pinColor, // Use the color from delayInfo
-                  iconSize: 40.0,
-                  onPressed: () {
-                    // Navegar directamente a la página de detalles
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => OrderDetailPage(
-                          detalleHtml: data['DetalleHTML'] ?? '',
-                          estadoNro: 1, // Ajusta según sea necesario
-                          totalPedido: data['TotalPedido'] ??
-                              0.0, // Ajusta según sea necesario
-                          codPedido: data['id'],
-                          pedidoTipo: data['Tipo'],
-                          ubicacion: data.containsKey('ubicacion') &&
-                                  data['ubicacion'] is GeoPoint
-                              ? data['ubicacion'] as GeoPoint
-                              : null,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              );
-            })
-            .where((marker) => marker != null)
-            .toList()
-            .cast<Marker>(); // Filter out null markers and cast to List<Marker>
-
-        // Center map on the client with the longest delay or the first order
-        _centerMapOnPriorityOrder(
-          orders.cast<QueryDocumentSnapshot<Object?>>(),
-        );
-      });
-    });
-  }
+  // Ya no se usa _getPendingOrders, la lógica se mueve al ValueListenableBuilder en el build
 
   Map<String, dynamic>? getDelayInfo(int delayMinutes) {
     for (int id in [40, 41, 42, 43]) {
@@ -311,23 +239,97 @@ class _MapPageState extends State<MapPage> {
                       ? Text('Permiso de ubicación denegado')
                       : CircularProgressIndicator(),
                 )
-              : FlutterMap(
-                  mapController: _mapController, // Asignar controlador al mapa
-                  options: MapOptions(
-                    initialCenter:
-                        _focusedPosition ?? _currentPosition ?? LatLng(0, 0),
-                    initialZoom: 15.0,
-                    minZoom: 5.0,
-                    maxZoom: 18.0,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                      subdomains: ['a', 'b', 'c'],
-                    ),
-                    MarkerLayer(markers: _markers),
-                  ],
+              : ValueListenableBuilder<List<DocumentSnapshot>>(
+                  valueListenable: PersistentStreamManager().pedidosNotifier,
+                  builder: (context, pedidos, child) {
+                    // Construir los marcadores a partir de los pedidos
+                    List<Marker> markers = [];
+                    for (var order in pedidos) {
+                      var data = order.data() as Map<String, dynamic>;
+                      if (!data.containsKey('ubicacion') ||
+                          data['ubicacion'] == null) continue;
+                      var location = data['ubicacion'] as GeoPoint;
+                      var pedidoId = data['id'];
+                      var pedidoEstado = pedidosBox.get(pedidoId);
+                      if (pedidoEstado == 'Procesando') continue;
+                      DateTime now = DateTime.now();
+                      DateTime fchHoraPara =
+                          (data['FchHoraMaxEntComp'] as Timestamp).toDate();
+                      int delayMinutes = fchHoraPara.difference(now).inMinutes;
+                      var delayInfo = getDelayInfo(delayMinutes);
+                      Color pinColor = delayInfo?["Color"] ?? Colors.red;
+                      markers.add(
+                        Marker(
+                          width: 80.0,
+                          height: 80.0,
+                          point: LatLng(location.latitude, location.longitude),
+                          child: IconButton(
+                            icon: Icon(Icons.location_on),
+                            color: pinColor,
+                            iconSize: 40.0,
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => OrderDetailPage(
+                                    detalleHtml: data['DetalleHTML'] ?? '',
+                                    estadoNro: 1,
+                                    totalPedido: data['TotalPedido'] ?? 0.0,
+                                    codPedido: data['id'],
+                                    pedidoTipo: data['Tipo'],
+                                    ubicacion: data.containsKey('ubicacion') &&
+                                            data['ubicacion'] is GeoPoint
+                                        ? data['ubicacion'] as GeoPoint
+                                        : null,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    }
+                    // Centrar el mapa en el pedido prioritario
+                    if (pedidos.isNotEmpty) {
+                      var filteredOrders = pedidos.where((order) {
+                        var data = order.data() as Map<String, dynamic>;
+                        var pedidoId = data['id'];
+                        return _getPedidoEstado(pedidoId) != '';
+                      }).toList();
+                      if (filteredOrders.isNotEmpty) {
+                        var firstOrder = filteredOrders.first;
+                        var data = firstOrder.data() as Map<String, dynamic>;
+                        var location = data['ubicacion'] as GeoPoint;
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          setState(() {
+                            _focusedPosition =
+                                LatLng(location.latitude, location.longitude);
+                          });
+                        });
+                      } else if (_currentPosition != null) {
+                        _mapController.move(_currentPosition!, 15.0);
+                      }
+                    }
+                    return FlutterMap(
+                      mapController: _mapController,
+                      options: MapOptions(
+                        initialCenter: _focusedPosition ??
+                            _currentPosition ??
+                            LatLng(0, 0),
+                        initialZoom: 15.0,
+                        minZoom: 5.0,
+                        maxZoom: 18.0,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                          subdomains: ['a', 'b', 'c'],
+                        ),
+                        MarkerLayer(markers: markers),
+                      ],
+                    );
+                  },
                 )),
     );
   }

@@ -297,27 +297,41 @@ class _HomePageState extends State<HomePage>
 // Helper to count pedidos "No Leído" (same logic as PendingOrdersPage)
   int _countPedidosNoLeidos(Box box) {
     int count = 0;
+    print('[PEDIDOS] Recorriendo ${box.keys.length} pedidos en pedidosBox...');
     for (var key in box.keys) {
       var pedidoEstado = box.get(key);
+      print('[PEDIDOS] Pedido $key → Estado: $pedidoEstado');
       if (pedidoEstado == null || pedidoEstado == 'No Leído') {
         count++;
+        print('[PEDIDOS] Pedido $key está sin leer (null o "No Leído")');
       }
     }
+    print('[PEDIDOS] Total de pedidos no leídos: $count');
     return count;
   }
 
   // Refresca el contador de pedidos no leídos automáticamente cuando cambie Hive
   void _setupPedidosBoxReactiveCounter() async {
     final box = await openBoxSafe('pedidosBox');
-    if (box == null) return;
+    if (box == null) {
+      print('[PEDIDOS] No se pudo abrir pedidosBox');
+      return;
+    }
     setState(() {
       pedidosBox = box;
     });
+    print('[PEDIDOS] pedidosBox inicializado para contador reactivo');
     // Inicializa el contador con el valor actual
-    _pendingOrdersCountNotifier.value = _countPedidosNoLeidos(box);
+    int initialCount = _countPedidosNoLeidos(box);
+    print('[PEDIDOS] Valor inicial del contador: $initialCount');
+    _pendingOrdersCountNotifier.value = initialCount;
     // Escucha cambios en Hive y actualiza el contador reactivo
     box.listenable().addListener(() {
-      _pendingOrdersCountNotifier.value = _countPedidosNoLeidos(box);
+      print(
+          '[PEDIDOS] Cambio detectado en pedidosBox, refrescando contador...');
+      int newCount = _countPedidosNoLeidos(box);
+      print('[PEDIDOS] Nuevo valor del contador: $newCount');
+      _pendingOrdersCountNotifier.value = newCount;
     });
   }
 
