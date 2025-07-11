@@ -332,13 +332,17 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                               String direccionCorta = direccion.length > 20
                                   ? direccion.substring(0, 20) + '...'
                                   : direccion;
-
                               // Determinar el estado del pedido y la etiqueta correspondiente
                               String etiquetaTexto = _getPedidoEstado(pedidoId);
                               Color etiquetaColor =
                                   _getPedidoEstadoColor(pedidoId);
 
-                              // Check for changes in sessionBox for _locationPermissionDenied
+                              // Excluir mostrar la etiqueta si el estado es 'Leído' o 'No Leído'
+                              bool mostrarEtiqueta = etiquetaTexto != 'Leído' &&
+                                  etiquetaTexto != 'No Leído' &&
+                                  etiquetaTexto.isNotEmpty;
+
+                              // Check for cambios en sessionBox para _locationPermissionDenied
                               bool locationPermissionDenied = false;
                               if (sesionBox.isOpen) {
                                 locationPermissionDenied = sesionBox.get(
@@ -379,9 +383,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 8.0,
-                                    vertical: 4.0,
-                                  ),
+                                      horizontal: 8.0, vertical: 4.0),
                                   child: Card(
                                     color: cardBlocked
                                         ? Colors
@@ -417,30 +419,27 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                                 ),
                                               ),
                                               SizedBox(width: 8.0),
-                                              if (!cardBlocked)
+                                              if (!cardBlocked &&
+                                                  mostrarEtiqueta)
                                                 Container(
                                                   padding: EdgeInsets.symmetric(
-                                                    horizontal: 6.0,
-                                                    vertical: 2.0,
-                                                  ),
+                                                      horizontal: 6.0,
+                                                      vertical: 2.0),
                                                   decoration: BoxDecoration(
                                                     color: etiquetaColor,
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                             8.0),
                                                   ),
-                                                  child: etiquetaTexto
-                                                          .isNotEmpty
-                                                      ? Text(
-                                                          etiquetaTexto,
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            fontSize: 12.0,
-                                                          ),
-                                                        )
-                                                      : SizedBox.shrink(),
+                                                  child: Text(
+                                                    etiquetaTexto,
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 12.0,
+                                                    ),
+                                                  ),
                                                 ),
                                               Spacer(),
                                               Icon(
