@@ -7,6 +7,42 @@ import 'package:hive/hive.dart';
 /// Optimized stream manager with persistent listeners and ValueNotifiers
 /// This eliminates the constant creation/removal of listeners
 class PersistentStreamManager {
+  // --- Real listener tracking ---
+  final Map<String, int> _activeListeners = {
+    'pedidos': 0,
+    'mensajes': 0,
+    'movil': 0,
+    'sesiones': 0,
+    'subEstados': 0,
+    'subEstadoMoviles': 0,
+  };
+
+  void _incrementListener(String key) {
+    _activeListeners[key] = (_activeListeners[key] ?? 0) + 1;
+    _logToMonitoreo('ActiveListeners_$key', _activeListeners[key]);
+    _logToMonitoreo('ActiveListenersTotal',
+        _activeListeners.values.reduce((a, b) => a + b));
+  }
+
+  void _decrementListener(String key) {
+    if (_activeListeners[key] != null && _activeListeners[key]! > 0) {
+      _activeListeners[key] = _activeListeners[key]! - 1;
+      _logToMonitoreo('ActiveListeners_' + key, _activeListeners[key]);
+      _logToMonitoreo('ActiveListenersTotal',
+          _activeListeners.values.reduce((a, b) => a + b));
+    }
+  }
+
+  // --- Monitoreo Hive box for diagnostics ---
+  Future<void> _logToMonitoreo(String etiqueta, dynamic valor) async {
+    try {
+      var box = await Hive.openBox('Monitoreo');
+      await box.put(etiqueta, valor);
+    } catch (e) {
+      print('❌ [PersistentStreamManager] Error logging to Monitoreo: $e');
+    }
+  }
+
   // --- Centralized Hive sync for mensajes and pedidos ---
   bool _hiveSyncInitialized = false;
   void initializeHiveSync() {
@@ -150,10 +186,14 @@ class PersistentStreamManager {
     try {
       _pedidosSubscription = _firebaseService.getPedidosStream().listen(
         (List<DocumentSnapshot> pedidos) {
-          _pedidosReads++;
+          // Increment by the number of documents received (real Firestore reads)
+          _pedidosReads += pedidos.length;
           print(
               '📦 [PersistentStreamManager] Pedidos updated: ${pedidos.length} items (reads: $_pedidosReads)');
           _pedidosNotifier.value = pedidos;
+          // Log to Hive every time the read counter changes
+          _logToMonitoreo('PedidosReads', _pedidosReads);
+          _logToMonitoreo('TotalReads', totalReads);
         },
         onError: (error) {
           print('❌ [PersistentStreamManager] Pedidos stream error: $error');
@@ -172,10 +212,14 @@ class PersistentStreamManager {
     try {
       _mensajesSubscription = _firebaseService.getMensajesStream().listen(
         (List<DocumentSnapshot> mensajes) {
-          _mensajesReads++;
+          // Increment by the number of documents received (real Firestore reads)
+          _mensajesReads += mensajes.length;
           print(
               '💬 [PersistentStreamManager] Mensajes updated: ${mensajes.length} items (reads: $_mensajesReads)');
           _mensajesNotifier.value = mensajes;
+          // Log to Hive every time the read counter changes
+          _logToMonitoreo('MensajesReads', _mensajesReads);
+          _logToMonitoreo('TotalReads', totalReads);
         },
         onError: (error) {
           print('❌ [PersistentStreamManager] Mensajes stream error: $error');
@@ -199,6 +243,9 @@ class PersistentStreamManager {
           print(
               '🚗 [PersistentStreamManager] Movil updated (reads: $_movilReads)');
           _movilNotifier.value = movil;
+          // Log to Hive every time the read counter changes
+          _logToMonitoreo('MovilReads', _movilReads);
+          _logToMonitoreo('TotalReads', totalReads);
         },
         onError: (error) {
           print('❌ [PersistentStreamManager] Movil stream error: $error');
@@ -221,6 +268,9 @@ class PersistentStreamManager {
           print(
               '🔐 [PersistentStreamManager] Sesiones updated (reads: $_sesionesReads)');
           _sesionesNotifier.value = sesiones;
+          // Log to Hive every time the read counter changes
+          _logToMonitoreo('SesionesReads', _sesionesReads);
+          _logToMonitoreo('TotalReads', totalReads);
         },
         onError: (error) {
           print('❌ [PersistentStreamManager] Sesiones stream error: $error');
@@ -241,10 +291,14 @@ class PersistentStreamManager {
       _subEstadosSubscription =
           _firebaseService.getSubEstadoMovilesStream().listen(
         (List<Map<String, dynamic>> subEstados) {
-          _subEstadosReads++;
+          // Increment by the number of documents received (real Firestore reads)
+          _subEstadosReads += subEstados.length;
           print(
               '📊 [PersistentStreamManager] SubEstados updated: ${subEstados.length} items (reads: $_subEstadosReads)');
           _subEstadosNotifier.value = subEstados;
+          // Log to Hive every time the read counter changes
+          _logToMonitoreo('SubEstadosReads', _subEstadosReads);
+          _logToMonitoreo('TotalReads', totalReads);
         },
         onError: (error) {
           print('❌ [PersistentStreamManager] SubEstados stream error: $error');
@@ -265,10 +319,14 @@ class PersistentStreamManager {
       _subEstadoMovilesSubscription =
           _firebaseService.getSubEstadoMovilesStream().listen(
         (List<Map<String, dynamic>> subEstadoMoviles) {
-          _subEstadoMovilesReads++;
+          // Increment by the number of documents received (real Firestore reads)
+          _subEstadoMovilesReads += subEstadoMoviles.length;
           print(
               '🚗📊 [PersistentStreamManager] SubEstadoMoviles updated: ${subEstadoMoviles.length} items (reads: $_subEstadoMovilesReads)');
           _subEstadoMovilesNotifier.value = subEstadoMoviles;
+          // Log to Hive every time the read counter changes
+          _logToMonitoreo('SubEstadoMovilesReads', _subEstadoMovilesReads);
+          _logToMonitoreo('TotalReads', totalReads);
         },
         onError: (error) {
           print(
@@ -284,11 +342,161 @@ class PersistentStreamManager {
     }
   }
 
+  // --- Gestión manual de listeners por widget ---
+  void removeListener(String streamType) {
+    switch (streamType) {
+      case 'pedidos':
+        if (_pedidosListeners > 0) {
+          _pedidosListeners--;
+          _decrementListener('pedidos');
+          _logToMonitoreo('PedidosListenerCount', _pedidosListeners);
+          _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+          print(
+              '🗑️ [PersistentStreamManager] Pedidos listener removed (remaining: $_pedidosListeners)');
+        }
+        break;
+      case 'mensajes':
+        if (_mensajesListeners > 0) {
+          _mensajesListeners--;
+          _decrementListener('mensajes');
+          _logToMonitoreo('MensajesListenerCount', _mensajesListeners);
+          _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+          print(
+              '🗑️ [PersistentStreamManager] Mensajes listener removed (remaining: $_mensajesListeners)');
+        }
+        break;
+      case 'movil':
+        if (_movilListeners > 0) {
+          _movilListeners--;
+          _decrementListener('movil');
+          _logToMonitoreo('MovilListenerCount', _movilListeners);
+          _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+          print(
+              '🗑️ [PersistentStreamManager] Movil listener removed (remaining: $_movilListeners)');
+        }
+        break;
+      case 'sesiones':
+        if (_sesionesListeners > 0) {
+          _sesionesListeners--;
+          _decrementListener('sesiones');
+          _logToMonitoreo('SesionesListenerCount', _sesionesListeners);
+          _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+          print(
+              '🗑️ [PersistentStreamManager] Sesiones listener removed (remaining: $_sesionesListeners)');
+        }
+        break;
+      case 'subEstados':
+        if (_subEstadosListeners > 0) {
+          _subEstadosListeners--;
+          _decrementListener('subEstados');
+          _logToMonitoreo('SubEstadosListenerCount', _subEstadosListeners);
+          _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+          print(
+              '🗑️ [PersistentStreamManager] SubEstados listener removed (remaining: $_subEstadosListeners)');
+        }
+        break;
+      case 'subEstadoMoviles':
+        if (_subEstadoMovilesListeners > 0) {
+          _subEstadoMovilesListeners--;
+          _decrementListener('subEstadoMoviles');
+          _logToMonitoreo(
+              'SubEstadoMovilesListenerCount', _subEstadoMovilesListeners);
+          _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+          print(
+              '🗑️ [PersistentStreamManager] SubEstadoMoviles listener removed (remaining: $_subEstadoMovilesListeners)');
+        }
+        break;
+    }
+  }
+
+  void removeListeners(List<String> streamTypes) {
+    for (String streamType in streamTypes) {
+      removeListener(streamType);
+    }
+  }
+
+  // --- Métodos de monitoreo detallado ---
+  Map<String, int> get activeListenersMap => Map.from(_activeListeners);
+
+  Map<String, Map<String, int>> getDetailedListenerInfo() {
+    return {
+      'pedidos': {
+        'widgetListeners': _pedidosListeners,
+        'activeListeners': _activeListeners['pedidos'] ?? 0,
+        'reads': _pedidosReads,
+      },
+      'mensajes': {
+        'widgetListeners': _mensajesListeners,
+        'activeListeners': _activeListeners['mensajes'] ?? 0,
+        'reads': _mensajesReads,
+      },
+      'movil': {
+        'widgetListeners': _movilListeners,
+        'activeListeners': _activeListeners['movil'] ?? 0,
+        'reads': _movilReads,
+      },
+      'sesiones': {
+        'widgetListeners': _sesionesListeners,
+        'activeListeners': _activeListeners['sesiones'] ?? 0,
+        'reads': _sesionesReads,
+      },
+      'subEstados': {
+        'widgetListeners': _subEstadosListeners,
+        'activeListeners': _activeListeners['subEstados'] ?? 0,
+        'reads': _subEstadosReads,
+      },
+      'subEstadoMoviles': {
+        'widgetListeners': _subEstadoMovilesListeners,
+        'activeListeners': _activeListeners['subEstadoMoviles'] ?? 0,
+        'reads': _subEstadoMovilesReads,
+      },
+    };
+  }
+
+  void printListenerSummary() {
+    print('\n📊 [PersistentStreamManager] LISTENER SUMMARY');
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('🔄 Persistent Streams Active: $totalActiveListeners/6');
+    print('📱 Total Widget Listeners: $totalWidgetListeners');
+    print('📖 Total Database Reads: $totalReads');
+    print('');
+    final info = getDetailedListenerInfo();
+    info.forEach((streamName, data) {
+      print(
+          '  📊 $streamName: ${data['widgetListeners']} widgets, ${data['activeListeners']} active, ${data['reads']} reads');
+    });
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+  }
+
+  bool get isProperlyInitialized {
+    return _initialized &&
+        _pedidosSubscription != null &&
+        _mensajesSubscription != null &&
+        _movilSubscription != null &&
+        _sesionesSubscription != null &&
+        _subEstadosSubscription != null &&
+        _subEstadoMovilesSubscription != null;
+  }
+
   // Getters for ValueNotifiers (widgets subscribe to these)
   ValueNotifier<List<DocumentSnapshot>> get pedidosNotifier {
     _pedidosListeners++;
     print(
         '👂 [PersistentStreamManager] Pedidos listener added (total: $_pedidosListeners)');
+    _incrementListener('pedidos');
+    _logToMonitoreo('PedidosListenerCount', _pedidosListeners);
+    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+    _logToMonitoreo('PedidosReads', _pedidosReads);
+    _logToMonitoreo('TotalReads', totalReads);
+    // Attach a removal callback for real listener tracking
+    _pedidosNotifier.addListener(() {
+      // No-op, just to ensure listener is tracked
+    });
+    // Remove listener when widget is disposed
+    _pedidosNotifier.addListener(() {
+      // This will be called on dispose, so decrement
+      _decrementListener('pedidos');
+    });
     return _pedidosNotifier;
   }
 
@@ -296,6 +504,15 @@ class PersistentStreamManager {
     _mensajesListeners++;
     print(
         '👂 [PersistentStreamManager] Mensajes listener added (total: $_mensajesListeners)');
+    _incrementListener('mensajes');
+    _logToMonitoreo('MensajesListenerCount', _mensajesListeners);
+    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+    _logToMonitoreo('MensajesReads', _mensajesReads);
+    _logToMonitoreo('TotalReads', totalReads);
+    _mensajesNotifier.addListener(() {});
+    _mensajesNotifier.addListener(() {
+      _decrementListener('mensajes');
+    });
     return _mensajesNotifier;
   }
 
@@ -303,6 +520,15 @@ class PersistentStreamManager {
     _movilListeners++;
     print(
         '👂 [PersistentStreamManager] Movil listener added (total: $_movilListeners)');
+    _incrementListener('movil');
+    _logToMonitoreo('MovilListenerCount', _movilListeners);
+    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+    _logToMonitoreo('MovilReads', _movilReads);
+    _logToMonitoreo('TotalReads', totalReads);
+    _movilNotifier.addListener(() {});
+    _movilNotifier.addListener(() {
+      _decrementListener('movil');
+    });
     return _movilNotifier;
   }
 
@@ -310,6 +536,15 @@ class PersistentStreamManager {
     _sesionesListeners++;
     print(
         '👂 [PersistentStreamManager] Sesiones listener added (total: $_sesionesListeners)');
+    _incrementListener('sesiones');
+    _logToMonitoreo('SesionesListenerCount', _sesionesListeners);
+    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+    _logToMonitoreo('SesionesReads', _sesionesReads);
+    _logToMonitoreo('TotalReads', totalReads);
+    _sesionesNotifier.addListener(() {});
+    _sesionesNotifier.addListener(() {
+      _decrementListener('sesiones');
+    });
     return _sesionesNotifier;
   }
 
@@ -317,6 +552,15 @@ class PersistentStreamManager {
     _subEstadosListeners++;
     print(
         '👂 [PersistentStreamManager] SubEstados listener added (total: $_subEstadosListeners)');
+    _incrementListener('subEstados');
+    _logToMonitoreo('SubEstadosListenerCount', _subEstadosListeners);
+    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+    _logToMonitoreo('SubEstadosReads', _subEstadosReads);
+    _logToMonitoreo('TotalReads', totalReads);
+    _subEstadosNotifier.addListener(() {});
+    _subEstadosNotifier.addListener(() {
+      _decrementListener('subEstados');
+    });
     return _subEstadosNotifier;
   }
 
@@ -324,6 +568,16 @@ class PersistentStreamManager {
     _subEstadoMovilesListeners++;
     print(
         '👂 [PersistentStreamManager] SubEstadoMoviles listener added (total: $_subEstadoMovilesListeners)');
+    _incrementListener('subEstadoMoviles');
+    _logToMonitoreo(
+        'SubEstadoMovilesListenerCount', _subEstadoMovilesListeners);
+    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
+    _logToMonitoreo('SubEstadoMovilesReads', _subEstadoMovilesReads);
+    _logToMonitoreo('TotalReads', totalReads);
+    _subEstadoMovilesNotifier.addListener(() {});
+    _subEstadoMovilesNotifier.addListener(() {
+      _decrementListener('subEstadoMoviles');
+    });
     return _subEstadoMovilesNotifier;
   }
 
@@ -379,6 +633,9 @@ class PersistentStreamManager {
     print('📊 Active Stream Listeners: $totalActiveListeners (persistent)');
     print('📊 Widget Listeners: $totalWidgetListeners');
     print('📊 Total Reads: $totalReads');
+    _logToMonitoreo('ActiveStreamListeners', totalActiveListeners);
+    _logToMonitoreo('WidgetListeners', totalWidgetListeners);
+    _logToMonitoreo('TotalReads', totalReads);
     print('');
     print('Per Stream Breakdown:');
     print('  📦 Pedidos: $_pedidosListeners widgets, $_pedidosReads reads');
@@ -389,6 +646,12 @@ class PersistentStreamManager {
         '  📊 SubEstados: $_subEstadosListeners widgets, $_subEstadosReads reads');
     print(
         '  🚗📊 SubEstadoMoviles: $_subEstadoMovilesListeners widgets, $_subEstadoMovilesReads reads');
+    _logToMonitoreo('PedidosReads', _pedidosReads);
+    _logToMonitoreo('MensajesReads', _mensajesReads);
+    _logToMonitoreo('MovilReads', _movilReads);
+    _logToMonitoreo('SesionesReads', _sesionesReads);
+    _logToMonitoreo('SubEstadosReads', _subEstadosReads);
+    _logToMonitoreo('SubEstadoMovilesReads', _subEstadoMovilesReads);
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   }
 

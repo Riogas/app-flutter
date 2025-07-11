@@ -72,8 +72,11 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
   @override
   void dispose() {
+    print('🔴 PendingOrdersPage: dispose() called - Instance: ${hashCode}');
     // Cancel the Timer if it is not null
     _hiveStateChecker?.cancel();
+    // Decrementa el contador de listeners de pedidos
+    _streamManager.removeListener('pedidos');
     super.dispose();
   }
 

@@ -1,4 +1,1 @@
-{
-  "version": 2,
-  "entries": [{ "package": "MoveIT", "rootUri": "../", "packageUri": "lib/" }]
-}
+{"version":2,"entries":[{"package":"MoveIT","rootUri":"../","packageUri":"lib/"}]}

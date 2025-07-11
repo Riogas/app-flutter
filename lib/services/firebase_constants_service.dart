@@ -46,5 +46,23 @@ class ConstantsService {
 
     print("📦 Contenido de constantBox después de guardar las constantes:");
     constantBox.toMap().forEach((key, value) => print('$key: $value'));
+
+    // Guardar en Hive la cantidad de lecturas de la colección de constantes y actualizar el total
+    try {
+      var monitoreoBox = await Hive.openBox('Monitoreo');
+      await monitoreoBox.put('ConstantesReads',
+          querySnapshot.docs.length); // 1 lectura por documento
+
+      // Sumar ConstantesReads al TotalReads (si ya existe, sumar; si no, crear)
+      int totalReads = monitoreoBox.get('TotalReads', defaultValue: 0);
+      totalReads += querySnapshot.docs.length;
+      await monitoreoBox.put('TotalReads', totalReads);
+
+      print(
+          '✅ ConstantesReads guardado en Hive (Monitoreo): ${querySnapshot.docs.length}');
+      print('✅ TotalReads actualizado en Hive (Monitoreo): $totalReads');
+    } catch (e) {
+      print('❌ Error guardando ConstantesReads en Hive: $e');
+    }
   }
 }

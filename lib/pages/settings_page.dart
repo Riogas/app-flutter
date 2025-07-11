@@ -961,10 +961,144 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(height: 10),
               _buildPermissionsButton(), // Added Permissions button
               SizedBox(height: 10),
+              _buildMonitoreoButton(),
+              SizedBox(height: 10),
               _buildLogoutButton(),
               SizedBox(height: 10),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonitoreoButton() {
+    return Center(
+      child: ElevatedButton.icon(
+        onPressed: () async {
+          var box = await Hive.openBox('Monitoreo');
+          Map<dynamic, dynamic> monitoreoMap = box.toMap();
+          // Mapeo de claves a nombres en español
+          final Map<String, String> lecturasLabels = {
+            'PedidosReads': 'Lectura pedidos',
+            'MensajesReads': 'Lectura mensajes',
+            'MovilReads': 'Lectura móvil',
+            'SesionesReads': 'Lectura sesiones',
+            'SubEstadosReads': 'Lectura subestados',
+            'SubEstadoMovilesReads': 'Lectura subestado móviles',
+            'ConstantesReads': 'Lectura constantes',
+          };
+          // Orden de visualización
+          final List<String> ordenLecturas = [
+            'PedidosReads',
+            'MensajesReads',
+            'MovilReads',
+            'SesionesReads',
+            'SubEstadosReads',
+            'SubEstadoMovilesReads',
+            'ConstantesReads',
+          ];
+          // Construir filas de la tabla
+          List<TableRow> rows = [];
+          for (final key in ordenLecturas) {
+            if (monitoreoMap.containsKey(key)) {
+              rows.add(
+                TableRow(children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6.0),
+                    child: Text(lecturasLabels[key] ?? key,
+                        style: TextStyle(fontWeight: FontWeight.w500)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6.0),
+                    child: Text(monitoreoMap[key].toString()),
+                  ),
+                ]),
+              );
+            }
+          }
+          // Agregar TotalReads al final
+          if (monitoreoMap.containsKey('TotalReads')) {
+            rows.add(
+              TableRow(children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text('Total Lecturas',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepPurple)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text(monitoreoMap['TotalReads'].toString(),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepPurple)),
+                ),
+              ]),
+            );
+          }
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: Text('Lecturas Firestore'),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: rows.isEmpty
+                      ? Text('No hay datos de lecturas.')
+                      : Table(
+                          columnWidths: {
+                            0: FlexColumnWidth(2),
+                            1: FlexColumnWidth(1),
+                          },
+                          border: TableBorder.symmetric(
+                            inside: BorderSide(
+                                width: 0.5, color: Colors.grey.shade300),
+                          ),
+                          children: [
+                            TableRow(
+                              decoration:
+                                  BoxDecoration(color: Colors.grey.shade200),
+                              children: [
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Text('Tipo',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Text('Valor',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                            ...rows
+                          ],
+                        ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: Text('Cerrar'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+        icon: Icon(Icons.analytics, color: Colors.deepPurple),
+        label: Text('Monitoreo'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.deepPurple,
+          side: BorderSide(color: Colors.deepPurple),
         ),
       ),
     );

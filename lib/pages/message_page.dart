@@ -52,6 +52,8 @@ class _MessagePageState extends State<MessagePage> {
   void dispose() {
     _messageSubscription?.cancel();
     _gpsStatusSubscription?.cancel(); // Cancel GPS status subscription
+    // Decrementa el contador de listeners de mensajes
+    _streamManager.removeListener('mensajes');
     super.dispose();
   }
 
