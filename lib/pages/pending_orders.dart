@@ -34,6 +34,8 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   final LocationService locationService =
       LocationService(); // Initialize locationService
   Timer? _hiveStateChecker; // Make it nullable
+  // Notificador para el estado del GPS
+  final ValueNotifier<bool> _gpsEnabledNotifier = ValueNotifier(false);
 
   @override
   void initState() {
@@ -47,6 +49,19 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
       movilId = constantBox.get('MovilID', defaultValue: 0);
     });
     _initPersistentStreams();
+    _initGpsListener();
+  }
+
+  void _initGpsListener() {
+    // Estado inicial
+    Geolocator.isLocationServiceEnabled().then((enabled) {
+      _gpsEnabledNotifier.value = enabled;
+    });
+    // Escucha cambios en el servicio de ubicación
+    Geolocator.getServiceStatusStream().listen((status) async {
+      bool enabled = status == ServiceStatus.enabled;
+      _gpsEnabledNotifier.value = enabled;
+    });
   }
 
   Future<void> _initPersistentStreams() async {
@@ -260,119 +275,115 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
               valueListenable:
                   (Hive.box('pedidosBox') as Box<dynamic>).listenable(),
               builder: (context, box, _) {
-                return ValueListenableBuilder<List<DocumentSnapshot>>(
-                  valueListenable: _streamManager.pedidosNotifier,
-                  builder: (context, pedidos, child) {
-                    // Add detailed logging for debugging
-                    print('🔍 PendingOrders pedidosNotifier state:');
-                    print('   Widget Instance: ${hashCode}');
-                    print('   Has data: ${pedidos.isNotEmpty}');
-                    if (pedidos.isNotEmpty) {
-                      print('   Data length: ${pedidos.length}');
-                      print(
-                          '   Sample data: ${pedidos.isNotEmpty ? pedidos.first.id : "no data"}');
-                    }
+                return ValueListenableBuilder<bool>(
+                  valueListenable: _gpsEnabledNotifier,
+                  builder: (context, isLocationServiceEnabled, _) {
+                    return ValueListenableBuilder<List<DocumentSnapshot>>(
+                      valueListenable: _streamManager.pedidosNotifier,
+                      builder: (context, pedidos, child) {
+                        // Add detailed logging for debugging
+                        print('🔍 PendingOrders pedidosNotifier state:');
+                        print('   Widget Instance: ${hashCode}');
+                        print('   Has data: ${pedidos.isNotEmpty}');
+                        if (pedidos.isNotEmpty) {
+                          print('   Data length: ${pedidos.length}');
+                          print(
+                              '   Sample data: ${pedidos.isNotEmpty ? pedidos.first.id : "no data"}');
+                        }
 
-                    if (pedidos.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.inbox, size: 64, color: Colors.grey),
-                            SizedBox(height: 16),
-                            Text('No hay pedidos pendientes.'),
-                            SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: () async {
-                                print('🔧 Checking why no orders found...');
-                                await PendingOrdersDiagnostic
-                                    .diagnosePendingOrdersIssue();
-                              },
-                              child: Text('Verificar Configuración'),
+                        if (pedidos.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.inbox, size: 64, color: Colors.grey),
+                                SizedBox(height: 16),
+                                Text('No hay pedidos pendientes.'),
+                                SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    print('🔧 Checking why no orders found...');
+                                    await PendingOrdersDiagnostic
+                                        .diagnosePendingOrdersIssue();
+                                  },
+                                  child: Text('Verificar Configuración'),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      );
-                    } else {
-                      var orders = pedidos;
+                          );
+                        } else {
+                          var orders = pedidos;
 
-                      return ListView.builder(
-                        itemCount: orders.length,
-                        itemBuilder: (context, index) {
-                          var pedido =
-                              orders[index].data() as Map<String, dynamic>;
-                          int pedidoId = pedido['id'] ?? -1;
+                          return ListView.builder(
+                            itemCount: orders.length,
+                            itemBuilder: (context, index) {
+                              var pedido =
+                                  orders[index].data() as Map<String, dynamic>;
+                              int pedidoId = pedido['id'] ?? -1;
 
-                          // Skip rendering the card if the order state is "Procesando"
-                          if (_getPedidoEstado(pedidoId) == 'Procesando') {
-                            return SizedBox.shrink();
-                          }
+                              // Skip rendering the card if the order state is "Procesando"
+                              if (_getPedidoEstado(pedidoId) == 'Procesando') {
+                                return SizedBox.shrink();
+                              }
 
-                          String tipo = pedido['Tipo'] ?? 'Pedidos';
-                          String direccion =
-                              pedido['ClienteDireccion'] ?? 'Desconocida';
-                          String direccionCorta = direccion.length > 20
-                              ? direccion.substring(0, 20) + '...'
-                              : direccion;
+                              String tipo = pedido['Tipo'] ?? 'Pedidos';
+                              String direccion =
+                                  pedido['ClienteDireccion'] ?? 'Desconocida';
+                              String direccionCorta = direccion.length > 20
+                                  ? direccion.substring(0, 20) + '...'
+                                  : direccion;
 
-                          // Determinar el estado del pedido y la etiqueta correspondiente
-                          String etiquetaTexto = _getPedidoEstado(pedidoId);
-                          Color etiquetaColor = _getPedidoEstadoColor(pedidoId);
+                              // Determinar el estado del pedido y la etiqueta correspondiente
+                              String etiquetaTexto = _getPedidoEstado(pedidoId);
+                              Color etiquetaColor =
+                                  _getPedidoEstadoColor(pedidoId);
 
-                          return GestureDetector(
-                            onTap: () async {
-                              // Check if GPS is enabled
-                              bool isLocationServiceEnabled =
-                                  await Geolocator.isLocationServiceEnabled();
-                              if (!isLocationServiceEnabled) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                        'Por favor, active el GPS para interactuar con los pedidos.'),
+                              // Check for changes in sessionBox for _locationPermissionDenied
+                              bool locationPermissionDenied = false;
+                              if (sesionBox.isOpen) {
+                                locationPermissionDenied = sesionBox.get(
+                                    '_locationPermissionDenied',
+                                    defaultValue: true);
+                              }
+                              bool cardBlocked = !isLocationServiceEnabled ||
+                                  locationPermissionDenied;
+                              if (cardBlocked) {
+                                textoPermisosGPS = locationPermissionDenied
+                                    ? 'Bloqueado - Sin Permisos de GPS activos.'
+                                    : 'Bloqueado - Sin GPS Activado';
+                              }
+
+                              return GestureDetector(
+                                onTap: () async {
+                                  if (cardBlocked) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                            'Por favor, active el GPS y los permisos para interactuar con los pedidos.'),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  if (pedido.containsKey('DetalleHTML') &&
+                                      pedido['DetalleHTML'].isNotEmpty) {
+                                    await _markAsReadAndNavigate(
+                                        pedido, pedidoId);
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                          content: Text(
+                                              'No hay detalles disponibles')),
+                                    );
+                                  }
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8.0,
+                                    vertical: 4.0,
                                   ),
-                                );
-                                return; // Exit if GPS is not enabled
-                              }
-
-                              if (pedido.containsKey('DetalleHTML') &&
-                                  pedido['DetalleHTML'].isNotEmpty) {
-                                await _markAsReadAndNavigate(pedido, pedidoId);
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content:
-                                          Text('No hay detalles disponibles')),
-                                );
-                              }
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8.0,
-                                vertical: 4.0,
-                              ),
-                              child: FutureBuilder<bool>(
-                                future: Geolocator.isLocationServiceEnabled(),
-                                builder: (context, snapshot) {
-                                  bool isLocationServiceEnabled =
-                                      snapshot.data ?? false;
-                                  if (isLocationServiceEnabled) {
-                                    textoPermisosGPS =
-                                        'Bloqueado - Sin GPS Activado';
-                                  }
-                                  // Check for changes in sessionBox for _locationPermissionDenied
-                                  if (sesionBox.isOpen) {
-                                    bool locationPermissionDenied = sesionBox
-                                        .get('_locationPermissionDenied',
-                                            defaultValue: true);
-                                    if (locationPermissionDenied) {
-                                      isLocationServiceEnabled = false;
-                                      textoPermisosGPS =
-                                          'Bloqueado - Sin Permisos de GPS activos.';
-                                    }
-                                  }
-
-                                  return Card(
-                                    color: !isLocationServiceEnabled
+                                  child: Card(
+                                    color: cardBlocked
                                         ? Colors
                                             .grey // Gray color if GPS is disabled
                                         : (_getPedidoEstado(pedidoId) ==
@@ -406,7 +417,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                                 ),
                                               ),
                                               SizedBox(width: 8.0),
-                                              if (isLocationServiceEnabled)
+                                              if (!cardBlocked)
                                                 Container(
                                                   padding: EdgeInsets.symmetric(
                                                     horizontal: 6.0,
@@ -445,14 +456,14 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                           Row(
                                             children: [
                                               Text(
-                                                'Dirección: ${!isLocationServiceEnabled ? textoPermisosGPS : direccionCorta}',
+                                                'Dirección: ${cardBlocked ? textoPermisosGPS : direccionCorta}',
                                                 style: TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 12.0,
                                                 ),
                                               ),
                                               Spacer(),
-                                              if (isLocationServiceEnabled &&
+                                              if (!cardBlocked &&
                                                   pedido.containsKey('WazeURL'))
                                                 Container(
                                                   child: Icon(
@@ -468,15 +479,15 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                             children: [
                                               Text(
                                                 tipo == 'Pedidos'
-                                                    ? 'Servicio: ${!isLocationServiceEnabled ? textoPermisosGPS : (pedido['ServicioNombre'] ?? 'Desconocido')}'
-                                                    : 'Defecto: ${!isLocationServiceEnabled ? textoPermisosGPS : (pedido['Defecto'] ?? 'Desconocido')}',
+                                                    ? 'Servicio: ${cardBlocked ? textoPermisosGPS : (pedido['ServicioNombre'] ?? 'Desconocido')}'
+                                                    : 'Defecto: ${cardBlocked ? textoPermisosGPS : (pedido['Defecto'] ?? 'Desconocido')}',
                                                 style: TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 12.0,
                                                 ),
                                               ),
                                               Spacer(),
-                                              if (isLocationServiceEnabled &&
+                                              if (!cardBlocked &&
                                                   pedido.containsKey('Precio'))
                                                 Text(
                                                   'Importe: ${pedido['Precio']}',
@@ -487,7 +498,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                                 ),
                                             ],
                                           ),
-                                          if (isLocationServiceEnabled &&
+                                          if (!cardBlocked &&
                                               pedido.containsKey('PedidoObs') &&
                                               pedido['PedidoObs'].isNotEmpty)
                                             Column(
@@ -505,7 +516,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                               ],
                                             ),
                                           SizedBox(height: 4.0),
-                                          if (isLocationServiceEnabled)
+                                          if (!cardBlocked)
                                             Row(
                                               children: [
                                                 _buildMinutesLeftStream(pedido),
@@ -515,14 +526,14 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                         ],
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
-                            ),
+                                  ),
+                                ),
+                              );
+                            },
                           );
-                        },
-                      );
-                    }
+                        }
+                      },
+                    );
                   },
                 );
               },
