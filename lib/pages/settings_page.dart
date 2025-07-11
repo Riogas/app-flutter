@@ -195,6 +195,18 @@ class _SettingsPageState extends State<SettingsPage> {
         tipoDeCierreDeSesion: 'logoutUser',
       );
 
+      // Llamar a cerrarSesion de SessionService antes de limpiar Hive
+      try {
+        final sessionService = SessionService();
+        final cerrarSesionResult = await sessionService.cerrarSesion(
+          idUsuario: idUsuario ?? '',
+          tipoDeCierreDeSesion: 'logoutUser',
+        );
+        print('Resultado cerrarSesion: $cerrarSesionResult');
+      } catch (e) {
+        print('Error al llamar a cerrarSesion: $e');
+      }
+
       var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
       // Eliminar los datos de sesión de Hive

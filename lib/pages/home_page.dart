@@ -326,11 +326,19 @@ class _HomePageState extends State<HomePage>
     void updatePedidosCount() async {
       // Obtén los pedidos actuales del stream manager
       final pedidos = _streamManager.pedidos;
+      print('[PEDIDOS][DEBUG] pedidos en stream: ${pedidos.length}');
       int count = 0;
       for (var pedido in pedidos) {
         var estado = box.get(pedido.id);
+        print(
+            '[PEDIDOS][DEBUG] pedido.id: ${pedido.id}, estado en Hive: $estado');
         if (estado == null || estado == 'No Leído') {
+          print(
+              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} cuenta como NO LEÍDO');
           count++;
+        } else {
+          print(
+              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} NO cuenta como no leído');
         }
       }
       print('[PEDIDOS][SMART COUNT] Total de pedidos no leídos: $count');
@@ -340,12 +348,19 @@ class _HomePageState extends State<HomePage>
     // Inicializa el contador con el valor actual
     updatePedidosCount();
 
-    // Escucha cambios en Hive
+    // Escucha cambios en Hive (incluye cualquier actualización de estado de un pedido)
     box.watch().listen((event) {
       print(
           '[PEDIDOS][WATCH] Evento en pedidosBox: key=${event.key}, value=${event.value}, deleted=${event.deleted}');
       updatePedidosCount();
     });
+
+    // También escucha cambios individuales en cada pedido (por si se actualiza desde otro lugar)
+    for (var key in box.keys) {
+      box.listenable(keys: [key]).addListener(() {
+        updatePedidosCount();
+      });
+    }
 
     // Escucha cambios en el stream de pedidos
     _streamManager.pedidosNotifier.addListener(() {
