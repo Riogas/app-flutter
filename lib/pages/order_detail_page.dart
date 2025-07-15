@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firebase_service.dart';
-import '../services/stream_manager.dart'; // Import StreamManager // Import FirebaseService
+import '../services/persistent_stream_manager.dart';
 import 'package:hive/hive.dart';
 import '../services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa para manejar URLs
@@ -37,8 +37,27 @@ class OrderDetailPage extends StatefulWidget {
 class _OrderDetailPageState extends State<OrderDetailPage> {
   late final WebViewController _controller;
   final FirebaseService _firebaseService = FirebaseService();
-  final StreamManager _streamManager = StreamManager(); // Add StreamManager
-  List<Map<String, dynamic>> _subEstados = [];
+  final PersistentStreamManager _persistentStreamManager =
+      PersistentStreamManager();
+  // ValueNotifier para subestados de finalización de pedidos
+  ValueNotifier<List<Map<String, dynamic>>>
+      get _subEstadosFinalizacionNotifier =>
+          _persistentStreamManager.subEstadoFinalizacionPedidosNotifier;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Imprime los subestados de finalización cada vez que cambian
+    _subEstadosFinalizacionNotifier.addListener(() {
+      final subestados = _subEstadosFinalizacionNotifier.value;
+      print('Subestados de finalización encontrados:');
+      for (var sub in subestados) {
+        print(sub);
+      }
+    });
+  }
+
+  // Ya no se necesita _subEstados, se usará el ValueNotifier
   String? _selectedSubEstado;
   String? _observaciones = '';
   final _observacionesController = TextEditingController();
@@ -84,22 +103,15 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       )
       ..loadHtmlString(_getHtmlWithViewport(widget.detalleHtml));
 
-    _streamManager.getSubEstadoFinalizacionPedidosStream().listen((
-      subEstados,
-    ) {
-      if (mounted) {
-        setState(() {
-          _subEstados = subEstados;
-        });
-      }
-    });
+    // Ya no se necesita escuchar el stream manualmente, se usará ValueNotifier
     _calcularDistanciaDesdeUbicacionCliente(); // llamada a función
 
     // Suscribirse al stream de moviles para obtener DistanciaMaxMtsCumpPedidos
-    _movilStream = _streamManager.getMovilStream();
-    _movilSubscription = _movilStream!.listen((snapshot) {
-      if (snapshot != null && snapshot.exists) {
-        final data = snapshot.data() as Map<String, dynamic>?;
+    // Si necesitas la distancia máxima, puedes obtenerla del movilNotifier
+    _persistentStreamManager.movilNotifier.addListener(() {
+      final movilSnapshot = _persistentStreamManager.movilNotifier.value;
+      if (movilSnapshot != null && movilSnapshot.exists) {
+        final data = movilSnapshot.data() as Map<String, dynamic>?;
         if (data != null && data.containsKey('DistanciaMaxMtsCumpPedidos')) {
           final value = data['DistanciaMaxMtsCumpPedidos'];
           if (value is int && value > 0) {
@@ -156,7 +168,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             lngCliente,
           );
           print(
-              '📏 Distancia hasta cliente: \\${distanciaEnMetros.toStringAsFixed(2)} metros');
+              '📏 Distancia hasta cliente: ${distanciaEnMetros.toStringAsFixed(2)} metros');
         } else {
           print('⚠️ Ubicación del cliente no disponible, distanciaEnMetros=0');
         }
@@ -484,7 +496,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           );
         }
 
-        String? CalculoDistancia = await getConstantValue('90');
+        String? CalculoDistancia = await getConstantValue('260');
+
+        print(
+          'CalculoDistancia: $CalculoDistancia, distanciaEnMetros: $distanciaEnMetros',
+        );
 
         if (_distanciaMaxMtsCumpPedidos != null &&
             distanciaEnMetros > _distanciaMaxMtsCumpPedidos! &&
@@ -587,23 +603,29 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                             content: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                DropdownButton<String>(
-                                  hint: Text('Seleccione'),
-                                  value: _selectedSubEstado,
-                                  onChanged: (newValue) {
-                                    setState(() {
-                                      _selectedSubEstado = newValue;
-                                    });
-                                  },
-                                  items: _subEstados.map((subEstado) {
-                                    return DropdownMenuItem<String>(
-                                      value:
-                                          subEstado['SubEstadoCod'].toString(),
-                                      child: Text(
-                                        subEstado['SubEstadoDesc'],
-                                      ),
+                                ValueListenableBuilder<
+                                    List<Map<String, dynamic>>>(
+                                  valueListenable:
+                                      _subEstadosFinalizacionNotifier,
+                                  builder: (context, subEstados, child) {
+                                    return DropdownButton<String>(
+                                      hint: Text('Seleccione'),
+                                      value: _selectedSubEstado,
+                                      onChanged: (newValue) {
+                                        setState(() {
+                                          _selectedSubEstado = newValue;
+                                        });
+                                      },
+                                      items: subEstados.map((subEstado) {
+                                        return DropdownMenuItem<String>(
+                                          value: subEstado['SubEstadoCod']
+                                              .toString(),
+                                          child:
+                                              Text(subEstado['SubEstadoDesc']),
+                                        );
+                                      }).toList(),
                                     );
-                                  }).toList(),
+                                  },
                                 ),
                                 SizedBox(height: 16),
                                 TextField(

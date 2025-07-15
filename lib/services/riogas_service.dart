@@ -644,7 +644,7 @@ class RioGasService {
       'FormaPago': formaPago,
       'MotCancel': motCancel,
       'FechaHoraCmbEst': fechaHoraCmbEst,
-      'Movil': movil,
+      'movil': movil,
       'DistanciaEnMetros': DistanciaEnMetros,
       'INAux1': inAux1,
       'INAux2': inAux2,

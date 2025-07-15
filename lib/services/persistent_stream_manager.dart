@@ -7,6 +7,10 @@ import 'package:hive/hive.dart';
 /// Optimized stream manager with persistent listeners and ValueNotifiers
 /// This eliminates the constant creation/removal of listeners
 class PersistentStreamManager {
+  // ValueNotifier for SubEstadoFinalizacionPedidos
+  final ValueNotifier<List<Map<String, dynamic>>>
+      _subEstadoFinalizacionPedidosNotifier = ValueNotifier([]);
+  StreamSubscription? _subEstadoFinalizacionPedidosSubscription;
   // --- Real listener tracking ---
   final Map<String, int> _activeListeners = {
     'pedidos': 0,
@@ -177,6 +181,8 @@ class PersistentStreamManager {
     await _initializeSubEstadosListener();
     await _initializeSubEstadoMovilesListener();
 
+    await _initializeSubEstadoFinalizacionPedidosListener();
+
     _initialized = true;
     print('✅ [PersistentStreamManager] All persistent listeners initialized');
   }
@@ -339,6 +345,30 @@ class PersistentStreamManager {
     } catch (e) {
       print(
           '❌ [PersistentStreamManager] Error initializing subEstadoMoviles listener: $e');
+    }
+  }
+
+  /// Initialize persistent SubEstadoFinalizacionPedidos listener
+  Future<void> _initializeSubEstadoFinalizacionPedidosListener() async {
+    try {
+      _subEstadoFinalizacionPedidosSubscription =
+          _firebaseService.getSubEstadoFinalizacionPedidosStream().listen(
+        (List<Map<String, dynamic>> subEstadosFinalizacionPedidos) {
+          print(
+              '✅ [PersistentStreamManager] SubEstadoFinalizacionPedidos updated: ${subEstadosFinalizacionPedidos.length} items');
+          _subEstadoFinalizacionPedidosNotifier.value =
+              subEstadosFinalizacionPedidos;
+        },
+        onError: (error) {
+          print(
+              '❌ [PersistentStreamManager] SubEstadoFinalizacionPedidos stream error: $error');
+        },
+      );
+      print(
+          '🔄 [PersistentStreamManager] SubEstadoFinalizacionPedidos persistent listener started');
+    } catch (e) {
+      print(
+          '❌ [PersistentStreamManager] Error initializing SubEstadoFinalizacionPedidos listener: $e');
     }
   }
 
@@ -579,6 +609,11 @@ class PersistentStreamManager {
       _decrementListener('subEstadoMoviles');
     });
     return _subEstadoMovilesNotifier;
+  }
+
+  ValueNotifier<List<Map<String, dynamic>>>
+      get subEstadoFinalizacionPedidosNotifier {
+    return _subEstadoFinalizacionPedidosNotifier;
   }
 
   // Convenience getters for current values

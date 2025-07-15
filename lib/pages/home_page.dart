@@ -355,12 +355,7 @@ class _HomePageState extends State<HomePage>
       updatePedidosCount();
     });
 
-    // También escucha cambios individuales en cada pedido (por si se actualiza desde otro lugar)
-    for (var key in box.keys) {
-      box.listenable(keys: [key]).addListener(() {
-        updatePedidosCount();
-      });
-    }
+    // Ya no es necesario agregar listeners individuales por pedido, box.watch() cubre todos los cambios.
 
     // Escucha cambios en el stream de pedidos
     _streamManager.pedidosNotifier.addListener(() {
