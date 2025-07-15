@@ -347,7 +347,7 @@ Future<void> _checkBatteryAndBackgroundSettings() async {
   // Verificar si la aplicación está en la lista de aplicaciones en segundo plano
   if (Platform.isAndroid) {
     AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-    if (await battery.isInBatterySaveMode) {
+    /*if (await battery.isInBatterySaveMode) {
       String? backgroundMessage = await getConstantValue(
         '141',
       ); // Fetch message from constant
@@ -355,7 +355,7 @@ Future<void> _checkBatteryAndBackgroundSettings() async {
         backgroundMessage ??
             'La aplicación está restringida para ejecutarse en segundo plano.',
       );
-    }
+    }*/
   }
 }
 

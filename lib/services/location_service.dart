@@ -35,7 +35,7 @@ class LocationService {
 
   /// 🔹 Inicializa el servicio de ubicación y sincronización
   Future<void> initializeLocationUpdates(BuildContext context) async {
-    await _requestIgnoreBatteryOptimizations();
+    //await _requestIgnoreBatteryOptimizations();
     await _getLocationPermission(context);
     await ensureCorrectLocationPermission(
       context,

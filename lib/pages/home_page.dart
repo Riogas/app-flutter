@@ -324,21 +324,26 @@ class _HomePageState extends State<HomePage>
 
     // Escucha cambios en el stream de pedidos y en Hive
     void updatePedidosCount() async {
-      // Obtén los pedidos actuales del stream manager
+      // Solo cuentan los pedidos que están en el stream
       final pedidos = _streamManager.pedidos;
       print('[PEDIDOS][DEBUG] pedidos en stream: ${pedidos.length}');
       int count = 0;
       for (var pedido in pedidos) {
-        var estado = box.get(pedido.id);
+        // Normaliza la clave: si el id es tipo "Pedidos-16287153", extrae el número
+        var pedidoIdStr = pedido.id.toString();
+        int? pedidoIdNum =
+            int.tryParse(pedidoIdStr.replaceAll(RegExp(r'[^0-9]'), ''));
+        var estado = box.get(pedidoIdNum ?? pedidoIdStr);
         print(
-            '[PEDIDOS][DEBUG] pedido.id: ${pedido.id}, estado en Hive: $estado');
+            '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} → clave Hive: ${pedidoIdNum ?? pedidoIdStr}, estado: $estado');
+        // Si no existe en Hive, o su estado es null o "No Leído", cuenta como no leído
         if (estado == null || estado == 'No Leído') {
           print(
-              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} cuenta como NO LEÍDO');
+              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} cuenta como NO LEÍDO (estado: $estado)');
           count++;
         } else {
           print(
-              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} NO cuenta como no leído');
+              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} NO cuenta como no leído (estado: $estado)');
         }
       }
       print('[PEDIDOS][SMART COUNT] Total de pedidos no leídos: $count');
@@ -352,13 +357,17 @@ class _HomePageState extends State<HomePage>
     box.watch().listen((event) {
       print(
           '[PEDIDOS][WATCH] Evento en pedidosBox: key=${event.key}, value=${event.value}, deleted=${event.deleted}');
-      updatePedidosCount();
+      // Espera un microtask para asegurar que el cambio se refleje en el box antes de contar
+      Future.microtask(() => updatePedidosCount());
     });
-
-    // Ya no es necesario agregar listeners individuales por pedido, box.watch() cubre todos los cambios.
 
     // Escucha cambios en el stream de pedidos
     _streamManager.pedidosNotifier.addListener(() {
+      updatePedidosCount();
+    });
+
+    // Refuerza la actualización del contador al volver de una pantalla (por ejemplo, OrderDetail)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       updatePedidosCount();
     });
   }
