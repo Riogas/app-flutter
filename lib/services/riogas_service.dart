@@ -619,6 +619,8 @@ class RioGasService {
       String formaPago,
       String motCancel,
       String fechaHoraCmbEst,
+      String movil,
+      double DistanciaEnMetros,
       String inAux1,
       String inAux2,
       String latitud,
@@ -630,7 +632,7 @@ class RioGasService {
       ) {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
-    return _post('FinalizarPedido', {
+    return _post('FinalizarPedidoV2', {
       'escenarioid': escenarioId,
       'PedidoId': pedidoId,
       'PedidoTpo': pedidoTpo,
@@ -642,6 +644,8 @@ class RioGasService {
       'FormaPago': formaPago,
       'MotCancel': motCancel,
       'FechaHoraCmbEst': fechaHoraCmbEst,
+      'Movil': movil,
+      'DistanciaEnMetros': DistanciaEnMetros,
       'INAux1': inAux1,
       'INAux2': inAux2,
       'Latitud': latitud,

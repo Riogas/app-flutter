@@ -973,8 +973,8 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(height: 10),
               _buildPermissionsButton(), // Added Permissions button
               SizedBox(height: 10),
-              _buildMonitoreoButton(),
-              SizedBox(height: 10),
+              // _buildMonitoreoButton(),
+              // SizedBox(height: 10),
               _buildLogoutButton(),
               SizedBox(height: 10),
             ],

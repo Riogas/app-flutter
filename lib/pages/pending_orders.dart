@@ -303,14 +303,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                 SizedBox(height: 16),
                                 Text('No hay pedidos pendientes.'),
                                 SizedBox(height: 16),
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    print('🔧 Checking why no orders found...');
-                                    await PendingOrdersDiagnostic
-                                        .diagnosePendingOrdersIssue();
-                                  },
-                                  child: Text('Verificar Configuración'),
-                                ),
                               ],
                             ),
                           );
