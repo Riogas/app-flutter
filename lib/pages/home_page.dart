@@ -324,29 +324,28 @@ class _HomePageState extends State<HomePage>
 
     // Escucha cambios en el stream de pedidos y en Hive
     void updatePedidosCount() async {
-      // Solo cuentan los pedidos que están en el stream
+      // Solo cuentan los pedidos que están en el stream y NO están en Hive como 'Procesando'
       final pedidos = _streamManager.pedidos;
       print('[PEDIDOS][DEBUG] pedidos en stream: ${pedidos.length}');
       int count = 0;
       for (var pedido in pedidos) {
-        // Normaliza la clave: si el id es tipo "Pedidos-16287153", extrae el número
         var pedidoIdStr = pedido.id.toString();
         int? pedidoIdNum =
             int.tryParse(pedidoIdStr.replaceAll(RegExp(r'[^0-9]'), ''));
         var estado = box.get(pedidoIdNum ?? pedidoIdStr);
         print(
             '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} → clave Hive: ${pedidoIdNum ?? pedidoIdStr}, estado: $estado');
-        // Si no existe en Hive, o su estado es null o "No Leído", cuenta como no leído
-        if (estado == null || estado == 'No Leído') {
-          print(
-              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} cuenta como NO LEÍDO (estado: $estado)');
+        // Solo NO cuenta los que están en Hive como 'Procesando'
+        if (estado != 'Procesando') {
           count++;
+          print(
+              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} cuenta como PENDIENTE (estado: $estado)');
         } else {
           print(
-              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} NO cuenta como no leído (estado: $estado)');
+              '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} NO cuenta (estado: Procesando)');
         }
       }
-      print('[PEDIDOS][SMART COUNT] Total de pedidos no leídos: $count');
+      print('[PEDIDOS][SMART COUNT] Total de pedidos pendientes: $count');
       _pendingOrdersCountNotifier.value = count;
     }
 

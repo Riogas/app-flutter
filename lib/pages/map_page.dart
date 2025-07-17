@@ -41,22 +41,29 @@ class _MapPageState extends State<MapPage> {
 
   Future<void> _initializeHive() async {
     constantBox = await Hive.openBox('constantBox');
+    print("🟣 Hive constantBox inicializado: ${constantBox.isOpen}");
+    print("🟣 Contenido de constantBox: ${constantBox.toMap()}");
     pedidosBox = await Hive.openBox('pedidosBox');
-    sessionBox = await Hive.openBox('sessionBox'); // Inicializar sessionBox
+    print("🟣 Hive pedidosBox inicializado: ${pedidosBox.isOpen}");
+    sessionBox = await Hive.openBox('sessionBox');
+    print("🟣 Hive sessionBox inicializado: ${sessionBox.isOpen}");
   }
 
   void _checkMapState() {
     final isMapActive = sessionBox.get('isMapActive', defaultValue: false);
+    print("🟣 Estado del mapa (isMapActive): $isMapActive");
     setState(() {
       _isMapEnabled = isMapActive;
     });
   }
 
   Future<void> _getCurrentLocation() async {
+    print("🟣 Iniciando obtención de ubicación actual...");
     bool serviceEnabled;
     LocationPermission permission;
 
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    print("🟣 Servicio de ubicación habilitado: $serviceEnabled");
     if (!serviceEnabled) {
       if (mounted) {
         setState(() {
@@ -67,8 +74,10 @@ class _MapPageState extends State<MapPage> {
     }
 
     permission = await Geolocator.checkPermission();
+    print("🟣 Permiso de ubicación actual: $permission");
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
+      print("🟣 Permiso de ubicación solicitado: $permission");
       if (permission == LocationPermission.denied) {
         if (mounted) {
           setState(() {
@@ -80,6 +89,7 @@ class _MapPageState extends State<MapPage> {
     }
 
     if (permission == LocationPermission.deniedForever) {
+      print("🟣 Permiso de ubicación denegado permanentemente");
       if (mounted) {
         setState(() {
           _locationPermissionDenied = true;
@@ -91,6 +101,8 @@ class _MapPageState extends State<MapPage> {
     Position position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
+    print(
+        "🟣 Ubicación obtenida: Latitud ${position.latitude}, Longitud ${position.longitude}");
 
     if (mounted) {
       setState(() {
@@ -109,6 +121,7 @@ class _MapPageState extends State<MapPage> {
             ),
           ),
         );
+        print("🟣 Marcador de ubicación actual agregado: $_currentPosition");
       });
     }
   }
@@ -135,23 +148,28 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _centerMapOnPriorityOrder(List<QueryDocumentSnapshot> orders) {
-    // Filtrar pedidos que no tengan estado "Procesando"
+    print("🟣 Centrar mapa en pedido prioritario...");
     var filteredOrders = orders.where((order) {
       var data = order.data() as Map<String, dynamic>;
       var pedidoId = data['id'];
-      return _getPedidoEstado(pedidoId) != '';
+      var estado = _getPedidoEstado(pedidoId);
+      print("🟣 Pedido ID: $pedidoId, Estado: $estado");
+      return estado != '';
     }).toList();
 
     if (filteredOrders.isNotEmpty) {
       var firstOrder = filteredOrders.first;
       var data = firstOrder.data() as Map<String, dynamic>;
       var location = data['ubicacion'] as GeoPoint;
+      print(
+          "🟣 Pedido prioritario encontrado: Latitud ${location.latitude}, Longitud ${location.longitude}");
 
       setState(() {
         _focusedPosition = LatLng(location.latitude, location.longitude);
       });
     } else if (_currentPosition != null) {
-      // Si no hay pedidos para geolocalizar, centrar en la ubicación actual
+      print(
+          "🟣 No hay pedidos prioritarios, centrando en la ubicación actual: $_currentPosition");
       _mapController.move(_currentPosition!, 15.0);
     }
   }
@@ -188,7 +206,10 @@ class _MapPageState extends State<MapPage> {
       }
     }
     print("❌ No se encontró un rango válido para delay $delayMinutes");
-    return null;
+    return {
+      "Color": Colors.white,
+      "Etiqueta": "",
+    }; // Color y etiqueta por defecto
   }
 
   Color getColorFromName(String colorName) {
@@ -210,6 +231,7 @@ class _MapPageState extends State<MapPage> {
     });
     sessionBox.put(
         'isMapActive', true); // Guardar el estado del mapa como activo
+    print("🟣 Mapa activado y estado guardado en Hive");
   }
 
   @override
@@ -257,7 +279,7 @@ class _MapPageState extends State<MapPage> {
                           (data['FchHoraMaxEntComp'] as Timestamp).toDate();
                       int delayMinutes = fchHoraPara.difference(now).inMinutes;
                       var delayInfo = getDelayInfo(delayMinutes);
-                      Color pinColor = delayInfo?["Color"] ?? Colors.red;
+                      Color pinColor = delayInfo?['Color'] ?? Colors.red;
                       markers.add(
                         Marker(
                           width: 80.0,
@@ -300,12 +322,16 @@ class _MapPageState extends State<MapPage> {
                         var firstOrder = filteredOrders.first;
                         var data = firstOrder.data() as Map<String, dynamic>;
                         var location = data['ubicacion'] as GeoPoint;
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          setState(() {
-                            _focusedPosition =
-                                LatLng(location.latitude, location.longitude);
+                        if (_focusedPosition == null ||
+                            _focusedPosition!.latitude != location.latitude ||
+                            _focusedPosition!.longitude != location.longitude) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            setState(() {
+                              _focusedPosition =
+                                  LatLng(location.latitude, location.longitude);
+                            });
                           });
-                        });
+                        }
                       } else if (_currentPosition != null) {
                         _mapController.move(_currentPosition!, 15.0);
                       }
@@ -325,6 +351,11 @@ class _MapPageState extends State<MapPage> {
                           urlTemplate:
                               "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                           subdomains: ['a', 'b', 'c'],
+                          additionalOptions: {
+                            'User-Agent':
+                                'MoveITApp/1.0 (https://moveit.example.com)',
+                            'Referer': 'https://moveit.example.com',
+                          },
                         ),
                         MarkerLayer(markers: markers),
                       ],

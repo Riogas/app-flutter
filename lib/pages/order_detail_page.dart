@@ -589,112 +589,114 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         children: [
           Expanded(child: WebViewWidget(controller: _controller)),
           if (widget.estadoNro == 1) // Show button only if estadoNro is 1
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  await showDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return StatefulBuilder(
-                        builder: (context, setState) {
-                          return AlertDialog(
-                            title: Text('Seleccione estado'),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ValueListenableBuilder<
-                                    List<Map<String, dynamic>>>(
-                                  valueListenable:
-                                      _subEstadosFinalizacionNotifier,
-                                  builder: (context, subEstados, child) {
-                                    return DropdownButton<String>(
-                                      hint: Text('Seleccione'),
-                                      value: _selectedSubEstado,
-                                      onChanged: (newValue) {
-                                        setState(() {
-                                          _selectedSubEstado = newValue;
-                                        });
-                                      },
-                                      items: subEstados.map((subEstado) {
-                                        return DropdownMenuItem<String>(
-                                          value: subEstado['SubEstadoCod']
-                                              .toString(),
-                                          child:
-                                              Text(subEstado['SubEstadoDesc']),
-                                        );
-                                      }).toList(),
-                                    );
-                                  },
-                                ),
-                                SizedBox(height: 16),
-                                TextField(
-                                  controller: _observacionesController,
-                                  maxLength: 100,
-                                  maxLines:
-                                      3, // Allow the field to occupy 2 or 3 rows
-                                  decoration: InputDecoration(
-                                    labelText: 'Observaciones',
-                                    hintText: 'Observaciones',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  onChanged: (value) {
-                                    final sanitizedValue = value.replaceAll(
-                                      RegExp(r'[^a-zA-Z0-9 ]'),
-                                      '',
-                                    );
-                                    if (sanitizedValue != value) {
-                                      _observacionesController.text =
-                                          sanitizedValue;
-                                      _observacionesController.selection =
-                                          TextSelection.fromPosition(
-                                        TextPosition(
-                                          offset: sanitizedValue.length,
-                                        ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return StatefulBuilder(
+                          builder: (context, setState) {
+                            return AlertDialog(
+                              title: Text('Seleccione estado'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ValueListenableBuilder<
+                                      List<Map<String, dynamic>>>(
+                                    valueListenable:
+                                        _subEstadosFinalizacionNotifier,
+                                    builder: (context, subEstados, child) {
+                                      return DropdownButton<String>(
+                                        hint: Text('Seleccione'),
+                                        value: _selectedSubEstado,
+                                        onChanged: (newValue) {
+                                          setState(() {
+                                            _selectedSubEstado = newValue;
+                                          });
+                                        },
+                                        items: subEstados.map((subEstado) {
+                                          return DropdownMenuItem<String>(
+                                            value: subEstado['SubEstadoCod']
+                                                .toString(),
+                                            child: Text(
+                                                subEstado['SubEstadoDesc']),
+                                          );
+                                        }).toList(),
                                       );
-                                    }
-                                    _observaciones = sanitizedValue;
+                                    },
+                                  ),
+                                  SizedBox(height: 16),
+                                  TextField(
+                                    controller: _observacionesController,
+                                    maxLength: 100,
+                                    maxLines:
+                                        3, // Allow the field to occupy 2 or 3 rows
+                                    decoration: InputDecoration(
+                                      labelText: 'Observaciones',
+                                      hintText: 'Observaciones',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    onChanged: (value) {
+                                      final sanitizedValue = value.replaceAll(
+                                        RegExp(r'[^a-zA-Z0-9 ]'),
+                                        '',
+                                      );
+                                      if (sanitizedValue != value) {
+                                        _observacionesController.text =
+                                            sanitizedValue;
+                                        _observacionesController.selection =
+                                            TextSelection.fromPosition(
+                                          TextPosition(
+                                            offset: sanitizedValue.length,
+                                          ),
+                                        );
+                                      }
+                                      _observaciones = sanitizedValue;
+                                    },
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
                                   },
+                                  child: Text('Cancelar'),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    if (_selectedSubEstado == 'Cumplido') {
+                                      print('Opción seleccionada: Cumplido');
+                                      _checkConstantAndProceed(
+                                        context,
+                                      ); // Check constant 70
+                                    } else {
+                                      print(
+                                        'Opción seleccionada: $_selectedSubEstado',
+                                      );
+                                      _checkConstantAndProceed(
+                                        context,
+                                      ); // Check constant 70
+                                    }
+                                  },
+                                  child: Text('Confirmar'),
                                 ),
                               ],
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                },
-                                child: Text('Cancelar'),
-                              ),
-                              TextButton(
-                                onPressed: () async {
-                                  if (_selectedSubEstado == 'Cumplido') {
-                                    print('Opción seleccionada: Cumplido');
-                                    _checkConstantAndProceed(
-                                      context,
-                                    ); // Check constant 70
-                                  } else {
-                                    print(
-                                      'Opción seleccionada: $_selectedSubEstado',
-                                    );
-                                    _checkConstantAndProceed(
-                                      context,
-                                    ); // Check constant 70
-                                  }
-                                },
-                                child: Text('Confirmar'),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
-                icon: Icon(Icons.check, color: Colors.white),
-                label: Text('Finalizar Pedido'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: Size(double.infinity, 50), // Full width button
-                  backgroundColor: Colors.lightGreen,
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                  icon: Icon(Icons.check, color: Colors.white),
+                  label: Text('Finalizar Pedido'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(double.infinity, 50), // Full width button
+                    backgroundColor: Colors.lightGreen,
+                  ),
                 ),
               ),
             ),
