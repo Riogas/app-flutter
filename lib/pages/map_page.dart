@@ -123,6 +123,15 @@ class _MapPageState extends State<MapPage> {
         );
         print("🟣 Marcador de ubicación actual agregado: $_currentPosition");
       });
+
+      // 🟢 Centrar el mapa en la ubicación actual después de que el widget esté renderizado
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          _mapController.move(_currentPosition!, 15.0);
+        } catch (e) {
+          print("🟣 Error al mover el mapa: $e");
+        }
+      });
     }
   }
 
@@ -336,6 +345,7 @@ class _MapPageState extends State<MapPage> {
                         _mapController.move(_currentPosition!, 15.0);
                       }
                     }
+                    markers.addAll(_markers);
                     return FlutterMap(
                       mapController: _mapController,
                       options: MapOptions(
@@ -349,8 +359,8 @@ class _MapPageState extends State<MapPage> {
                       children: [
                         TileLayer(
                           urlTemplate:
-                              "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                          subdomains: ['a', 'b', 'c'],
+                              "http://osmtileserver.riogas.uy/tile/{z}/{x}/{y}.png",
+                          subdomains: [], // No subdomains needed for the custom server
                           additionalOptions: {
                             'User-Agent':
                                 'MoveITApp/1.0 (https://moveit.example.com)',
