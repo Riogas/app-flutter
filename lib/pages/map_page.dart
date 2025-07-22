@@ -1,13 +1,11 @@
 import 'package:MoveIT/pages/order_detail_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import '../services/firebase_service.dart';
-import '../services/stream_manager.dart'; // Import StreamManager // Asegúrate de usar la ruta correcta
 import 'package:hive/hive.dart'; // Import Hive for Box
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:MoveIT/pages/pending_orders.dart';
 import '../services/persistent_stream_manager.dart';
 
 class MapPage extends StatefulWidget {
@@ -20,7 +18,6 @@ class _MapPageState extends State<MapPage> {
   LatLng? _focusedPosition; // Track the map's focused position
   bool _locationPermissionDenied = false;
   bool _isMapEnabled = false; // Estado inicial del mapa deshabilitado
-  final FirebaseService _firebaseService = FirebaseService();
   // Eliminado: final StreamManager _streamManager = StreamManager(); // Usar PersistentStreamManager singleton
   List<Marker> _markers = [];
   late Box constantBox;
@@ -32,11 +29,21 @@ class _MapPageState extends State<MapPage> {
   @override
   void initState() {
     super.initState();
+    _initializeTileCache();
     _initializeHive().then((_) {
       _checkMapState(); // Verificar el estado del mapa después de inicializar Hive
       _getCurrentLocation();
       // Ya no llamamos a _getPendingOrders, usamos el notifier global
     });
+  }
+
+  Future<void> _initializeTileCache() async {
+    try {
+      await FMTCStore('mapCache').manage.create();
+      print("🟣 Cache de tiles inicializado correctamente");
+    } catch (e) {
+      print("🟣 Error al inicializar cache de tiles: $e");
+    }
   }
 
   Future<void> _initializeHive() async {
@@ -154,33 +161,6 @@ class _MapPageState extends State<MapPage> {
       return 'Enviando';
     }
     return 'Nuevo';
-  }
-
-  void _centerMapOnPriorityOrder(List<QueryDocumentSnapshot> orders) {
-    print("🟣 Centrar mapa en pedido prioritario...");
-    var filteredOrders = orders.where((order) {
-      var data = order.data() as Map<String, dynamic>;
-      var pedidoId = data['id'];
-      var estado = _getPedidoEstado(pedidoId);
-      print("🟣 Pedido ID: $pedidoId, Estado: $estado");
-      return estado != '';
-    }).toList();
-
-    if (filteredOrders.isNotEmpty) {
-      var firstOrder = filteredOrders.first;
-      var data = firstOrder.data() as Map<String, dynamic>;
-      var location = data['ubicacion'] as GeoPoint;
-      print(
-          "🟣 Pedido prioritario encontrado: Latitud ${location.latitude}, Longitud ${location.longitude}");
-
-      setState(() {
-        _focusedPosition = LatLng(location.latitude, location.longitude);
-      });
-    } else if (_currentPosition != null) {
-      print(
-          "🟣 No hay pedidos prioritarios, centrando en la ubicación actual: $_currentPosition");
-      _mapController.move(_currentPosition!, 15.0);
-    }
   }
 
   // Ya no se usa _getPendingOrders, la lógica se mueve al ValueListenableBuilder en el build
@@ -346,6 +326,18 @@ class _MapPageState extends State<MapPage> {
                       }
                     }
                     markers.addAll(_markers);
+                    // Leer constante para la URL del servidor de tiles
+                    var tileServerData = constantBox.get('270');
+                    String tileServerUrl =
+                        "http://osmtileserver.riogas.uy/tile"; // Valor por defecto
+
+                    if (tileServerData != null &&
+                        tileServerData['Estado'] == 'A') {
+                      tileServerUrl = tileServerData['Valor'];
+                      print(
+                          "✅ URL del servidor de tiles obtenida desde constante: $tileServerUrl");
+                    }
+
                     return FlutterMap(
                       mapController: _mapController,
                       options: MapOptions(
@@ -358,9 +350,9 @@ class _MapPageState extends State<MapPage> {
                       ),
                       children: [
                         TileLayer(
-                          urlTemplate:
-                              "http://osmtileserver.riogas.uy/tile/{z}/{x}/{y}.png",
-                          subdomains: [], // No subdomains needed for the custom server
+                          urlTemplate: "$tileServerUrl/{z}/{x}/{y}.png",
+                          tileProvider: FMTCStore('mapCache').getTileProvider(),
+                          subdomains: [],
                           additionalOptions: {
                             'User-Agent':
                                 'MoveITApp/1.0 (https://moveit.example.com)',
