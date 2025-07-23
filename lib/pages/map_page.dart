@@ -40,7 +40,8 @@ class _MapPageState extends State<MapPage> {
   Future<void> _initializeTileCache() async {
     try {
       await FMTCStore('mapCache').manage.create();
-      print("🟣 Cache de tiles inicializado con expiración de 7 días");
+      print(
+          "🟣 Cache de tiles inicializado (días configurables desde constante ID 300)");
     } catch (e) {
       print("🟣 Error al inicializar cache de tiles: $e");
     }
@@ -161,6 +162,20 @@ class _MapPageState extends State<MapPage> {
       return 'Enviando';
     }
     return 'Nuevo';
+  }
+
+  int _getTileCacheDays() {
+    var data = constantBox.get('300');
+    print("🔍 Leyendo constante con ID 300 para días de cache: $data");
+    if (data != null && data['Estado'] == 'A') {
+      print("✅ Estado es 'A' para ID 300, días configurados: ${data['Valor']}");
+      return data['Valor'] ??
+          7; // Usar el valor de la constante o 7 por defecto
+    } else {
+      print(
+          "❌ Estado no es 'A' para ID 300 o data es null, usando 7 días por defecto");
+      return 7; // Valor por defecto
+    }
   }
 
   // Ya no se usa _getPendingOrders, la lógica se mueve al ValueListenableBuilder en el build
@@ -353,7 +368,8 @@ class _MapPageState extends State<MapPage> {
                           urlTemplate: "$tileServerUrl/{z}/{x}/{y}.png",
                           tileProvider: FMTCTileProvider(
                             stores: {'mapCache': BrowseStoreStrategy.read},
-                            cachedValidDuration: Duration(days: 7),
+                            cachedValidDuration:
+                                Duration(days: _getTileCacheDays()),
                           ),
                           subdomains: [],
                           additionalOptions: {
