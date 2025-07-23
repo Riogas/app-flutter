@@ -40,7 +40,7 @@ class _MapPageState extends State<MapPage> {
   Future<void> _initializeTileCache() async {
     try {
       await FMTCStore('mapCache').manage.create();
-      print("🟣 Cache de tiles inicializado correctamente");
+      print("🟣 Cache de tiles inicializado con expiración de 7 días");
     } catch (e) {
       print("🟣 Error al inicializar cache de tiles: $e");
     }
@@ -351,7 +351,10 @@ class _MapPageState extends State<MapPage> {
                       children: [
                         TileLayer(
                           urlTemplate: "$tileServerUrl/{z}/{x}/{y}.png",
-                          tileProvider: FMTCStore('mapCache').getTileProvider(),
+                          tileProvider: FMTCTileProvider(
+                            stores: {'mapCache': BrowseStoreStrategy.read},
+                            cachedValidDuration: Duration(days: 7),
+                          ),
                           subdomains: [],
                           additionalOptions: {
                             'User-Agent':
