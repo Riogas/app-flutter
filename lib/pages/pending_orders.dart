@@ -168,44 +168,65 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     Map<String, dynamic> pedido,
     int pedidoId,
   ) async {
-    // Check if GPS is enabled
+    print("🟢 [_markAsReadAndNavigate] Inicio. Pedido ID: $pedidoId");
+
+    // 1. Verificar si el GPS está activado
+    print("🔍 Verificando si el GPS está activado...");
     bool isLocationServiceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!isLocationServiceEnabled) {
+      print("❌ GPS desactivado. Mostrando SnackBar.");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Por favor, active el GPS para continuar.')),
       );
-      return; // Exit the function if GPS is not enabled
+      return;
     }
+    print("✅ GPS activado.");
 
-    // Marcar como leído en Hive antes de navegar
+    // 2. Marcar como leído en Hive
     if (pedidosBox != null) {
       await pedidosBox!.put(pedidoId, 'Leído');
+      final estadoActual = pedidosBox!.get(pedidoId);
       print(
-          '[PENDING_ORDERS] Pedido $pedidoId marcado como "Leído" en Hive. Estado actual: ${pedidosBox!.get(pedidoId)}');
+          "📦 Hive actualizado. Pedido $pedidoId marcado como 'Leído'. Estado actual: $estadoActual");
     } else {
-      print(
-          '[PENDING_ORDERS] No se pudo marcar el pedido $pedidoId como "Leído" porque pedidosBox es null');
+      print("⚠️ pedidosBox es null. No se pudo marcar como leído.");
     }
 
-    // Navegar inmediatamente
+    // 3. Preparar navegación
+    print("➡️ Preparando navegación a OrderDetailPage...");
+
+    final detalleHtml = pedido['DetalleHTML'];
+    final estadoNro = pedido['EstadoNro'];
+    final precio = pedido['Precio'] ?? 0;
+    final tipo = pedido['Tipo'];
+    final ubicacion =
+        (pedido.containsKey('ubicacion') && pedido['ubicacion'] is GeoPoint)
+            ? pedido['ubicacion'] as GeoPoint
+            : null;
+
+    print("""
+🧭 Datos de navegación:
+- EstadoNro: $estadoNro
+- TotalPedido: $precio
+- Tipo: $tipo
+- Ubicación: ${ubicacion != null ? 'lat=${ubicacion.latitude}, lng=${ubicacion.longitude}' : 'null'}
+""");
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => OrderDetailPage(
-          detalleHtml: pedido['DetalleHTML'],
-          estadoNro: pedido['EstadoNro'],
-          totalPedido: pedido['Precio'] ?? 0,
+          detalleHtml: detalleHtml,
+          estadoNro: estadoNro,
+          totalPedido: precio,
           codPedido: pedidoId,
-          pedidoTipo: pedido['Tipo'],
-          ubicacion:
-              pedido.containsKey('ubicacion') && pedido['ubicacion'] is GeoPoint
-                  ? pedido['ubicacion'] as GeoPoint
-                  : null,
+          pedidoTipo: tipo,
+          ubicacion: ubicacion,
         ),
       ),
     );
-    // La lógica de marcar como leído y sincronizar con Hive está centralizada en PersistentStreamManager
-    // Si necesitas lógica adicional, implementa solo la llamada a RioGasService aquí si corresponde
+
+    print("🚀 Navegación ejecutada con éxito hacia OrderDetailPage.");
   }
 
   Future<void> _callDescargaLecturaPedidos(
@@ -213,58 +234,103 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     int pedidoId, {
     required String lectDesc,
   }) async {
+    print(
+        "🟠 [_callDescargaLecturaPedidos] Iniciando para pedidoId: $pedidoId");
+
     String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
     String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
-    var box = await Hive.openBox('sessionBox');
-    String deviceId = box.get('deviceId');
-    String movilid = box.get('movil');
-    int escenarioId = int.tryParse(box.get('escenario').toString()) ?? 0;
-    String username = box.get('username');
+    try {
+      var box = await Hive.openBox('sessionBox');
 
-    String inAux1 = movilid;
-    String inAux2 = '';
+      String? deviceId = box.get('deviceId');
+      String? movilid = box.get('movil');
+      int escenarioId =
+          int.tryParse(box.get('escenario')?.toString() ?? '') ?? 0;
+      String? username = box.get('username');
 
-    String latitud = '0.0';
-    String longitud = '0.0';
-    String utmx = '0.0';
-    String utmy = '0.0';
+      if ([deviceId, movilid, username].contains(null)) {
+        print(
+            "❌ [_callDescargaLecturaPedidos] Error: Faltan datos en sessionBox");
+        return;
+      }
 
-    // Invoca el método para obtener la ubicación
-    final locationData = await locationService.getCurrentLocation();
+      String inAux1 = movilid!;
+      String inAux2 = '';
+      String latitud = '0.0';
+      String longitud = '0.0';
+      String utmx = '0.0';
+      String utmy = '0.0';
 
-    if (locationData != null) {
-      latitud = locationData['latitude'].toString();
-      longitud = locationData['longitude'].toString();
-      utmx = locationData['utmX'].toString();
-      utmy = locationData['utmY'].toString();
+      print("🛰️ [_callDescargaLecturaPedidos] Obteniendo ubicación GPS...");
+      try {
+        final locationData = await locationService
+            .getCurrentLocation()
+            .timeout(Duration(seconds: 5));
+
+        if (locationData != null) {
+          latitud = locationData['latitude'].toString();
+          longitud = locationData['longitude'].toString();
+          utmx = locationData['utmX'].toString();
+          utmy = locationData['utmY'].toString();
+          print(
+              "✅ [_callDescargaLecturaPedidos] Ubicación: $latitud, $longitud");
+        } else {
+          print("⚠️ [_callDescargaLecturaPedidos] No se obtuvo ubicación.");
+        }
+      } on TimeoutException catch (_) {
+        print("⏰ [_callDescargaLecturaPedidos] Timeout al obtener ubicación.");
+      } catch (e) {
+        print("❌ [_callDescargaLecturaPedidos] Error al obtener ubicación: $e");
+      }
+
+      double velocidad = 0.0;
+      double distanciaRecorrida = 0.0;
+
+      try {
+        var locationBox = await Hive.openBox('locationBox');
+        velocidad = double.parse(
+          locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2),
+        );
+        distanciaRecorrida =
+            locationBox.get('totalDistance', defaultValue: 0.0);
+      } catch (e) {
+        print(
+            "⚠️ [_callDescargaLecturaPedidos] Error leyendo Hive de ubicación: $e");
+      }
+
+      print(
+          "📤 [_callDescargaLecturaPedidos] Enviando datos a RioGasService...");
+
+      // Timeout defensivo de 8 segundos
+      await RioGasService.descargaLecturaPedidos(
+        escenarioId,
+        pedidoId,
+        pedidoTpo,
+        username!,
+        'NroSesion', // TODO: reemplazar con ID real si se tiene
+        deviceId!,
+        lectDesc,
+        fechaHoraCmbEst,
+        movilid,
+        inAux2,
+        latitud,
+        longitud,
+        utmx,
+        utmy,
+        velocidad,
+        distanciaRecorrida,
+      ).timeout(const Duration(seconds: 8), onTimeout: () {
+        print("⏰ [_callDescargaLecturaPedidos] Timeout al esperar respuesta");
+        throw TimeoutException("descargaLecturaPedidos timeout");
+      });
+
+      print(
+          "✅ [_callDescargaLecturaPedidos] Finalizado OK para pedido $pedidoId");
+    } catch (e, st) {
+      print("❌ [_callDescargaLecturaPedidos] Excepción: $e");
+      print(st);
     }
-
-    // Retrieve speed and distance from Hive
-    var locationBox = await Hive.openBox('locationBox');
-    double velocidad = double.parse(
-        locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2));
-    double distanciaRecorrida =
-        locationBox.get('totalDistance', defaultValue: 0.0);
-
-    await RioGasService.descargaLecturaPedidos(
-      escenarioId,
-      pedidoId,
-      pedidoTpo,
-      username,
-      'NroSesion', // Replace with actual session number if available
-      deviceId,
-      lectDesc,
-      fechaHoraCmbEst,
-      movilid,
-      inAux2,
-      latitud,
-      longitud,
-      utmx,
-      utmy,
-      velocidad,
-      distanciaRecorrida,
-    );
   }
 
   @override
@@ -394,7 +460,12 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
                           return GestureDetector(
                             onTap: () async {
+                              print(
+                                  "🟢 [TAP] Tap detectado en tarjeta con pedidoId: $pedidoId");
+
                               if (cardBlocked) {
+                                print(
+                                    "🔴 [BLOQUEADO] cardBlocked = true. Mostrando mensaje de permisos GPS");
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
@@ -404,13 +475,24 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                                 return;
                               }
 
+                              print(
+                                  "🟡 [CHECK] cardBlocked = false. Verificando DetalleHTML...");
+
                               if (pedido.containsKey('DetalleHTML') &&
                                   pedido['DetalleHTML'].isNotEmpty) {
+                                print(
+                                    "🔵 [DETALLE OK] DetalleHTML presente, llamando descargaLectura...");
                                 await _callDescargaLecturaPedidos(
-                                    pedido, pedidoId,
-                                    lectDesc: 'LECTURA');
+                                  pedido,
+                                  pedidoId,
+                                  lectDesc: 'LECTURA',
+                                );
+
+                                print("🟣 [NAVIGATE] Navegando a detalle...");
                                 await _markAsReadAndNavigate(pedido, pedidoId);
                               } else {
+                                print(
+                                    "⚠️ [SIN DETALLE] pedido['DetalleHTML'] no está presente o está vacío.");
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                       content:
