@@ -372,30 +372,49 @@ class LocationService {
   }
 
   Future<Map<String, dynamic>?> getCurrentLocation() async {
-    if (_locationPermissionDenied) return null;
+    if (_locationPermissionDenied) {
+      print("❌ [GPS] Permiso de ubicación denegado previamente.");
+      return null;
+    }
 
     try {
+      print(
+          "📍 [GPS] Solicitando posición actual con timeout de 5 segundos...");
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
         forceAndroidLocationManager: true,
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          print("⏰ [GPS] Timeout al obtener la posición.");
+          throw TimeoutException("Timeout al obtener la posición GPS.");
+        },
       );
 
-      // Define la proyección WGS84 (Lat, Lon)
+      print(
+          "✅ [GPS] Posición obtenida: lat=${position.latitude}, lon=${position.longitude}");
+
+      // Proyección WGS84 (lat/lon)
       final wgs84 = Projection.get('EPSG:4326');
 
-      // Define la proyección UTM 21S (EPSG:32721)
-      final utm21s = Projection.add('EPSG:32721',
-          '+proj=utm +zone=21 +south +datum=WGS84 +units=m +no_defs');
+      // Proyección UTM 21S
+      final utm21s = Projection.add(
+        'EPSG:32721',
+        '+proj=utm +zone=21 +south +datum=WGS84 +units=m +no_defs',
+      );
 
-      // Crear el punto con las coordenadas obtenidas
       final point = Point(x: position.longitude, y: position.latitude);
 
-      // Convertir a UTM 21S
+      print("📐 [TRANSFORM] Transformando coordenadas a UTM 21S...");
       final result = wgs84?.transform(utm21s, point);
+
       if (result == null) {
-        print('❌ Error: Transformation result is null.');
+        print('❌ [TRANSFORM] Error: Resultado de transformación es null.');
         return null;
       }
+
+      print(
+          "✅ [TRANSFORM] Transformación exitosa: utmX=${result.x}, utmY=${result.y}");
 
       return {
         'latitude': position.latitude,
@@ -403,8 +422,11 @@ class LocationService {
         'utmX': result.x,
         'utmY': result.y,
       };
+    } on TimeoutException catch (e) {
+      print("⏰ [EXCEPTION] Timeout: $e");
+      return null;
     } catch (e) {
-      print('Error al obtener la ubicación: $e');
+      print("❌ [EXCEPTION] Error inesperado al obtener ubicación: $e");
       return null;
     }
   }

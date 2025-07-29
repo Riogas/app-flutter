@@ -233,103 +233,120 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     Map<String, dynamic> pedido,
     int pedidoId, {
     required String lectDesc,
+    BuildContext? context, // <- Opcional para mostrar mensajes
   }) async {
     print(
         "🟠 [_callDescargaLecturaPedidos] Iniciando para pedidoId: $pedidoId");
 
-    String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
-    String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
+    final String pedidoTpo =
+        pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
+    final String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
     try {
-      var box = await Hive.openBox('sessionBox');
+      final box = await Hive.openBox('sessionBox');
 
-      String? deviceId = box.get('deviceId');
-      String? movilid = box.get('movil');
-      int escenarioId =
+      final String? deviceId = box.get('deviceId');
+      final String? movilid = box.get('movil');
+      final int escenarioId =
           int.tryParse(box.get('escenario')?.toString() ?? '') ?? 0;
-      String? username = box.get('username');
+      final String? username = box.get('username');
 
       if ([deviceId, movilid, username].contains(null)) {
-        print(
-            "❌ [_callDescargaLecturaPedidos] Error: Faltan datos en sessionBox");
+        print("❌ Faltan datos en sessionBox (deviceId, movilid o username)");
+        if (context != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error de sesión: faltan datos del usuario.')),
+          );
+        }
         return;
       }
 
       String inAux1 = movilid!;
       String inAux2 = '';
-      String latitud = '0.0';
-      String longitud = '0.0';
-      String utmx = '0.0';
-      String utmy = '0.0';
+      String latitud = '0.0', longitud = '0.0', utmx = '0.0', utmy = '0.0';
 
-      print("🛰️ [_callDescargaLecturaPedidos] Obteniendo ubicación GPS...");
+      print("🛰️ Obteniendo ubicación GPS...");
       try {
         final locationData = await locationService
             .getCurrentLocation()
-            .timeout(Duration(seconds: 5));
+            .timeout(const Duration(seconds: 5));
 
         if (locationData != null) {
           latitud = locationData['latitude'].toString();
           longitud = locationData['longitude'].toString();
           utmx = locationData['utmX'].toString();
           utmy = locationData['utmY'].toString();
-          print(
-              "✅ [_callDescargaLecturaPedidos] Ubicación: $latitud, $longitud");
+          print("✅ Ubicación obtenida: $latitud, $longitud");
         } else {
-          print("⚠️ [_callDescargaLecturaPedidos] No se obtuvo ubicación.");
+          print("⚠️ No se obtuvo ubicación GPS.");
         }
-      } on TimeoutException catch (_) {
-        print("⏰ [_callDescargaLecturaPedidos] Timeout al obtener ubicación.");
+      } on TimeoutException {
+        print("⏰ Timeout al obtener la ubicación GPS.");
       } catch (e) {
-        print("❌ [_callDescargaLecturaPedidos] Error al obtener ubicación: $e");
+        print("❌ Error al obtener ubicación GPS: $e");
       }
 
       double velocidad = 0.0;
       double distanciaRecorrida = 0.0;
 
       try {
-        var locationBox = await Hive.openBox('locationBox');
+        final locationBox = await Hive.openBox('locationBox');
         velocidad = double.parse(
           locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2),
         );
         distanciaRecorrida =
             locationBox.get('totalDistance', defaultValue: 0.0);
       } catch (e) {
-        print(
-            "⚠️ [_callDescargaLecturaPedidos] Error leyendo Hive de ubicación: $e");
+        print("⚠️ Error leyendo datos de velocidad/distancia en Hive: $e");
       }
 
-      print(
-          "📤 [_callDescargaLecturaPedidos] Enviando datos a RioGasService...");
+      print("📤 Enviando datos a RioGasService...");
 
-      // Timeout defensivo de 8 segundos
-      await RioGasService.descargaLecturaPedidos(
-        escenarioId,
-        pedidoId,
-        pedidoTpo,
-        username!,
-        'NroSesion', // TODO: reemplazar con ID real si se tiene
-        deviceId!,
-        lectDesc,
-        fechaHoraCmbEst,
-        movilid,
-        inAux2,
-        latitud,
-        longitud,
-        utmx,
-        utmy,
-        velocidad,
-        distanciaRecorrida,
-      ).timeout(const Duration(seconds: 8), onTimeout: () {
-        print("⏰ [_callDescargaLecturaPedidos] Timeout al esperar respuesta");
-        throw TimeoutException("descargaLecturaPedidos timeout");
-      });
+      try {
+        await RioGasService.descargaLecturaPedidos(
+          escenarioId,
+          pedidoId,
+          pedidoTpo,
+          username!,
+          'NroSesion', // TODO: usar real si se tiene
+          deviceId!,
+          lectDesc,
+          fechaHoraCmbEst,
+          movilid,
+          inAux2,
+          latitud,
+          longitud,
+          utmx,
+          utmy,
+          velocidad,
+          distanciaRecorrida,
+        ).timeout(const Duration(seconds: 8));
 
-      print(
-          "✅ [_callDescargaLecturaPedidos] Finalizado OK para pedido $pedidoId");
+        print("✅ Petición completada con éxito para pedido $pedidoId");
+      } on TimeoutException {
+        print("⏰ Timeout esperando respuesta de RioGasService");
+        if (context != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('La conexión con el servidor ha expirado.')),
+          );
+        }
+      } catch (e) {
+        print("❌ Error inesperado al llamar a RioGasService: $e");
+        if (context != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al enviar datos al servidor.')),
+          );
+        }
+      }
     } catch (e, st) {
-      print("❌ [_callDescargaLecturaPedidos] Excepción: $e");
+      print("❌ Excepción general: $e");
       print(st);
+      if (context != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ocurrió un error inesperado.')),
+        );
+      }
     }
   }
 

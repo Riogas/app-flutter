@@ -407,6 +407,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   }
 
   void _checkConstantAndProceed(BuildContext context) async {
+    print("🟢 [INIT] Iniciando verificación de constante 70...");
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -416,6 +417,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     );
 
     try {
+      print("📦 [HIVE] Abriendo cajas Hive...");
       var box = await Hive.openBox('constantBox');
       var sessionBox = await Hive.openBox('sessionBox');
       var escenario = sessionBox.get('escenario');
@@ -425,159 +427,170 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       String? valorFinal;
 
       if (data != null) {
+        print("🧾 [DATA] Constante 70 leída: $data");
         if (data.containsKey(valorEscenarioKey) &&
             data[valorEscenarioKey] != null) {
-          valorFinal = data[valorEscenarioKey]; // Prioritize ValorEscenario
+          valorFinal = data[valorEscenarioKey];
+          print(
+              "🟣 [ESCENARIO] Se usará valor por escenario: $valorEscenarioKey => $valorFinal");
         } else {
-          valorFinal = data['Valor']; // Default to Valor
+          valorFinal = data['Valor'];
+          print("🔵 [DEFAULT] Se usará valor general: $valorFinal");
         }
       }
 
       if (data != null && data['Estado'] == 'A' && valorFinal == 'S') {
-        Navigator.of(context).pop(); // Close loading dialog
-        _showPaymentModal(context); // Show payment modal if conditions are met
-      } else {
-        // Execute the service directly if conditions are not met
-        if (_selectedSubEstado == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Debe seleccionar al menos una acción.')),
-          );
-          return;
-        }
-
-        var pedidosBox = await Hive.openBox('pedidosBox');
-        var sessionBox = await Hive.openBox('sessionBox');
-        var pedido = pedidosBox.get('pedido');
-        var escenario = sessionBox.get('escenario').toString();
-        var usuario = sessionBox.get('username');
-        var pedidoId = widget.codPedido;
-        var pedidoTpo = widget.pedidoTipo;
-        var currentLocation = await LocationService().getCurrentLocation();
-        if (currentLocation != null) {
-          print(
-              'Latitud: ${currentLocation['latitude']}, Longitud: ${currentLocation['longitude']}');
-          print(
-              'UTM Este (X): ${currentLocation['utmX']}, UTM Norte (Y): ${currentLocation['utmY']}');
-        }
-
-        if (currentLocation == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('No se pudo obtener la ubicación actual.')),
-          );
-          return;
-        }
-
-        // Debug print: State of pedidosBox before service execution
-        // print('Estado inicial de pedidosBox: ${pedidosBox.toMap()}');
-
-        var box = await Hive.openBox('sessionBox');
-
-        String deviceId = box.get('deviceId');
-
-        var locationBox = await Hive.openBox('locationBox');
-        double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
-        double distanciaRecorrida =
-            locationBox.get('totalDistance', defaultValue: 0.0);
-        String movil = box.get('movil').toString(); // Get movil from sessionBox
-
-        /* Aqui debería ir la lógica para controlar la distancia del cliente */
-        // Calcular distancia entre ubicación actual y cliente
-        double latActual = currentLocation['latitude'];
-        double lngActual = currentLocation['longitude'];
-        double distanciaEnMetros = 0;
-        if (widget.ubicacion != null) {
-          double latCliente = widget.ubicacion!.latitude;
-          double lngCliente = widget.ubicacion!.longitude;
-          distanciaEnMetros = Geolocator.distanceBetween(
-            latActual,
-            lngActual,
-            latCliente,
-            lngCliente,
-          );
-        }
-
-        String? CalculoDistancia = await getConstantValue('260');
-
-        print(
-          'CalculoDistancia: $CalculoDistancia, distanciaEnMetros: $distanciaEnMetros',
-        );
-
-        if (_distanciaMaxMtsCumpPedidos != null &&
-            distanciaEnMetros > _distanciaMaxMtsCumpPedidos! &&
-            CalculoDistancia == 'S') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'La distancia al cliente es mayor a la permitida para finalizar el pedido.',
-              ),
-            ),
-          );
-          return;
-        }
-
-        var response = await RioGasService.finalizarPedido(
-            int.parse(escenario), // Convert escenario to int
-            pedidoId,
-            pedidoTpo,
-            usuario,
-            '',
-            deviceId,
-            2,
-            int.parse(_selectedSubEstado!),
-            '',
-            _observaciones ?? '',
-            DateTime.now().toUtc().toIso8601String(),
-            movil,
-            distanciaEnMetros,
-            '',
-            '',
-            currentLocation['latitude'].toString(),
-            currentLocation['longitude'].toString(),
-            currentLocation['utmX'].toString(),
-            currentLocation['utmY'].toString(),
-            velocidad, // Pass speed from Hive
-            distanciaRecorrida // Pass distance from Hive
-            );
-
-        if (response != null) {
-          var pedidosBox = await Hive.openBox('pedidosBox');
-          if (pedidosBox.containsKey(pedidoId)) {
-            await pedidosBox.put(
-              pedidoId,
-              'Procesando',
-            ); // Update to 'Procesando' on success
-          }
-          // Debug print: State of pedidosBox after successful service execution
-          // print('Estado de pedidosBox después de éxito: ${pedidosBox.toMap()}');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Visita finalizada con éxito.')),
-          );
-        } else {
-          var pedidosBox = await Hive.openBox('pedidosBox');
-          if (pedidosBox.containsKey(pedidoId)) {
-            await pedidosBox.put(
-              pedidoId,
-              'Enviando',
-            ); // Update to 'Enviando' on failure
-          }
-          // Debug print: State of pedidosBox after failed service execution
-          // print('Estado de pedidosBox después de fallo: ${pedidosBox.toMap()}');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Enviando finalización de la visita.')),
-          );
-        }
+        print("✅ [MODAL] Condiciones cumplidas, mostrando modal de pago...");
+        Navigator.of(context).pop();
+        _showPaymentModal(context);
+        return;
       }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Ocurrió un error inesperado.')));
-    } finally {
-      Navigator.of(context).pop(); // Close loading dialog
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => HomePage(),
-        ), // Navigate to HomePage widget
+
+      if (_selectedSubEstado == null) {
+        print("❌ [ERROR] SubEstado no seleccionado");
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Debe seleccionar al menos una acción.')),
+        );
+        return;
+      }
+
+      print("🗃️ [HIVE] Reuniendo datos adicionales...");
+      var pedidosBox = await Hive.openBox('pedidosBox');
+      var pedido = pedidosBox.get('pedido');
+      var usuario = sessionBox.get('username');
+      var pedidoId = widget.codPedido;
+      var pedidoTpo = widget.pedidoTipo;
+      String movil = sessionBox.get('movil').toString();
+      String deviceId = sessionBox.get('deviceId');
+
+      String lat = '0.0';
+      String lng = '0.0';
+      String utmx = '0.0';
+      String utmy = '0.0';
+
+      print("📍 [GPS] Solicitando ubicación actual...");
+      try {
+        var currentLocation = await LocationService()
+            .getCurrentLocation()
+            .timeout(Duration(seconds: 5));
+        if (currentLocation != null) {
+          lat = currentLocation['latitude'].toString();
+          lng = currentLocation['longitude'].toString();
+          utmx = currentLocation['utmX'].toString();
+          utmy = currentLocation['utmY'].toString();
+
+          print(
+              "✅ [GPS] Ubicación obtenida: Lat: $lat, Lng: $lng, UTMX: $utmx, UTMY: $utmy");
+        } else {
+          print("⚠️ [GPS] No se obtuvo ubicación, se usará 0.0 por defecto.");
+        }
+      } catch (e) {
+        print("❌ [GPS] Error al obtener ubicación: $e. Se continuará sin GPS.");
+      }
+
+      var locationBox = await Hive.openBox('locationBox');
+      double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
+      double distanciaRecorrida =
+          locationBox.get('totalDistance', defaultValue: 0.0);
+
+      print(
+          "🚗 [MOVIMIENTO] Velocidad: $velocidad m/s | Distancia: $distanciaRecorrida m");
+
+      // Cálculo de distancia al cliente
+      double distanciaEnMetros = 0;
+      if (widget.ubicacion != null && lat != '0.0' && lng != '0.0') {
+        double latCliente = widget.ubicacion!.latitude;
+        double lngCliente = widget.ubicacion!.longitude;
+        double latActual = double.tryParse(lat) ?? 0.0;
+        double lngActual = double.tryParse(lng) ?? 0.0;
+
+        distanciaEnMetros = Geolocator.distanceBetween(
+          latActual,
+          lngActual,
+          latCliente,
+          lngCliente,
+        );
+        print("📏 [DISTANCIA] Distancia al cliente: $distanciaEnMetros m");
+      } else {
+        print(
+            "⚠️ [DISTANCIA] No se puede calcular distancia al cliente sin GPS.");
+      }
+
+      String? CalculoDistancia = await getConstantValue('260');
+      print("📐 [VALOR 260] CalculoDistancia = $CalculoDistancia");
+
+      if (_distanciaMaxMtsCumpPedidos != null &&
+          distanciaEnMetros > _distanciaMaxMtsCumpPedidos! &&
+          CalculoDistancia == 'S') {
+        print(
+            "❌ [VALIDACIÓN] Fuera del rango permitido ($distanciaEnMetros > $_distanciaMaxMtsCumpPedidos)");
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'La distancia al cliente es mayor a la permitida para finalizar el pedido.'),
+          ),
+        );
+        return;
+      }
+
+      print("📤 [API] Enviando datos a RioGasService.finalizarPedido...");
+      var response = await RioGasService.finalizarPedido(
+        int.parse(escenario.toString()),
+        pedidoId,
+        pedidoTpo,
+        usuario,
+        '',
+        deviceId,
+        2,
+        int.parse(_selectedSubEstado!),
+        '',
+        _observaciones ?? '',
+        DateTime.now().toUtc().toIso8601String(),
+        movil,
+        distanciaEnMetros,
+        '',
+        '',
+        lat,
+        lng,
+        utmx,
+        utmy,
+        velocidad,
+        distanciaRecorrida,
       );
+
+      if (response != null) {
+        print("✅ [SERVICIO] Finalización exitosa para pedidoId $pedidoId");
+        if (pedidosBox.containsKey(pedidoId)) {
+          await pedidosBox.put(pedidoId, 'Procesando');
+          print("📥 [HIVE] Pedido $pedidoId marcado como 'Procesando'");
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Visita finalizada con éxito.')),
+        );
+      } else {
+        print(
+            "⚠️ [SERVICIO] No hubo respuesta del servicio. Pedido en estado 'Enviando'");
+        if (pedidosBox.containsKey(pedidoId)) {
+          await pedidosBox.put(pedidoId, 'Enviando');
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Enviando finalización de la visita.')),
+        );
+      }
+    } catch (e, st) {
+      print("❌ [ERROR] Excepción durante el flujo: $e");
+      print(st);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ocurrió un error inesperado.')),
+      );
+    } finally {
+      Navigator.of(context).pop();
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => HomePage()),
+      );
+      print("🔚 [FIN] Flujo de finalización completado.");
     }
   }
 
