@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:hive/hive.dart'; // Import Hive for Box
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/persistent_stream_manager.dart';
+import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 
 class MapPage extends StatefulWidget {
   @override
@@ -25,12 +26,16 @@ class _MapPageState extends State<MapPage> {
   late Box sessionBox; // Box para guardar el estado del mapa
   final MapController _mapController =
       MapController(); // 🟢 Agregar controlador del mapa
+  bool _mapRendered = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeTileCache();
-    _initializeHive().then((_) {
+    // Inicializa el backend predeterminado y otras tareas asíncronas
+    Future.microtask(() async {
+      await FMTCObjectBoxBackend().initialise();
+      await _initializeTileCache();
+      await _initializeHive();
       _checkMapState(); // Verificar el estado del mapa después de inicializar Hive
       _getCurrentLocation();
       // Ya no llamamos a _getPendingOrders, usamos el notifier global
@@ -39,9 +44,9 @@ class _MapPageState extends State<MapPage> {
 
   Future<void> _initializeTileCache() async {
     try {
+      // 🟣 Activar logs internos del paquete
       await FMTCStore('mapCache').manage.create();
-      print(
-          "🟣 Cache de tiles inicializado (días configurables desde constante ID 300)");
+      print("🟣 Cache de tiles inicializado con logging activado");
     } catch (e) {
       print("🟣 Error al inicializar cache de tiles: $e");
     }
@@ -246,16 +251,14 @@ class _MapPageState extends State<MapPage> {
         actions: [
           IconButton(
             icon: Icon(Icons.my_location),
-            onPressed: _isMapEnabled
-                ? _centerMapOnUser
-                : null, // Solo habilitar si el mapa está activo
+            onPressed: _isMapEnabled ? _centerMapOnUser : null,
           ),
         ],
       ),
       body: !_isMapEnabled
           ? Center(
               child: ElevatedButton(
-                onPressed: _activateMap, // Activar el mapa y guardar el estado
+                onPressed: _activateMap,
                 child: Text('Activar Mapa'),
               ),
             )
@@ -268,7 +271,6 @@ class _MapPageState extends State<MapPage> {
               : ValueListenableBuilder<List<DocumentSnapshot>>(
                   valueListenable: PersistentStreamManager().pedidosNotifier,
                   builder: (context, pedidos, child) {
-                    // Construir los marcadores a partir de los pedidos
                     List<Marker> markers = [];
                     for (var order in pedidos) {
                       var data = order.data() as Map<String, dynamic>;
@@ -284,6 +286,7 @@ class _MapPageState extends State<MapPage> {
                       int delayMinutes = fchHoraPara.difference(now).inMinutes;
                       var delayInfo = getDelayInfo(delayMinutes);
                       Color pinColor = delayInfo?['Color'] ?? Colors.red;
+
                       markers.add(
                         Marker(
                           width: 80.0,
@@ -303,10 +306,7 @@ class _MapPageState extends State<MapPage> {
                                     totalPedido: data['TotalPedido'] ?? 0.0,
                                     codPedido: data['id'],
                                     pedidoTipo: data['Tipo'],
-                                    ubicacion: data.containsKey('ubicacion') &&
-                                            data['ubicacion'] is GeoPoint
-                                        ? data['ubicacion'] as GeoPoint
-                                        : null,
+                                    ubicacion: data['ubicacion'] as GeoPoint,
                                   ),
                                 ),
                               );
@@ -315,6 +315,7 @@ class _MapPageState extends State<MapPage> {
                         ),
                       );
                     }
+
                     // Centrar el mapa en el pedido prioritario
                     if (pedidos.isNotEmpty) {
                       var filteredOrders = pedidos.where((order) {
@@ -322,29 +323,23 @@ class _MapPageState extends State<MapPage> {
                         var pedidoId = data['id'];
                         return _getPedidoEstado(pedidoId) != '';
                       }).toList();
+
                       if (filteredOrders.isNotEmpty) {
                         var firstOrder = filteredOrders.first;
                         var data = firstOrder.data() as Map<String, dynamic>;
                         var location = data['ubicacion'] as GeoPoint;
-                        if (_focusedPosition == null ||
-                            _focusedPosition!.latitude != location.latitude ||
-                            _focusedPosition!.longitude != location.longitude) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            setState(() {
-                              _focusedPosition =
-                                  LatLng(location.latitude, location.longitude);
-                            });
-                          });
-                        }
+                        _focusedPosition =
+                            LatLng(location.latitude, location.longitude);
                       } else if (_currentPosition != null) {
-                        _mapController.move(_currentPosition!, 15.0);
+                        _focusedPosition = _currentPosition;
                       }
                     }
+
                     markers.addAll(_markers);
-                    // Leer constante para la URL del servidor de tiles
+
                     var tileServerData = constantBox.get('270');
                     String tileServerUrl =
-                        "http://osmtileserver.riogas.uy/tile"; // Valor por defecto
+                        "http://osmtileserver.riogas.uy/tile";
 
                     if (tileServerData != null &&
                         tileServerData['Estado'] == 'A') {
@@ -362,6 +357,15 @@ class _MapPageState extends State<MapPage> {
                         initialZoom: 15.0,
                         minZoom: 5.0,
                         maxZoom: 18.0,
+                        onMapReady: () {
+                          print(
+                              "🟣 Mapa renderizado. Intentando centrar en ubicación...");
+                          if (_focusedPosition != null) {
+                            _mapController.move(_focusedPosition!, 15.0);
+                          } else if (_currentPosition != null) {
+                            _mapController.move(_currentPosition!, 15.0);
+                          }
+                        },
                       ),
                       children: [
                         TileLayer(

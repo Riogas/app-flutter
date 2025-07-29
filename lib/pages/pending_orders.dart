@@ -37,6 +37,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   Timer? _gpsPermissionChecker; // Timer para chequear permisos de GPS
   // Notificador para el estado del GPS
   final ValueNotifier<bool> _gpsEnabledNotifier = ValueNotifier(false);
+  final Set<int> _descargados = {}; // NUEVO: fuera del build, al nivel de clase
 
   @override
   void initState() {
@@ -209,10 +210,10 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
   Future<void> _callDescargaLecturaPedidos(
     Map<String, dynamic> pedido,
-    int pedidoId,
-  ) async {
+    int pedidoId, {
+    required String lectDesc,
+  }) async {
     String pedidoTpo = pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
-    String lectDesc = 'LECTURA';
     String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
 
     var box = await Hive.openBox('sessionBox');
@@ -247,23 +248,23 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         locationBox.get('totalDistance', defaultValue: 0.0);
 
     await RioGasService.descargaLecturaPedidos(
-        escenarioId,
-        pedidoId,
-        pedidoTpo,
-        username,
-        'NroSesion', // Replace with actual session number if available
-        deviceId,
-        lectDesc,
-        fechaHoraCmbEst,
-        movilid,
-        inAux2,
-        latitud,
-        longitud,
-        utmx,
-        utmy,
-        velocidad, // Pass speed from Hive
-        distanciaRecorrida // Pass distance from Hive
-        );
+      escenarioId,
+      pedidoId,
+      pedidoTpo,
+      username,
+      'NroSesion', // Replace with actual session number if available
+      deviceId,
+      lectDesc,
+      fechaHoraCmbEst,
+      movilid,
+      inAux2,
+      latitud,
+      longitud,
+      utmx,
+      utmy,
+      velocidad,
+      distanciaRecorrida,
+    );
   }
 
   @override
@@ -281,7 +282,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
     print('🔧 PendingOrdersPage: Building main scaffold');
 
-    // <<<< ESTE ES EL CAMBIO: envolvemos el Scaffold.body en ValueListenableBuilder de Hive >>>
     return Scaffold(
       appBar: AppBar(
         title: ValueListenableBuilder<List<DocumentSnapshot>>(
@@ -297,297 +297,274 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           },
         ),
       ),
-      body: pedidosBox == null
-          ? Center(child: CircularProgressIndicator())
-          : ValueListenableBuilder(
-              valueListenable: Hive.box('sessionBox').listenable(keys: [
-                '_locationPermissionAlways',
-                '_locationPermissionDenied'
-              ]),
-              builder: (context, sessionBox, _) {
-                bool locationPermissionAlways = sessionBox
-                    .get('_locationPermissionAlways', defaultValue: false);
-                bool locationPermissionDenied = sessionBox
-                    .get('_locationPermissionDenied', defaultValue: true);
+      body: ValueListenableBuilder(
+        valueListenable: Hive.box('sessionBox').listenable(
+            keys: ['_locationPermissionAlways', '_locationPermissionDenied']),
+        builder: (context, sessionBox, _) {
+          bool locationPermissionAlways =
+              sessionBox.get('_locationPermissionAlways', defaultValue: false);
+          bool locationPermissionDenied =
+              sessionBox.get('_locationPermissionDenied', defaultValue: true);
 
-                return ValueListenableBuilder(
-                  valueListenable:
-                      (Hive.box('pedidosBox') as Box<dynamic>).listenable(),
-                  builder: (context, box, _) {
-                    return ValueListenableBuilder<bool>(
-                      valueListenable: _gpsEnabledNotifier,
-                      builder: (context, isLocationServiceEnabled, _) {
-                        return ValueListenableBuilder<List<DocumentSnapshot>>(
-                          valueListenable: _streamManager.pedidosNotifier,
-                          builder: (context, pedidos, child) {
-                            print('🔍 PendingOrders pedidosNotifier state:');
-                            print('   Widget Instance: ${hashCode}');
-                            print('   Has data: ${pedidos.isNotEmpty}');
-                            if (pedidos.isNotEmpty) {
-                              print('   Data length: ${pedidos.length}');
-                              print(
-                                  '   Sample data: ${pedidos.isNotEmpty ? pedidos.first.id : "no data"}');
-                            }
+          return ValueListenableBuilder(
+            valueListenable:
+                (Hive.box('pedidosBox') as Box<dynamic>).listenable(),
+            builder: (context, box, _) {
+              return ValueListenableBuilder<bool>(
+                valueListenable: _gpsEnabledNotifier,
+                builder: (context, isLocationServiceEnabled, _) {
+                  return ValueListenableBuilder<List<DocumentSnapshot>>(
+                    valueListenable: _streamManager.pedidosNotifier,
+                    builder: (context, pedidos, child) {
+                      print('🔍 PendingOrders pedidosNotifier state:');
+                      print('   Widget Instance: ${hashCode}');
+                      print('   Has data: ${pedidos.isNotEmpty}');
+                      if (pedidos.isNotEmpty) {
+                        print('   Data length: ${pedidos.length}');
+                        print('   Sample data: ${pedidos.first.id}');
+                      }
 
-                            if (pedidos.isEmpty) {
-                              return Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.inbox,
-                                        size: 64, color: Colors.grey),
-                                    SizedBox(height: 16),
-                                    Text('No hay pedidos pendientes.'),
-                                    SizedBox(height: 16),
-                                  ],
-                                ),
-                              );
-                            } else {
-                              var orders = pedidos;
+                      // NUEVO: Llamar _callDescargaLecturaPedidos para pedidos no procesados
+                      for (var order in pedidos) {
+                        var pedidoData = order.data() as Map<String, dynamic>;
+                        int pedidoId = pedidoData['id'] ?? -1;
 
-                              return ListView.builder(
-                                itemCount: orders.length,
-                                itemBuilder: (context, index) {
-                                  var pedido = orders[index].data()
-                                      as Map<String, dynamic>;
-                                  int pedidoId = pedido['id'] ?? -1;
+                        if (!_descargados.contains(pedidoId)) {
+                          _descargados.add(pedidoId);
+                          _callDescargaLecturaPedidos(pedidoData, pedidoId,
+                              lectDesc: 'DESCARGA');
+                        }
+                      }
 
-                                  // Skip rendering the card if the order state is "Procesando"
-                                  if (_getPedidoEstado(pedidoId) ==
-                                      'Procesando') {
-                                    return SizedBox.shrink();
-                                  }
-
-                                  String tipo = pedido['Tipo'] ?? 'Pedidos';
-                                  String direccion =
-                                      pedido['ClienteDireccion'] ??
-                                          'Desconocida';
-                                  String direccionCorta = direccion.length > 20
-                                      ? direccion.substring(0, 20) + '...'
-                                      : direccion;
-                                  // Determinar el estado del pedido y la etiqueta correspondiente
-                                  String etiquetaTexto =
-                                      _getPedidoEstado(pedidoId);
-                                  Color etiquetaColor =
-                                      _getPedidoEstadoColor(pedidoId);
-
-                                  // Excluir mostrar la etiqueta si el estado es 'Leído' o 'No Leído'
-                                  bool mostrarEtiqueta =
-                                      etiquetaTexto != 'Leído' &&
-                                          etiquetaTexto != 'No Leído' &&
-                                          etiquetaTexto.isNotEmpty;
-
-                                  // Usa directamente los valores del sessionBox reactivo
-                                  bool cardBlocked =
-                                      !isLocationServiceEnabled ||
-                                          locationPermissionDenied ||
-                                          !locationPermissionAlways;
-                                  String textoPermisosGPS = '';
-                                  if (cardBlocked) {
-                                    if (!locationPermissionAlways) {
-                                      textoPermisosGPS =
-                                          'Bloqueado - Sin permisos de GPS.';
-                                    } else if (locationPermissionDenied) {
-                                      textoPermisosGPS =
-                                          'Bloqueado - Sin Permisos de GPS activos.';
-                                    } else {
-                                      textoPermisosGPS =
-                                          'Bloqueado - Sin GPS Activado';
-                                    }
-                                  }
-
-                                  return GestureDetector(
-                                    onTap: () async {
-                                      if (cardBlocked) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                                'Por favor, active el GPS y los permisos para interactuar con los pedidos.'),
-                                          ),
-                                        );
-                                        return;
-                                      }
-
-                                      if (pedido.containsKey('DetalleHTML') &&
-                                          pedido['DetalleHTML'].isNotEmpty) {
-                                        await _markAsReadAndNavigate(
-                                            pedido, pedidoId);
-                                      } else {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                              content: Text(
-                                                  'No hay detalles disponibles')),
-                                        );
-                                      }
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8.0, vertical: 4.0),
-                                      child: Card(
-                                        color: cardBlocked
-                                            ? Colors
-                                                .grey // Gray color if GPS is disabled
-                                            : (_getPedidoEstado(pedidoId) ==
-                                                    'No Leído'
-                                                ? (tipo == 'Services'
-                                                    ? Colors.deepPurpleAccent
-                                                    : Colors.lightBlue)
-                                                : (tipo == 'Services'
-                                                    ? Colors.deepPurple
-                                                        .withOpacity(0.7)
-                                                    : Colors.blueGrey)),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(10.0),
-                                        ),
-                                        elevation: 5,
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              SizedBox(height: 4.0),
-                                              Row(
-                                                children: [
-                                                  Text(
-                                                    'Número: $pedidoId',
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Colors.white,
-                                                      fontSize: 14.0,
-                                                    ),
-                                                  ),
-                                                  SizedBox(width: 8.0),
-                                                  if (!cardBlocked &&
-                                                      mostrarEtiqueta)
-                                                    Container(
-                                                      padding:
-                                                          EdgeInsets.symmetric(
-                                                              horizontal: 6.0,
-                                                              vertical: 2.0),
-                                                      decoration: BoxDecoration(
-                                                        color: etiquetaColor,
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(8.0),
-                                                      ),
-                                                      child: Text(
-                                                        etiquetaTexto,
-                                                        style: TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12.0,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  Spacer(),
-                                                  Icon(
-                                                    tipo == 'Services'
-                                                        ? Icons.build
-                                                        : Icons.local_shipping,
-                                                    color: Colors.white,
-                                                    size: 20.0,
-                                                  ),
-                                                ],
-                                              ),
-                                              SizedBox(height: 4.0),
-                                              Row(
-                                                children: [
-                                                  Text(
-                                                    'Dirección: ${cardBlocked ? textoPermisosGPS : direccionCorta}',
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 12.0,
-                                                    ),
-                                                  ),
-                                                  Spacer(),
-                                                  if (!cardBlocked &&
-                                                      pedido.containsKey(
-                                                          'WazeURL'))
-                                                    Container(
-                                                      child: Icon(
-                                                        Icons.location_on,
-                                                        color: Colors.white,
-                                                        size: 20.0,
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                              SizedBox(height: 4.0),
-                                              Row(
-                                                children: [
-                                                  Text(
-                                                    tipo == 'Pedidos'
-                                                        ? 'Servicio: ${cardBlocked ? textoPermisosGPS : (pedido['ServicioNombre'] ?? 'Desconocido')}'
-                                                        : 'Defecto: ${cardBlocked ? textoPermisosGPS : (pedido['Defecto'] ?? 'Desconocido')}',
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 12.0,
-                                                    ),
-                                                  ),
-                                                  Spacer(),
-                                                  if (!cardBlocked &&
-                                                      pedido.containsKey(
-                                                          'Precio'))
-                                                    Text(
-                                                      'Importe: ${pedido['Precio']}',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 12.0,
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                              if (!cardBlocked &&
-                                                  pedido.containsKey(
-                                                      'PedidoObs') &&
-                                                  pedido['PedidoObs']
-                                                      .isNotEmpty)
-                                                Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    SizedBox(height: 4.0),
-                                                    Text(
-                                                      'Observaciones: ${pedido['PedidoObs']}',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 12.0,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              SizedBox(height: 4.0),
-                                              if (!cardBlocked)
-                                                Row(
-                                                  children: [
-                                                    _buildMinutesLeftStream(
-                                                        pedido),
-                                                    SizedBox(width: 8.0),
-                                                  ],
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
-                            }
-                          },
+                      if (pedidos.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.inbox, size: 64, color: Colors.grey),
+                              SizedBox(height: 16),
+                              Text('No hay pedidos pendientes.'),
+                              SizedBox(height: 16),
+                            ],
+                          ),
                         );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+                      }
+
+                      return ListView.builder(
+                        itemCount: pedidos.length,
+                        itemBuilder: (context, index) {
+                          var pedido =
+                              pedidos[index].data() as Map<String, dynamic>;
+                          int pedidoId = pedido['id'] ?? -1;
+
+                          if (_getPedidoEstado(pedidoId) == 'Procesando') {
+                            return SizedBox.shrink();
+                          }
+
+                          String tipo = pedido['Tipo'] ?? 'Pedidos';
+                          String direccion =
+                              pedido['ClienteDireccion'] ?? 'Desconocida';
+                          String direccionCorta = direccion.length > 20
+                              ? direccion.substring(0, 20) + '...'
+                              : direccion;
+
+                          String etiquetaTexto = _getPedidoEstado(pedidoId);
+                          Color etiquetaColor = _getPedidoEstadoColor(pedidoId);
+
+                          bool mostrarEtiqueta = etiquetaTexto != 'Leído' &&
+                              etiquetaTexto != 'No Leído' &&
+                              etiquetaTexto.isNotEmpty;
+
+                          bool cardBlocked = !isLocationServiceEnabled ||
+                              locationPermissionDenied ||
+                              !locationPermissionAlways;
+
+                          String textoPermisosGPS = '';
+                          if (cardBlocked) {
+                            if (!locationPermissionAlways) {
+                              textoPermisosGPS =
+                                  'Bloqueado - Sin permisos de GPS.';
+                            } else if (locationPermissionDenied) {
+                              textoPermisosGPS =
+                                  'Bloqueado - Sin Permisos de GPS activos.';
+                            } else {
+                              textoPermisosGPS = 'Bloqueado - Sin GPS Activado';
+                            }
+                          }
+
+                          return GestureDetector(
+                            onTap: () async {
+                              if (cardBlocked) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Por favor, active el GPS y los permisos.'),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              if (pedido.containsKey('DetalleHTML') &&
+                                  pedido['DetalleHTML'].isNotEmpty) {
+                                await _callDescargaLecturaPedidos(
+                                    pedido, pedidoId,
+                                    lectDesc: 'LECTURA');
+                                await _markAsReadAndNavigate(pedido, pedidoId);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content:
+                                          Text('No hay detalles disponibles')),
+                                );
+                              }
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8.0, vertical: 4.0),
+                              child: Card(
+                                color: cardBlocked
+                                    ? Colors.grey
+                                    : (_getPedidoEstado(pedidoId) == 'No Leído'
+                                        ? (tipo == 'Services'
+                                            ? Colors.deepPurpleAccent
+                                            : Colors.lightBlue)
+                                        : (tipo == 'Services'
+                                            ? Colors.deepPurple.withOpacity(0.7)
+                                            : Colors.blueGrey)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                ),
+                                elevation: 5,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      SizedBox(height: 4.0),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'Número: $pedidoId',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              fontSize: 14.0,
+                                            ),
+                                          ),
+                                          SizedBox(width: 8.0),
+                                          if (!cardBlocked && mostrarEtiqueta)
+                                            Container(
+                                              padding: EdgeInsets.symmetric(
+                                                  horizontal: 6.0,
+                                                  vertical: 2.0),
+                                              decoration: BoxDecoration(
+                                                color: etiquetaColor,
+                                                borderRadius:
+                                                    BorderRadius.circular(8.0),
+                                              ),
+                                              child: Text(
+                                                etiquetaTexto,
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12.0,
+                                                ),
+                                              ),
+                                            ),
+                                          Spacer(),
+                                          Icon(
+                                            tipo == 'Services'
+                                                ? Icons.build
+                                                : Icons.local_shipping,
+                                            color: Colors.white,
+                                            size: 20.0,
+                                          ),
+                                        ],
+                                      ),
+                                      SizedBox(height: 4.0),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'Dirección: ${cardBlocked ? textoPermisosGPS : direccionCorta}',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12.0,
+                                            ),
+                                          ),
+                                          Spacer(),
+                                          if (!cardBlocked &&
+                                              pedido.containsKey('WazeURL'))
+                                            Icon(Icons.location_on,
+                                                color: Colors.white,
+                                                size: 20.0),
+                                        ],
+                                      ),
+                                      SizedBox(height: 4.0),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            tipo == 'Pedidos'
+                                                ? 'Servicio: ${cardBlocked ? textoPermisosGPS : (pedido['ServicioNombre'] ?? 'Desconocido')}'
+                                                : 'Defecto: ${cardBlocked ? textoPermisosGPS : (pedido['Defecto'] ?? 'Desconocido')}',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12.0,
+                                            ),
+                                          ),
+                                          Spacer(),
+                                          if (!cardBlocked &&
+                                              pedido.containsKey('Precio'))
+                                            Text(
+                                              'Importe: ${pedido['Precio']}',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12.0,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      if (!cardBlocked &&
+                                          pedido.containsKey('PedidoObs') &&
+                                          pedido['PedidoObs'].isNotEmpty)
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            SizedBox(height: 4.0),
+                                            Text(
+                                              'Observaciones: ${pedido['PedidoObs']}',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12.0,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      SizedBox(height: 4.0),
+                                      if (!cardBlocked)
+                                        Row(
+                                          children: [
+                                            _buildMinutesLeftStream(pedido),
+                                            SizedBox(width: 8.0),
+                                          ],
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
