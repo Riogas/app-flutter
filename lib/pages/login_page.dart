@@ -1275,8 +1275,10 @@ class _LoginPageState extends State<LoginPage> {
               nomUsuario: nombreUsuario,
               primeraUbicacion: currentLocation ?? LatLng(0.0, 0.0),
               versionApp: versionApp,
-              tipoDeCierreDeSesion: '',
+              tipoDeCierreDeSesion: 'logoutForzado',
+              fchHoraCierre: DateTime.now(),
             );
+
             print("[33m$kLoginFlowTag Resultado de setHistory: $result[0m");
             if (result != null && result['success'] == true) {
               print(

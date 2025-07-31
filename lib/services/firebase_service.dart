@@ -414,7 +414,7 @@ class FirebaseService {
     Query pedidosQuery = _firestore
         .collection(collectionName)
         .where('Movil', isEqualTo: movil)
-        .where('FchPara', isEqualTo: fechaActual)
+        .where('FchPara', isLessThanOrEqualTo: fechaActual)
         .where('VisibleEnApp', isEqualTo: 'S')
         .where('EstadoNro', isEqualTo: 1);
 

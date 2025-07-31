@@ -21,6 +21,7 @@ class SessionService {
     required LatLng primeraUbicacion,
     required String versionApp,
     required String tipoDeCierreDeSesion,
+    DateTime? fchHoraCierre,
   }) async {
     print("$kSessionTag saveSession: INICIO");
     var box = await Hive.openBox('sessionBox');
@@ -77,6 +78,8 @@ class SessionService {
       'versionAndroid': versionAndroid,
       'nivelBateria': nivelBateria,
       'gpsActivado': gpsActivado,
+      'fchHoraCierre': fchHoraCierre,
+      'tipoDeCierreDeSesion': tipoDeCierreDeSesion,
     };
 
     print("$kSessionTag saveSession: Datos de sesión preparados");
@@ -155,6 +158,7 @@ class SessionService {
     required LatLng primeraUbicacion,
     required String versionApp,
     required String tipoDeCierreDeSesion,
+    required DateTime fchHoraCierre,
   }) async {
     print("$kSessionTag _getSessionCommonData: INICIO");
     var box = await Hive.openBox('sessionBox');
@@ -198,6 +202,7 @@ class SessionService {
       'primeraUbicacion': primeraUbicacion,
       'versionApp': versionApp,
       'tipoDeCierreDeSesion': tipoDeCierreDeSesion,
+      'fchHoraCierre': fchHoraCierre,
       'idUsuario': idUsuario,
       'nomUsuario': nomUsuario,
     };
@@ -209,125 +214,148 @@ class SessionService {
     required LatLng primeraUbicacion,
     required String versionApp,
     required String tipoDeCierreDeSesion,
+    required DateTime fchHoraCierre,
   }) async {
-    print("$kSessionTag setHistory: INICIO");
-    final common = await _getSessionCommonData(
-      idUsuario: idUsuario,
-      nomUsuario: nomUsuario,
-      primeraUbicacion: primeraUbicacion,
-      versionApp: versionApp,
-      tipoDeCierreDeSesion: tipoDeCierreDeSesion,
-    );
-    if (common['escenarioId'] == '0') {
-      print("$kSessionTag setHistory: escenario no definido");
-      return {
-        'success': false,
-        'message': 'No se pudo crear la sesión: escenario no definido.',
-      };
-    }
-    final escenarioId = common['escenarioId'];
-    final movilSeleccionado = common['movilSeleccionado'];
-    final fechaActual = common['fechaActual'];
-    final now = common['now'] as DateTime;
-    final horaActual = now.toIso8601String().split('T')[1].split('.')[0];
-    final idSesion = common['idSesion'];
-    final sessionData = {
-      'distanciaRecorridaMts': common['distanciaRecorridaMts'],
-      'estado': common['estado'],
-      'fchHoraExpira': common['fchHoraExpira'],
-      'fchHoraInicio': common['fchHoraInicio'],
-      'fchUltConexionDisp': common['fchUltConexionDisp'],
-      'idSesion': idSesion,
-      'idTerminal': common['idTerminal'],
-      'idUsuario': idUsuario,
-      'infoDispositivo': common['infoDispositivo'],
-      'nomUsuario': common['nombreUsuario'],
-      'movil': movilSeleccionado,
-      'primeraUbicacion': GeoPoint(
-        (common['primeraUbicacion'] as LatLng).latitude,
-        (common['primeraUbicacion'] as LatLng).longitude,
-      ),
-      'tiempoLogueoMins': common['tiempoLogueoMins'],
-      'ultUbicacion': GeoPoint(
-        (common['primeraUbicacion'] as LatLng).latitude,
-        (common['primeraUbicacion'] as LatLng).longitude,
-      ),
-      'versionApp': versionApp,
-      'versionAndroid': common['versionAndroid'],
-      'nivelBateria': common['nivelBateria'],
-      'gpsActivado': common['gpsActivado'],
-    };
+    print("$kSessionTag 📥 setHistory: INICIO");
+
     try {
-      // Asegurar que el documento de la fecha existe
+      print("$kSessionTag 🔍 Obteniendo datos comunes de sesión...");
+      final common = await _getSessionCommonData(
+        idUsuario: idUsuario,
+        nomUsuario: nomUsuario,
+        primeraUbicacion: primeraUbicacion,
+        versionApp: versionApp,
+        tipoDeCierreDeSesion: tipoDeCierreDeSesion,
+        fchHoraCierre: fchHoraCierre,
+      );
+
+      print("$kSessionTag ✅ Datos comunes obtenidos: $common");
+
+      if (common['escenarioId'] == '0') {
+        print("$kSessionTag ⚠️ Escenario no definido. Abortando.");
+        return {
+          'success': false,
+          'message': 'No se pudo crear la sesión: escenario no definido.',
+        };
+      }
+
+      final escenarioId = common['escenarioId'];
+      final movilSeleccionado = common['movilSeleccionado'];
+      final fechaActual = common['fechaActual'];
+      final now = common['now'] as DateTime;
+      final horaActual = now.toIso8601String().split('T')[1].split('.')[0];
+      final idSesion = common['idSesion'];
+
+      final sessionData = {
+        'distanciaRecorridaMts': common['distanciaRecorridaMts'],
+        'estado': common['estado'],
+        'fchHoraExpira': common['fchHoraExpira'],
+        'fchHoraInicio': common['fchHoraInicio'],
+        'fchUltConexionDisp': common['fchUltConexionDisp'],
+        'idSesion': idSesion,
+        'idTerminal': common['idTerminal'],
+        'idUsuario': idUsuario,
+        'infoDispositivo': common['infoDispositivo'],
+        'nomUsuario': common['nombreUsuario'],
+        'movil': movilSeleccionado,
+        'primeraUbicacion': GeoPoint(
+          primeraUbicacion.latitude,
+          primeraUbicacion.longitude,
+        ),
+        'tiempoLogueoMins': common['tiempoLogueoMins'],
+        'ultUbicacion': GeoPoint(
+          primeraUbicacion.latitude,
+          primeraUbicacion.longitude,
+        ),
+        'versionApp': versionApp,
+        'versionAndroid': common['versionAndroid'],
+        'nivelBateria': common['nivelBateria'],
+        'gpsActivado': common['gpsActivado'],
+      };
+
+      print("$kSessionTag 🗂 Asegurando documento de fecha...");
       await _firestore.collection('sessions-$escenarioId').doc(fechaActual).set(
           {'createdAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
-      print("$kSessionTag setHistory: Documento de fecha asegurado");
-      print("$kSessionTag setHistory: Buscando sesión activa");
+
+      print("$kSessionTag 🔎 Buscando sesión activa del usuario...");
       final doc = await _firestore
           .collection('sessions-$escenarioId')
           .doc(fechaActual)
           .collection('activeSessions')
           .doc('Usuario-$idUsuario')
           .get();
+
       if (doc.exists) {
+        print(
+            "$kSessionTag 🔄 Sesión activa encontrada, moviendo a history...");
         final data = doc.data()!;
-        final movilAnterior = data['idMovil'] ?? data['movil'] ?? 'Desconocido';
+
+        // 🔹 Agregar campos faltantes antes de guardar en "history"
+        data['tipoDeCierreDeSesion'] = tipoDeCierreDeSesion;
+        data['fchHoraCierre'] = fchHoraCierre.toIso8601String();
+
         final historyId = '${horaActual.replaceAll(':', '')}-$idUsuario';
-        print("$kSessionTag setHistory: Moviendo sesión activa a history");
+
         await _firestore
             .collection('sessions-$escenarioId')
             .doc(fechaActual)
             .collection('history')
             .doc(historyId)
             .set(data);
+
         await _firestore
             .collection('sessions-$escenarioId')
             .doc(fechaActual)
             .collection('activeSessions')
             .doc('Usuario-$idUsuario')
             .delete();
-        print("$kSessionTag setHistory: Sesión movida a history");
+
         print(
-            "$kSessionTag setHistory: Llamando a saveSession para crear la nueva sesión");
+            "$kSessionTag ✅ Sesión movida a history. Creando nueva sesión...");
         final saveResult = await saveSession(
           idUsuario: idUsuario,
           nomUsuario: nomUsuario,
           primeraUbicacion: primeraUbicacion,
           versionApp: versionApp,
           tipoDeCierreDeSesion: tipoDeCierreDeSesion,
+          fchHoraCierre: fchHoraCierre,
         );
-        print("$kSessionTag setHistory: Resultado de saveSession: $saveResult");
+        print("$kSessionTag 📌 Resultado saveSession: $saveResult");
         return saveResult;
       }
-      // Si no existe, verificar si el móvil está en uso por otro usuario
-      print("$kSessionTag setHistory: Buscando móvil en uso por otro usuario");
+
+      print(
+          "$kSessionTag 🔍 Buscando si el móvil está en uso por otro usuario...");
       final snapshot = await _firestore
           .collection('sessions-$escenarioId')
           .doc(fechaActual)
           .collection('activeSessions')
           .where('movil', isEqualTo: movilSeleccionado)
           .get();
+
       if (snapshot.docs.isNotEmpty) {
+        print(
+            "$kSessionTag 🔄 Móvil está en uso. Moviendo sesión a history...");
         final data = snapshot.docs.first.data();
         final otroUsuario = data['idUsuario'] ?? 'Desconocido';
         final docId = snapshot.docs.first.id;
         final historyId = '${horaActual.replaceAll(':', '')}-$otroUsuario';
-        print("$kSessionTag setHistory: Moviendo móvil en uso a history");
+
         await _firestore
             .collection('sessions-$escenarioId')
             .doc(fechaActual)
             .collection('history')
             .doc(historyId)
             .set(data);
+
         await _firestore
             .collection('sessions-$escenarioId')
             .doc(fechaActual)
             .collection('activeSessions')
             .doc(docId)
             .delete();
-        print("$kSessionTag setHistory: Móvil liberado y movido a history");
-        print(
-            "$kSessionTag setHistory: Llamando a saveSession para crear la nueva sesión");
+
+        print("$kSessionTag ✅ Móvil liberado. Creando nueva sesión...");
         final saveResult = await saveSession(
           idUsuario: idUsuario,
           nomUsuario: nomUsuario,
@@ -335,17 +363,17 @@ class SessionService {
           versionApp: versionApp,
           tipoDeCierreDeSesion: tipoDeCierreDeSesion,
         );
-        print("$kSessionTag setHistory: Resultado de saveSession: $saveResult");
+        print("$kSessionTag 📌 Resultado saveSession: $saveResult");
         return saveResult;
       }
-      print(
-          "$kSessionTag setHistory: No existe sesión previa para mover a history");
+
+      print("$kSessionTag ⚠️ No existe sesión previa para mover a history.");
       return {
         'success': false,
         'message': 'No existe sesión previa para mover a history.',
       };
     } catch (e) {
-      print("$kSessionTag setHistory: ERROR $e");
+      print("$kSessionTag ❌ ERROR en setHistory: $e");
       return {
         'success': false,
         'message': 'Error en setHistory: $e',
