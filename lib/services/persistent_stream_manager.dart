@@ -240,6 +240,28 @@ class PersistentStreamManager {
     }
   }
 
+  void reset() {
+    print('🔄 [PersistentStreamManager] Reseteando estado interno');
+
+    _pedidosSubscription?.cancel();
+    _mensajesSubscription?.cancel();
+    _movilSubscription?.cancel();
+    _sesionesSubscription?.cancel();
+    _subEstadosSubscription?.cancel();
+    _subEstadoMovilesSubscription?.cancel();
+
+    // NO uses .dispose() en notifiers si pensás reusarlos, mejor:
+    _pedidosNotifier.value = [];
+    _mensajesNotifier.value = [];
+    _movilNotifier.value = null;
+    _sesionesNotifier.value = null;
+    _subEstadosNotifier.value = [];
+    _subEstadoMovilesNotifier.value = [];
+
+    _hiveSyncInitialized = false;
+    _initialized = false;
+  }
+
   /// Initialize persistent Movil listener
   Future<void> _initializeMovilListener() async {
     try {
@@ -265,7 +287,6 @@ class PersistentStreamManager {
     }
   }
 
-  /// Initialize persistent Sesiones listener
   Future<void> _initializeSesionesListener() async {
     try {
       _sesionesSubscription = _firebaseService.getSesionesStream().listen(
@@ -273,8 +294,13 @@ class PersistentStreamManager {
           _sesionesReads++;
           print(
               '🔐 [PersistentStreamManager] Sesiones updated (reads: $_sesionesReads)');
-          _sesionesNotifier.value = sesiones;
-          // Log to Hive every time the read counter changes
+
+          if (_sesionesNotifier.value != sesiones) {
+            _sesionesNotifier.value = sesiones;
+          } else {
+            _sesionesNotifier.value = sesiones == null ? {} : {...sesiones};
+          }
+
           _logToMonitoreo('SesionesReads', _sesionesReads);
           _logToMonitoreo('TotalReads', totalReads);
         },
@@ -720,14 +746,14 @@ class PersistentStreamManager {
     _subEstadosSubscription?.cancel();
     _subEstadoMovilesSubscription?.cancel();
 
-    _pedidosNotifier.dispose();
-    _mensajesNotifier.dispose();
-    _movilNotifier.dispose();
-    _sesionesNotifier.dispose();
-    _subEstadosNotifier.dispose();
-    _subEstadoMovilesNotifier.dispose();
+    // ❌ NO hacer esto:
+    // _pedidosNotifier.dispose();  👈❌
+    // _mensajesNotifier.dispose(); 👈❌
+    // etc.
 
     _initialized = false;
-    print('✅ [PersistentStreamManager] All listeners disposed');
+    _hiveSyncInitialized = false;
+
+    print('✅ [PersistentStreamManager] All listeners disposed (soft)');
   }
 }

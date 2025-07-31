@@ -33,10 +33,19 @@ class _MapPageState extends State<MapPage> {
     super.initState();
     // Inicializa el backend predeterminado y otras tareas asíncronas
     Future.microtask(() async {
-      await FMTCObjectBoxBackend().initialise();
+      try {
+        await FMTCObjectBoxBackend().initialise();
+        print("🟣 FMTC backend inicializado");
+      } catch (e) {
+        if (e is RootAlreadyInitialised) {
+          print("🟣 FMTC backend ya estaba inicializado");
+        } else {
+          print("🟥 Error al inicializar FMTC backend: $e");
+        }
+      }
+
       await _initializeTileCache();
       await _initializeHive();
-      _checkMapState(); // Verificar el estado del mapa después de inicializar Hive
       _getCurrentLocation();
       // Ya no llamamos a _getPendingOrders, usamos el notifier global
     });
@@ -60,6 +69,9 @@ class _MapPageState extends State<MapPage> {
     print("🟣 Hive pedidosBox inicializado: ${pedidosBox.isOpen}");
     sessionBox = await Hive.openBox('sessionBox');
     print("🟣 Hive sessionBox inicializado: ${sessionBox.isOpen}");
+
+    // 🟢 Mover aquí
+    _checkMapState();
   }
 
   void _checkMapState() {
@@ -276,7 +288,15 @@ class _MapPageState extends State<MapPage> {
                       var data = order.data() as Map<String, dynamic>;
                       if (!data.containsKey('ubicacion') ||
                           data['ubicacion'] == null) continue;
-                      var location = data['ubicacion'] as GeoPoint;
+                      GeoPoint? location;
+                      if (data['ubicacion'] != null &&
+                          data['ubicacion'] is GeoPoint) {
+                        location = data['ubicacion'];
+                      } else {
+                        print("⚠️ Pedido sin ubicación válida: ${data['id']}");
+                        continue;
+                      }
+
                       var pedidoId = data['id'];
                       var pedidoEstado = pedidosBox.get(pedidoId);
                       if (pedidoEstado == 'Procesando') continue;
@@ -291,7 +311,8 @@ class _MapPageState extends State<MapPage> {
                         Marker(
                           width: 80.0,
                           height: 80.0,
-                          point: LatLng(location.latitude, location.longitude),
+                          point:
+                              LatLng(location!.latitude, location!.longitude),
                           child: IconButton(
                             icon: Icon(Icons.location_on),
                             color: pinColor,
@@ -327,9 +348,17 @@ class _MapPageState extends State<MapPage> {
                       if (filteredOrders.isNotEmpty) {
                         var firstOrder = filteredOrders.first;
                         var data = firstOrder.data() as Map<String, dynamic>;
-                        var location = data['ubicacion'] as GeoPoint;
-                        _focusedPosition =
-                            LatLng(location.latitude, location.longitude);
+                        GeoPoint? location;
+                        if (data['ubicacion'] != null &&
+                            data['ubicacion'] is GeoPoint) {
+                          location = data['ubicacion'];
+                          _focusedPosition =
+                              LatLng(location!.latitude, location!.longitude);
+                        } else {
+                          print(
+                              "⚠️ Pedido prioritario sin ubicación válida: ${data['id']}");
+                          _focusedPosition = _currentPosition;
+                        }
                       } else if (_currentPosition != null) {
                         _focusedPosition = _currentPosition;
                       }

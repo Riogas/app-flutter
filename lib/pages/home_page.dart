@@ -98,6 +98,16 @@ class _HomePageState extends State<HomePage>
     super.initState();
     //secureScreen();
 
+    final streamManager = PersistentStreamManager();
+
+    if (!streamManager.isProperlyInitialized) {
+      streamManager.initialize().then((_) {
+        print('✅ [HomePage] StreamManager inicializado correctamente');
+        setState(
+            () {}); // Para asegurar reconstrucción si usás ValueListenableBuilder
+      });
+    }
+
     // 🔹 Initialize message counter notifier
     _messageCountNotifier = ValueNotifier<int>(0);
     // 🔹 Initialize pending orders counter notifier
@@ -602,42 +612,34 @@ class _HomePageState extends State<HomePage>
     });
   }
 
-  Future<void> forzarDeslogueoYRedirigir(
+  void forzarDeslogueoYRedirigir(
     BuildContext context,
     String nomUsuario,
     String movil,
-  ) async {
+  ) {
+    final mensaje =
+        'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.';
     print(
-        '\u001b[31m[HOME_SESSION] forzarDeslogueoYRedirigir llamado con nomUsuario: $nomUsuario, movil: $movil\u001b[0m');
-    final mensaje = (nomUsuario == 'Desconocido' || movil == 'Desconocido')
-        ? 'Se ha terminado su tiempo de sesión, por favor ingrese nuevamente.'
-        : 'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.';
+        '[HOME_SESSION] forzarDeslogueoYRedirigir llamado con nomUsuario: $nomUsuario, movil: $movil');
+    print('[HOME_SESSION] Mensaje de deslogueo: $mensaje');
 
-    print('\u001b[31m[HOME_SESSION] Mensaje de deslogueo: $mensaje\u001b[0m');
-    // Redirigir al LoginPage, pasándole que debe ejecutar cierre forzado
-    try {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        try {
-          print('[HOME_SESSION] Navegando a LoginPage con forcedLogout');
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => LoginPage(
-                forcedLogout: true,
-                forcedLogoutMessage: mensaje,
-                movil: movil,
-              ),
-            ),
-          );
-        } catch (e, stack) {
-          print(
-              '\u001b[31m[HOME_SESSION] ❌ Error navegando a LoginPage: $e\n$stack\u001b[0m');
-        }
-      });
-    } catch (e, stack) {
-      print(
-          '\u001b[31m[HOME_SESSION] ❌ Error en forzarDeslogueoYRedirigir: $e\n$stack\u001b[0m');
-    }
+    // Esperar brevemente para permitir que el build actual finalice
+    Future.delayed(Duration(milliseconds: 100), () {
+      if (!context.mounted) {
+        print('[HOME_SESSION] 🚫 Contexto desmontado. Cancelando navegación.');
+        return;
+      }
+
+      try {
+        Navigator.of(context).pushReplacementNamed('/login', arguments: {
+          'forcedLogout': true,
+          'mensaje': mensaje,
+        });
+        print('[HOME_SESSION] Navegando a LoginPage con forcedLogout');
+      } catch (e) {
+        print('[HOME_SESSION] ❌ Error navegando a LoginPage: $e');
+      }
+    });
   }
 
   Widget _showForcedLogoutDialog(
@@ -952,105 +954,113 @@ class _HomePageState extends State<HomePage>
           ),
         ],
       ),
-      body: FutureBuilder(
-        future: Hive.openBox('sessionBox'),
-        builder: (context, snapshot) {
-          print('[HOME_SESSION] future: Hive.openBox(sessionBox)');
-          if (!snapshot.hasData) {
-            print('[HOME_SESSION] No hay datos en snapshot, mostrando loader');
-            return Center(child: CircularProgressIndicator());
-          }
+      body: Hive.isBoxOpen('sessionBox')
+          ? ValueListenableBuilder<Map<String, dynamic>?>(
+              valueListenable: _streamManager.sesionesNotifier,
+              builder: (context, data, _) {
+                print('[HOME_SESSION] (LIVE) Data de sesionesNotifier: $data');
 
-          try {
-            var box = Hive.box('sessionBox');
-            bool firstLoginDone =
-                box.get('firstLoginDone', defaultValue: false);
-            bool existeSession = Hive.isBoxOpen('sessionBox');
+                final box = Hive.box('sessionBox');
+                final firstLoginDone =
+                    box.get('firstLoginDone', defaultValue: false);
 
-            print(
-                '\u001b[36m[HOME_SESSION] firstLoginDone: $firstLoginDone, existeSession: $existeSession\u001b[0m');
+                if (firstLoginDone) {
+                  print(
+                      '[HOME_SESSION] Ignorando logout forzado por primer login manual...');
+                  return _widgetOptions.elementAt(_selectedIndex);
+                }
 
-            // ✅ Si es el primer login manual, ignorar completamente el chequeo de sesión activa
-            if (firstLoginDone && existeSession) {
-              print(
-                  '\u001b[32m[HOME_SESSION] Ignorando chequeo de logout forzado en el primer login manual...\u001b[0m');
-              return _widgetOptions.elementAt(_selectedIndex);
-            } else {
-              if (existeSession) {
-                print(
-                    '[HOME_SESSION] Chequeando logout forzado en Firestore...');
-                // ✅ Si no es el primer login, proceder con la validación en Firestore
-                return StreamBuilder<Map<String, dynamic>?>(
-                  stream:
-                      _sesionesStream, // 🔹 FIX: Use stable stream to prevent rebuilds
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
+                if (data == null) {
+                  print(
+                      '[HOME_SESSION] ❌ Documento eliminado o null desde sesionesNotifier');
+                  final logoutControlled =
+                      box.get('logoutControlled', defaultValue: false);
+
+                  if (!logoutControlled) {
+                    print(
+                        '[HOME_SESSION] Forzando logout por documento Firestore nulo');
+                    Future.microtask(() async {
+                      final usuarioActual =
+                          await obtenerUsuarioLogueadoActual(); // 🔹 Await necesario
+                      forzarDeslogueoYRedirigir(
+                        context,
+                        usuarioActual['nomUsuario'] ?? 'Desconocido',
+                        usuarioActual['movil'] ?? 'Desconocido',
+                      );
+                    });
+                  }
+                } else {
+                  print(
+                      '[HOME_SESSION] ✅ Datos recibidos desde sesionesNotifier: $data');
+                  if (data['idTerminal'] != box.get('deviceId')) {
+                    print(
+                        '[HOME_SESSION] ⚠️ idTerminal cambiado, forzando deslogueo');
+                    Future.microtask(() => forzarDeslogueoYRedirigir(
+                          context,
+                          data['nomUsuario'] ?? 'Desconocido',
+                          data['movil'] ?? 'Desconocido',
+                        ));
+                  }
+                }
+
+                return _widgetOptions.elementAt(_selectedIndex);
+              },
+            )
+          : FutureBuilder(
+              future: Hive.openBox('sessionBox'),
+              builder: (context, snapshot) {
+                print('[HOME_SESSION] future: Hive.openBox(sessionBox)');
+                if (!snapshot.hasData) {
+                  print(
+                      '[HOME_SESSION] No hay datos en snapshot, mostrando loader');
+                  return Center(child: CircularProgressIndicator());
+                }
+
+                return ValueListenableBuilder<Map<String, dynamic>?>(
+                  valueListenable: _streamManager.sesionesNotifier,
+                  builder: (context, data, _) {
+                    print(
+                        '[HOME_SESSION] (POST-FUTURE) Data de sesionesNotifier: $data');
+                    final box = Hive.box('sessionBox');
+                    final firstLoginDone =
+                        box.get('firstLoginDone', defaultValue: false);
+
+                    if (firstLoginDone) {
                       print(
-                          '[HOME_SESSION] Esperando datos del stream de Firestore...');
-                      return Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      print(
-                          '\u001b[31m[HOME_SESSION] Error en el stream: ${snapshot.error}\u001b[0m');
-                      return Center(
-                          child: Text('Error: [31m${snapshot.error}[0m'));
+                          '[HOME_SESSION] Ignorando logout forzado por primer login manual...');
+                      return _widgetOptions.elementAt(_selectedIndex);
                     }
 
-                    if (snapshot.hasData) {
-                      var data = snapshot.data;
-                      print('[HOME_SESSION] Datos recibidos del stream: $data');
-                      if (Hive.isBoxOpen('sessionBox')) {
-                        var box = Hive.box('sessionBox');
-                        if (data != null &&
-                            data['idTerminal'] != box.get('deviceId')) {
-                          print(
-                              '\u001b[31m[HOME_SESSION] idTerminal cambiado, forzando deslogueo\u001b[0m');
-                          forzarDeslogueoYRedirigir(
-                            context,
-                            data['nomUsuario'] ?? 'Desconocido',
-                            data['movil'] ?? 'Desconocido',
-                          );
-                        }
+                    if (data == null) {
+                      print(
+                          '[HOME_SESSION] ❌ Documento eliminado o null desde sesionesNotifier');
+                      final logoutControlled =
+                          box.get('logoutControlled', defaultValue: false);
+                      if (!logoutControlled) {
+                        print(
+                            '[HOME_SESSION] Forzando logout por documento Firestore nulo');
+                        Future.microtask(() => forzarDeslogueoYRedirigir(
+                            context, 'Desconocido', 'Desconocido'));
                       }
                     } else {
                       print(
-                          '[HOME_SESSION] No hay datos en el snapshot del stream, forzando logout si corresponde');
-                      // Si no hay datos en el snapshot, forzar logout
-                      if (Hive.isBoxOpen('sessionBox')) {
-                        var box = Hive.box('sessionBox');
-                        bool logoutControlled =
-                            box.get('logoutControlled', defaultValue: false);
+                          '[HOME_SESSION] ✅ Datos recibidos desde sesionesNotifier: $data');
+                      if (data['idTerminal'] != box.get('deviceId')) {
                         print(
-                            '[HOME_SESSION] logoutControlled: $logoutControlled');
-                        if (!logoutControlled) {
-                          print(
-                              '\u001b[31m[HOME_SESSION] Forzando deslogueo por ausencia de datos en Firestore\u001b[0m');
-                          forzarDeslogueoYRedirigir(
-                            context,
-                            'Desconocido',
-                            'Desconocido',
-                          );
-                        }
+                            '[HOME_SESSION] ⚠️ idTerminal cambiado, forzando deslogueo');
+                        Future.microtask(() => forzarDeslogueoYRedirigir(
+                              context,
+                              data['nomUsuario'] ?? 'Desconocido',
+                              data['movil'] ?? 'Desconocido',
+                            ));
                       }
                     }
 
                     return _widgetOptions.elementAt(_selectedIndex);
                   },
                 );
-              } else {
-                print(
-                    '[HOME_SESSION] No existe sessionBox, mostrando widget principal');
-                return _widgetOptions.elementAt(_selectedIndex);
-              }
-            }
-          } catch (e) {
-            print(
-                '\u001b[31m[HOME_SESSION] ❌ Error al abrir la caja sessionBox: $e\u001b[0m');
-            return _showForcedLogoutDialog(
-                context, 'Desconocido', 'Desconocido');
-          }
-        },
-      ),
+              },
+            ),
       bottomNavigationBar: ValueListenableBuilder<int>(
         valueListenable: _pendingOrdersCountNotifier,
         builder: (context, pendingOrdersCount, child) {
@@ -1111,6 +1121,98 @@ class _HomePageState extends State<HomePage>
       ),
       label: label,
     );
+  }
+
+  Future<Map<String, String>> obtenerUsuarioLogueadoActual() async {
+    const tag = '[🔍 OBTENER_USUARIO_LOGUEADO_ACTUAL]';
+    const int maxReintentos = 3;
+    const Duration esperaEntreIntentos = Duration(seconds: 2);
+
+    try {
+      print(
+          '$tag 🟢 INICIO del proceso de obtención de usuario logueado actual');
+
+      final box = await openBoxSafe('sessionBox');
+      if (box == null) {
+        print('$tag ❌ No se pudo abrir la caja Hive: sessionBox');
+        return {
+          'nomUsuario': 'Desconocido',
+          'movil': 'Desconocido',
+        };
+      }
+
+      final movilActual = box.get('movil', defaultValue: '0').toString();
+      final escenarioId = box.get('escenario', defaultValue: '0').toString();
+      final username = box.get('username', defaultValue: '0').toString();
+
+      print('$tag 📦 Datos leídos desde Hive:');
+      print('$tag    - movil: $movilActual');
+      print('$tag    - escenarioId: $escenarioId');
+      print('$tag    - username: $username');
+
+      final collectionName = 'sessions-$escenarioId';
+      final now = DateTime.now();
+      final fechaActual =
+          now.toIso8601String().split('T')[0].replaceAll('-', '');
+      final activeSessionsRef = FirebaseFirestore.instance
+          .collection(collectionName)
+          .doc(fechaActual)
+          .collection('activeSessions');
+
+      print('$tag 📂 Colección: $collectionName');
+      print('$tag 📅 Fecha actual formateada: $fechaActual');
+      print(
+          '$tag 📡 Consultando Firestore: $collectionName/$fechaActual/activeSessions');
+
+      for (int intento = 1; intento <= maxReintentos; intento++) {
+        print('$tag 🔁 Intento $intento de $maxReintentos');
+
+        final querySnapshot = await activeSessionsRef.get(
+          const GetOptions(source: Source.server),
+        );
+
+        print(
+            '$tag 🔄 Documentos encontrados en activeSessions: ${querySnapshot.docs.length}');
+
+        for (final doc in querySnapshot.docs) {
+          final data = doc.data();
+          final docId = doc.id;
+          final docMovil = data['movil']?.toString() ?? 'null';
+
+          print('$tag    ➤ Documento ID: $docId');
+          print('$tag       - movil: $docMovil');
+
+          if (docMovil == movilActual) {
+            print('$tag ✅ Documento coincidente encontrado: $docId');
+            print('$tag    ↪️ nomUsuario: ${data['nomUsuario'] ?? 'null'}');
+            return {
+              'nomUsuario': data['nomUsuario']?.toString() ?? 'Desconocido',
+              'movil': data['movil']?.toString() ?? 'Desconocido',
+            };
+          }
+        }
+
+        if (intento < maxReintentos) {
+          print(
+              '$tag ⏳ Documento no encontrado aún. Esperando ${esperaEntreIntentos.inSeconds}s antes de reintentar...');
+          await Future.delayed(esperaEntreIntentos);
+        }
+      }
+
+      print(
+          '$tag ⚠️ No se encontró ningún documento con móvil = $movilActual luego de $maxReintentos intentos');
+      return {
+        'nomUsuario': 'Desconocido',
+        'movil': movilActual,
+      };
+    } catch (e, st) {
+      print('$tag ❌ Error inesperado al obtener usuario logueado: $e');
+      print('$tag 🧵 StackTrace:\n$st');
+      return {
+        'nomUsuario': 'Desconocido',
+        'movil': 'Desconocido',
+      };
+    }
   }
 
   Widget _buildBadge(int count) {

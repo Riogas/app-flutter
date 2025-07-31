@@ -218,7 +218,13 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         builder: (context) => OrderDetailPage(
           detalleHtml: detalleHtml,
           estadoNro: estadoNro,
-          totalPedido: precio,
+          totalPedido: (pedido['Precio'] is double)
+              ? pedido['Precio']
+              : (pedido['Precio'] is int)
+                  ? (pedido['Precio'] as int).toDouble()
+                  : (pedido['Precio'] is String)
+                      ? double.tryParse(pedido['Precio']) ?? 0.0
+                      : 0.0,
           codPedido: pedidoId,
           pedidoTipo: tipo,
           ubicacion: ubicacion,

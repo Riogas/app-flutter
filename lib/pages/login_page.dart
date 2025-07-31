@@ -25,6 +25,7 @@ import 'package:open_file/open_file.dart'; // Import for OpenFile
 import 'package:dio/dio.dart'; // Import for Dio HTTP client
 import 'package:video_player/video_player.dart';
 import '../utils/stream_manager.dart';
+import '../services/persistent_stream_manager.dart';
 
 const String kLoginFlowTag = "[LOGIN_FLOW]";
 
@@ -267,21 +268,28 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _handleForcedLogoutAndShowDialog() async {
     try {
       final movil = int.tryParse(widget.movil ?? '0') ?? 0;
-      final box = await Hive.openBox('sessionBox');
 
-      String? deviceId = box.get('deviceId');
-      String? idUsuario = box.get('username');
-      String escenario = box.get('escenario') ?? "0";
-      String usuario = box.get('username') ?? "string";
-      String? idTerminal = box.get('deviceId');
+      Box? box;
+      if (Hive.isBoxOpen('sessionBox')) {
+        box = Hive.box('sessionBox');
+      } else {
+        box = await Hive.openBox('sessionBox');
+      }
+
+      final deviceId = box.get('deviceId');
+      final idUsuario = box.get('username');
+      final escenario = box.get('escenario') ?? "0";
+      final usuario = box.get('username') ?? "string";
+      final idTerminal = box.get('deviceId');
 
       final platform = MethodChannel("background_service");
       await platform.invokeMethod("stopLocationService", {
-        "movil": movil,
+        "movil": movil.toString(),
         "escenario": escenario,
         "usuario": usuario,
-        "deviceId": "$idTerminal",
+        "deviceId": idTerminal.toString(),
       });
+
       print("🛑 Servicio de ubicación detenido y notificación eliminada.");
 
       await RioGasService.registrarCierre(
@@ -292,34 +300,48 @@ class _LoginPageState extends State<LoginPage> {
         'DeslogueoForzado',
       );
 
-      await box.clear();
-      await Hive.openBox('mensajesBox').then((b) => b.clear());
+      // Limpiar cajas abiertas de forma segura
+      if (box.isOpen) await box.clear();
+
+      if (Hive.isBoxOpen('mensajesBox')) {
+        await Hive.box('mensajesBox').clear();
+      } else {
+        await Hive.openBox('mensajesBox').then((b) => b.clear());
+      }
 
       await _cancelStreams();
 
-      await box.deleteFromDisk();
+      // Eliminar disco solo si sigue abierto
+      if (box.isOpen) await box.deleteFromDisk();
 
-      // Mostrar diálogo solo si el widget sigue montado
       if (mounted) {
-        _showForcedLogoutDialog(widget.forcedLogoutMessage);
+        _showForcedLogoutDialog(
+          mensaje: widget.forcedLogoutMessage ??
+              'Su sesión ha sido cerrada. Por favor, inicie sesión nuevamente.',
+        );
       }
     } catch (e) {
       print('❌ Error durante limpieza por deslogueo forzado: $e');
     }
   }
 
-  void _showForcedLogoutDialog(String? mensaje) {
+  void _showForcedLogoutDialog({required String mensaje}) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text('Deslogueo forzado'),
-        content: Text(
-          mensaje ??
-              'Su sesión ha sido cerrada. Por favor, inicie sesión nuevamente.',
-        ),
+        content: Text(mensaje),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context); // Cierra el diálogo
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => LoginPage()),
+                (_) => false,
+              );
+            },
             child: const Text('Aceptar'),
           ),
         ],
@@ -328,7 +350,8 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _cancelStreams() async {
-    await cancelAllStreams(); // ahora sí, porque lo hiciste accesible globalmente
+    await cancelAllStreams(); // Esto cancela los streams externos que ya tenías
+    PersistentStreamManager().dispose(); // 🔥 Cancela los persistentes
     print('🔴 Todos los streams cancelados.');
   }
 
@@ -370,6 +393,17 @@ class _LoginPageState extends State<LoginPage> {
       print("Antes del login");
 
       if (response != null && response['OK'] == 99) {
+        //Poner loading de descarga y desconectar hives
+
+        var sessionBox = await Hive.openBox('sessionBox');
+        var constantBox = await Hive.openBox('constantBox');
+        var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
+
+        // Eliminar los datos de sesión de Hive
+        await sessionBox.deleteFromDisk();
+        await constantBox.deleteFromDisk();
+        await mensajesBox.deleteFromDisk();
+
         _validateAppVersion();
       } else {
         if (response != null && response['OK'] == 0) {
@@ -1321,6 +1355,8 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
+  double _downloadProgress = 0.0;
+
   void _showUpdateDialog(String message, String link, bool isRequired) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       showDialog(
@@ -1338,81 +1374,76 @@ class _LoginPageState extends State<LoginPage> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  print(
-                      '🔄 Confirmación recibida. Iniciando proceso de actualización.');
-
-                  // Solicitar permiso REQUEST_INSTALL_PACKAGES
                   if (await Permission.requestInstallPackages.isDenied) {
-                    print(
-                        '⚠️ Permiso REQUEST_INSTALL_PACKAGES denegado. Solicitando permiso.');
                     final status =
                         await Permission.requestInstallPackages.request();
                     if (!status.isGranted) {
-                      print('❌ Permiso REQUEST_INSTALL_PACKAGES no concedido.');
                       _showMessage(
                           'No se puede continuar sin el permiso para instalar paquetes.');
                       return;
                     }
                   }
 
-                  try {
-                    // Mostrar indicador de progreso
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (BuildContext context) {
-                        return AlertDialog(
-                          title: Text('Descargando actualización...'),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 20),
-                              Text(
-                                  'Por favor, espera mientras se descarga la actualización.')
-                            ],
-                          ),
-                        );
-                      },
-                    );
+                  double progress = 0.0;
+                  late StateSetter dialogSetState;
 
-                    // Descarga el archivo desde la URL
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (BuildContext context) {
+                      return StatefulBuilder(
+                        builder: (context, setState) {
+                          dialogSetState = setState;
+                          return AlertDialog(
+                            title: Text('Descargando actualización...'),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                LinearProgressIndicator(value: progress),
+                                SizedBox(height: 16),
+                                Text(
+                                  'Descarga: ${(progress * 100).toStringAsFixed(0)}%',
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+
+                  try {
                     final tempDir = await getTemporaryDirectory();
                     final filePath = '${tempDir.path}/app_update.apk';
 
                     Dio dio = Dio();
-                    await dio.download(link, filePath,
-                        onReceiveProgress: (received, total) {
-                      if (total != -1) {
-                        print(
-                            '📥 Progreso de descarga: ${(received / total * 100).toStringAsFixed(0)}%');
-                      }
-                    });
+                    await dio.download(
+                      link,
+                      filePath,
+                      onReceiveProgress: (received, total) {
+                        if (total != -1) {
+                          final newProgress = received / total;
+                          dialogSetState(() {
+                            progress = newProgress;
+                          });
+                        }
+                      },
+                    );
 
                     Navigator.of(context)
-                        .pop(); // Cierra la ventana de progreso
+                        .pop(); // Cierra el diálogo de progreso
 
-                    print(
-                        '✅ Descarga completada. Archivo guardado en: $filePath');
-
-                    // Abre el archivo descargado para instalarlo
                     final result = await OpenFile.open(filePath);
 
                     var box = await Hive.openBox('sessionBox');
-                    box.clear(); // Limpia la caja de sesión al cerrar la app
+                    box.clear();
 
-                    if (result.type == ResultType.done) {
-                      print('✅ Archivo abierto exitosamente.');
-                    } else {
-                      print(
-                          '⚠️ No se pudo abrir el archivo descargado. Resultado: ${result.message}');
+                    if (result.type != ResultType.done) {
                       _showMessage('No se pudo abrir el archivo descargado.');
                     }
                   } catch (e) {
                     Navigator.of(context)
-                        .pop(); // Cierra la ventana de progreso en caso de error
-                    print(
-                        '❌ Error al intentar descargar o abrir el archivo: $e');
+                        .pop(); // Cierra el diálogo de progreso
                     _showMessage(
                         'Error al intentar descargar o abrir el archivo: $e');
                   }
@@ -1702,6 +1733,9 @@ class _LoginPageState extends State<LoginPage> {
     // Verificar si las notificaciones están habilitadas
     if (await Permission.notification.isGranted) {
       // Si están habilitadas, navegar a HomePage
+      PersistentStreamManager().reset(); // Reinicia todo el estado
+      await PersistentStreamManager().initialize(); // Relanza listeners
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => HomePage()),
@@ -1775,6 +1809,9 @@ class _LoginPageState extends State<LoginPage> {
 
     // 🔹 Cerrar el diálogo de carga y navegar a HomePage
     if (mounted) {
+      PersistentStreamManager().reset(); // Reinicia todo el estado
+      await PersistentStreamManager().initialize(); // Relanza listeners
+
       Navigator.pop(context);
     }
     await _checkNotificationPermissionAndNavigate();

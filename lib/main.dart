@@ -531,27 +531,35 @@ void _showUpdateDialog(String message, String link, bool isRequired) {
                   }
                 }
 
-                try {
-                  // Mostrar indicador de progreso
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (BuildContext context) {
-                      return AlertDialog(
-                        title: Text('Descargando actualización...'),
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 20),
-                            Text(
-                                'Por favor, espera mientras se descarga la actualización.')
-                          ],
-                        ),
-                      );
-                    },
-                  );
+                double progress = 0.0;
+                late StateSetter dialogSetState;
 
+                // Mostrar barra de progreso
+                showDialog(
+                  context: navigatorKey.currentContext!,
+                  barrierDismissible: false,
+                  builder: (BuildContext context) {
+                    return StatefulBuilder(
+                      builder: (context, setState) {
+                        dialogSetState = setState;
+                        return AlertDialog(
+                          title: Text('Descargando actualización...'),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              LinearProgressIndicator(value: progress),
+                              SizedBox(height: 16),
+                              Text(
+                                  'Descarga: ${(progress * 100).toStringAsFixed(0)}%'),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+
+                try {
                   // Descarga el archivo desde la URL
                   final tempDir = await getTemporaryDirectory();
                   final filePath = '${tempDir.path}/app_update.apk';
@@ -560,12 +568,17 @@ void _showUpdateDialog(String message, String link, bool isRequired) {
                   await dio.download(link, filePath,
                       onReceiveProgress: (received, total) {
                     if (total != -1) {
+                      final newProgress = received / total;
+                      dialogSetState(() {
+                        progress = newProgress;
+                      });
                       print(
-                          '📥 Progreso de descarga: ${(received / total * 100).toStringAsFixed(0)}%');
+                          '📥 Progreso de descarga: ${(newProgress * 100).toStringAsFixed(0)}%');
                     }
                   });
 
-                  Navigator.of(context).pop(); // Cierra el diálogo de progreso
+                  Navigator.of(navigatorKey.currentContext!)
+                      .pop(); // Cierra el diálogo de progreso
 
                   print(
                       '✅ Descarga completada. Archivo guardado en: $filePath');
@@ -584,7 +597,7 @@ void _showUpdateDialog(String message, String link, bool isRequired) {
                     _showMessage('No se pudo abrir el archivo descargado.');
                   }
                 } catch (e) {
-                  Navigator.of(context)
+                  Navigator.of(navigatorKey.currentContext!)
                       .pop(); // Cierra el diálogo de progreso en caso de error
                   print('❌ Error al intentar descargar o abrir el archivo: $e');
                   _showMessage(
@@ -699,6 +712,24 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(primarySwatch: Colors.blue),
       navigatorKey: navigatorKey,
       home: isLoggedIn ? HomePage() : LoginPage(),
+      onGenerateRoute: (RouteSettings settings) {
+        if (settings.name == '/login') {
+          final args = settings.arguments as Map<String, dynamic>?;
+
+          return MaterialPageRoute(
+            builder: (context) => LoginPage(
+              forcedLogout: args?['forcedLogout'] ?? false,
+              forcedLogoutMessage: args?['mensaje'] ?? '',
+            ),
+          );
+        }
+
+        if (settings.name == '/home') {
+          return MaterialPageRoute(builder: (context) => HomePage());
+        }
+
+        return null;
+      },
     );
   }
 }
