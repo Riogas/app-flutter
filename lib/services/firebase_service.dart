@@ -416,7 +416,8 @@ class FirebaseService {
         .where('Movil', isEqualTo: movil)
         .where('VisibleEnApp', isEqualTo: 'S')
         .where('EstadoNro', isEqualTo: 1)
-        .where('FchPara', isLessThanOrEqualTo: fechaActual);
+        //.where('FchPara', isLessThanOrEqualTo: fechaActual);
+        .where('FchPara', isEqualTo: fechaActual);
 
     Stream<List<DocumentSnapshot>> pedidosStream = pedidosQuery
         .orderBy(
