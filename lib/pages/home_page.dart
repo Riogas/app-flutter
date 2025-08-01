@@ -970,7 +970,17 @@ class _HomePageState extends State<HomePage>
                   return _widgetOptions.elementAt(_selectedIndex);
                 }
 
-                if (data == null) {
+                final tiempoDesdeInit = DateTime.now()
+                    .difference(
+                        _streamManager.lastInitializationTime ?? DateTime(2000))
+                    .inSeconds;
+
+                if (data == null && tiempoDesdeInit < 3) {
+                  print(
+                      '[HOME_SESSION] ⚠️ Ignorando null reciente tras inicialización');
+                  return _widgetOptions
+                      .elementAt(_selectedIndex); // no hace logout
+                } else if (data == null) {
                   print(
                       '[HOME_SESSION] ❌ Documento eliminado o null desde sesionesNotifier');
                   final logoutControlled =
@@ -995,11 +1005,15 @@ class _HomePageState extends State<HomePage>
                   if (data['idTerminal'] != box.get('deviceId')) {
                     print(
                         '[HOME_SESSION] ⚠️ idTerminal cambiado, forzando deslogueo');
-                    Future.microtask(() => forzarDeslogueoYRedirigir(
-                          context,
-                          data['nomUsuario'] ?? 'Desconocido',
-                          data['movil'] ?? 'Desconocido',
-                        ));
+                    Future.microtask(() async {
+                      final usuarioActual =
+                          await obtenerUsuarioLogueadoActual(); // 🔹 Await necesario
+                      forzarDeslogueoYRedirigir(
+                        context,
+                        usuarioActual['nomUsuario'] ?? 'Desconocido',
+                        usuarioActual['movil'] ?? 'Desconocido',
+                      );
+                    });
                   }
                 }
 

@@ -165,11 +165,15 @@ class PersistentStreamManager {
 
   // Initialization flag
   bool _initialized = false;
+  DateTime? lastInitializationTime;
 
   /// Initialize all persistent listeners
   /// This should be called once at app startup
   Future<void> initialize() async {
     if (_initialized) return;
+
+    lastInitializationTime = DateTime.now();
+    print('[PersistentStreamManager] Initializing persistent listeners...');
 
     print('🔄 [PersistentStreamManager] Initializing persistent listeners...');
 

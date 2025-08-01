@@ -78,8 +78,6 @@ class SessionService {
       'versionAndroid': versionAndroid,
       'nivelBateria': nivelBateria,
       'gpsActivado': gpsActivado,
-      'fchHoraCierre': fchHoraCierre,
-      'tipoDeCierreDeSesion': tipoDeCierreDeSesion,
     };
 
     print("$kSessionTag saveSession: Datos de sesión preparados");
@@ -293,6 +291,7 @@ class SessionService {
         // 🔹 Agregar campos faltantes antes de guardar en "history"
         data['tipoDeCierreDeSesion'] = tipoDeCierreDeSesion;
         data['fchHoraCierre'] = fchHoraCierre.toIso8601String();
+        data['estado'] = 'Inactiva';
 
         final historyId = '${horaActual.replaceAll(':', '')}-$idUsuario';
 
