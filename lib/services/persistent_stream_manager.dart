@@ -194,14 +194,37 @@ class PersistentStreamManager {
   /// Initialize persistent Pedidos listener
   Future<void> _initializePedidosListener() async {
     try {
+      final movil = Hive.box('sessionBox').get('movil');
+
+      print('[PersistentStreamManager] Movil obtenido: $movil');
       _pedidosSubscription = _firebaseService.getPedidosStream().listen(
         (List<DocumentSnapshot> pedidos) {
-          // Increment by the number of documents received (real Firestore reads)
           _pedidosReads += pedidos.length;
+
+          // 🔎 Mostrar todos los documentos crudos antes de filtrar
           print(
-              '📦 [PersistentStreamManager] Pedidos updated: ${pedidos.length} items (reads: $_pedidosReads)');
-          _pedidosNotifier.value = pedidos;
-          // Log to Hive every time the read counter changes
+              '📄 [PersistentStreamManager] Pedidos recibidos sin filtrar (${pedidos.length}):');
+          for (var doc in pedidos) {
+            print('  ➖ Pedido ID: ${doc.id}, Data: ${doc.data()}');
+          }
+
+          // 🔹 Aplicar el filtro
+          final pedidosFiltrados = pedidos.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return data['EstadoNro'] == 1 &&
+                data['VisibleEnApp'] == 'S' &&
+                data['Movil'] == int.tryParse(movil);
+          }).toList();
+
+          // ✅ Mostrar los pedidos que pasaron el filtro
+          print(
+              '✅ [PersistentStreamManager] Pedidos filtrados (${pedidosFiltrados.length}):');
+          for (var doc in pedidosFiltrados) {
+            print('  🟢 Pedido ID: ${doc.id}, Data: ${doc.data()}');
+          }
+
+          _pedidosNotifier.value = pedidosFiltrados;
+
           _logToMonitoreo('PedidosReads', _pedidosReads);
           _logToMonitoreo('TotalReads', totalReads);
         },

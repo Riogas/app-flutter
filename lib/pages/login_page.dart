@@ -267,7 +267,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handleForcedLogoutAndShowDialog() async {
     try {
-      final movil = int.tryParse(widget.movil ?? '0') ?? 0;
+      //final movil = int.tryParse(widget.movil ?? '0') ?? 0;
 
       Box? box;
       if (Hive.isBoxOpen('sessionBox')) {
@@ -275,12 +275,12 @@ class _LoginPageState extends State<LoginPage> {
       } else {
         box = await Hive.openBox('sessionBox');
       }
-
       final deviceId = box.get('deviceId');
       final idUsuario = box.get('username');
       final escenario = box.get('escenario') ?? "0";
       final usuario = box.get('username') ?? "string";
       final idTerminal = box.get('deviceId');
+      final movil = box.get('movil') ?? 0;
 
       final platform = MethodChannel("background_service");
       await platform.invokeMethod("stopLocationService", {

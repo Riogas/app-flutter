@@ -414,9 +414,9 @@ class FirebaseService {
     Query pedidosQuery = _firestore
         .collection(collectionName)
         .where('Movil', isEqualTo: movil)
-        .where('FchPara', isLessThanOrEqualTo: fechaActual)
         .where('VisibleEnApp', isEqualTo: 'S')
-        .where('EstadoNro', isEqualTo: 1);
+        .where('EstadoNro', isEqualTo: 1)
+        .where('FchPara', isLessThanOrEqualTo: fechaActual);
 
     Stream<List<DocumentSnapshot>> pedidosStream = pedidosQuery
         .orderBy(
@@ -439,10 +439,12 @@ class FirebaseService {
         // print('⚠ Pérdida de conectividad con Firestore.');
       }*/
     }).map((snapshot) {
-      // print('Fetched ${snapshot.docs.length} pedidos');
-      snapshot.docs.forEach((doc) {
-        // print('Pedido: ${doc.data()}');
-      });
+      print("📥 Snapshot recibido con ${snapshot.docs.length} docs");
+      for (var change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.removed) {
+          print("🗑️ Eliminado: ${change.doc.id}");
+        }
+      }
       return snapshot.docs;
     });
 
