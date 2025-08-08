@@ -14,7 +14,51 @@ import '../services/auth_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // Import FirebaseMessaging
 
 class RioGasService {
-  static const String baseUrl = 'https://www.riogas.uy/ica_geos_/appservices/';
+  /// Llama al servicio DescargaPedidos con el body especificado.
+  /// [sdtPedidos] debe ser una lista de mapas con la clave 'PedidoId'.
+  static Future<Map<String, dynamic>?> descargaPedidos(
+    int escenarioId,
+    List<Map<String, dynamic>> sdtPedidos,
+    String pedidoTpo,
+    String usuario,
+    String nroSesion,
+    String termMobileEquipo,
+    String lectDesc,
+    String fechaHoraCmbEst,
+    String inAux1,
+    String inAux2,
+    String latitud,
+    String longitud,
+    String utmX,
+    String utmY,
+    double velocidad,
+    double distanciaRecorrida,
+  ) {
+    velocidad = double.parse(velocidad.toStringAsFixed(2));
+    distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
+    return _post('DescargaPedidos', {
+      'token': token,
+      'escenarioid': escenarioId,
+      'sdtPedidos': sdtPedidos,
+      'PedidoTpo': pedidoTpo,
+      'usuario': usuario,
+      'NroSesion': nroSesion,
+      'TermMobileEquipo': termMobileEquipo,
+      'LectDesc': lectDesc,
+      'FechaHoraCmbEst': fechaHoraCmbEst,
+      'INAux1': inAux1,
+      'INAux2': inAux2,
+      'Latitud': latitud,
+      'longitud': longitud,
+      'utmX': utmX,
+      'utmY': utmY,
+      'Velocidad': velocidad,
+      'DistanciaRecorrida': distanciaRecorrida,
+    });
+  }
+
+  static late final String baseUrl;
+  /* aca la constante */
   static const Map<String, String> headers = {
     'accept': 'application/json',
     'Content-Type': 'application/json',
@@ -42,7 +86,7 @@ class RioGasService {
     }
 
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-    // print("📦 requestbox values: ${failedRequestsBox.values}");
+    print("📦 requestbox values: ${failedRequestsBox.values}");
     if (failedRequestsBox.isNotEmpty) {
       // print('📦 Pending requests found: ${failedRequestsBox.length}');
       //_retryTimer?.cancel(); // Cancel any existing timer
@@ -75,6 +119,10 @@ class RioGasService {
 
   // Ensure the timer starts at least once during initialization
   static Future<void> initializeService() async {
+    // 👇 NUEVO: inicializar baseUrl dinámico
+    final dynamicUrl = await getConstantValue('600');
+    baseUrl = dynamicUrl ?? 'https://www.riogas.uy/ica_geos_/appservices/';
+
     await initializeRetryInterval();
     await deleteOldRequests(); // Call the method to delete old requests
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
@@ -82,9 +130,9 @@ class RioGasService {
     // Listen for changes in the failedRequestsBox
     failedRequestsBox.watch().listen((event) async {
       if (failedRequestsBox.isNotEmpty) {
-        // print(
-        //   '📦 Detected new data in failedRequestsBox. Starting retry timer.',
-        // );
+        print(
+          '📦 Detected new data in failedRequestsBox. Starting retry timer.',
+        );
         await startRetryTimer();
       } else {
         // print('📦 failedRequestsBox is empty. No retry timer will be started.');
@@ -96,140 +144,218 @@ class RioGasService {
     String? endpoint,
     Map<String, dynamic>? payload,
   ) async {
-    if (endpoint == null || payload == null) {
-      // print(
-      //   '⚠️ No se puede guardar la solicitud fallida: endpoint o payload es null.',
-      // );
+    if (endpoint == null || payload == null) return;
+
+    final failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
+    // Para FinalizarPedidoV2 deduplicamos por firma JSON del payload
+    if (endpoint == 'FinalizarPedidoV2') {
+      final newSignature = jsonEncode(payload); // firma simple y suficiente
+
+      final exists = failedRequestsBox.values.any((request) {
+        try {
+          final map = Map<String, dynamic>.from(request as Map);
+          return map['endpoint'] == 'FinalizarPedidoV2' &&
+              map['signature'] == newSignature;
+        } catch (_) {
+          return false;
+        }
+      });
+
+      if (exists) {
+        // print('⚠️ Duplicate FinalizarPedidoV2 detected, not saving again.');
+        return;
+      }
+
+      await failedRequestsBox.add({
+        'endpoint': endpoint,
+        'payload': payload,
+        'signature': newSignature,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
       return;
     }
-    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
-    // Check if the same endpoint + payload already exists
-    bool exists = failedRequestsBox.values.any((request) {
-      return request['endpoint'] == endpoint &&
-          Map<String, dynamic>.from(request['payload'] as Map).toString() ==
-              payload.toString();
+    // Resto de endpoints (salvo los prohibidos que ya filtramos antes)
+    final exists = failedRequestsBox.values.any((request) {
+      try {
+        final map = Map<String, dynamic>.from(request as Map);
+        // dedupe básico por endpoint+payload textual
+        return map['endpoint'] == endpoint &&
+            Map<String, dynamic>.from(map['payload'] as Map).toString() ==
+                payload.toString();
+      } catch (_) {
+        return false;
+      }
     });
 
-    if (exists) {
-      // print('⚠️ Duplicate request detected. Not saving again: $endpoint');
-      return;
-    }
+    if (exists) return;
 
-    await failedRequestsBox.add({'endpoint': endpoint, 'payload': payload});
-    // print('❌ Request saved for retry: $endpoint');
+    await failedRequestsBox.add({
+      'endpoint': endpoint,
+      'payload': payload,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
   }
 
   static Future<void> processPendingRequests() async {
-    print('🔄 Starting processPendingRequests...');
-    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-    var conexionBox = await Hive.openBox('conexionBox');
-    bool isConnected = conexionBox.get('conexionRioGas', defaultValue: false);
+    const tag = '📦[FAILED_SYNC]';
 
+    print('$tag ▶️ Iniciando procesamiento de requests pendientes...');
+
+    final failedRequestsBox = await Hive.openBox('failedRequestsBox');
+    final conexionBox = await Hive.openBox('conexionBox');
+    var isConnected = conexionBox.get('conexionRioGas', defaultValue: false);
+
+    // Si no hay conexión, intentamos validar el dispositivo para reestablecerla
     if (!isConnected) {
-      print('⚠️ Not connected. Skipping processing.');
-      return;
+      print('$tag ⚠️ Sin conexión a RioGas. Intentando validar dispositivo...');
+
+      final sessionBox = await Hive.openBox('sessionBox');
+      final deviceId = sessionBox.get('deviceId');
+
+      if (deviceId == null || (deviceId is String && deviceId.isEmpty)) {
+        print(
+            '$tag ❌ deviceId no encontrado en sessionBox. Abortando procesamiento.');
+        return;
+      }
+
+      try {
+        final response = await validarDispositivo(deviceId);
+        final success = response != null &&
+            (response['Existe'] == true ||
+                response['success'] == true ||
+                response['OK'] == 0 ||
+                response['ok'] == 0);
+
+        if (success) {
+          print(
+              '$tag ✅ Dispositivo validado. Marcando conexionRioGas=true y continuando.');
+          await conexionBox.put('conexionRioGas', true);
+          await conexionBox.put(
+              'conexionRioGasTimestamp', DateTime.now().toIso8601String());
+          isConnected = true;
+        } else {
+          print('$tag ❌ Validación de dispositivo fallida. No se continuará.');
+          return;
+        }
+      } catch (e, st) {
+        print('$tag ❌ Error validando dispositivo: $e');
+        print(st);
+        return;
+      }
     }
 
-    print('📦 Retrieving pending requests...');
+    print('$tag 🔍 Recuperando requests pendientes...');
+    final rawMap = failedRequestsBox.toMap();
     List<MapEntry<dynamic, Map<String, dynamic>>> pendingRequests =
-        failedRequestsBox
-            .toMap()
-            .entries
+        rawMap.entries
             .map((entry) {
               try {
                 final map = Map<String, dynamic>.from(entry.value as Map);
                 return MapEntry(entry.key, map);
               } catch (error) {
-                print('❌ Error parsing request: $error');
+                print(
+                    '$tag ❌ Error parseando request con key ${entry.key}: $error');
                 return null;
               }
             })
             .whereType<MapEntry<dynamic, Map<String, dynamic>>>()
             .toList();
 
-    print('📋 Found ${pendingRequests.length} pending requests.');
+    print(
+        '$tag 📋 Se encontraron ${pendingRequests.length} requests pendientes.');
 
     for (var entry in pendingRequests) {
+      // delay defensivo para no saturar el backend
+      await Future.delayed(const Duration(seconds: 1));
+
       final key = entry.key;
       final request = entry.value;
 
       try {
-        String endpoint = request['endpoint'];
+        final endpoint = request['endpoint'] ?? 'UNKNOWN';
+        final payload = Map<String, dynamic>.from(request['payload'] ?? {});
+        final timestamp = request['timestamp'];
 
-        // Skip processing for the 'RegistrarErrores' and 'RegistrarCoordenadas' endpoints
-        if (endpoint == 'RegistrarErrores' ||
-            endpoint == 'RegistrarCoordenadas') {
-          print('⚠️ Skipping request to endpoint: $endpoint');
+        if (request['processed'] == true) {
+          print(
+              '$tag ⏩ Request con key $key ya estaba marcada como procesada. Se omite.');
           continue;
         }
 
-        Map<String, dynamic> payload = Map<String, dynamic>.from(
-          request['payload'] as Map,
-        );
-
-        // Add a defensive flag to prevent repeated processing
-        if (request['processed'] == true) {
-          print(
-              '⚠️ Request with key $key already marked as processed. Skipping.');
+        // Endpoints que no reintentamos desde failedRequestsBox
+        if (endpoint == 'RegistrarErrores' ||
+            endpoint == 'RegistrarCoordenadas') {
+          print('$tag ⛔ Endpoint $endpoint ignorado. No se reintenta.');
           continue;
         }
 
         print(
-            '🌐 Sending request to endpoint: $endpoint with payload: $payload');
-        var response = await _post(endpoint, payload);
+            '$tag 🌐 Enviando [$endpoint] con payload: ${jsonEncode(payload)}');
+        if (timestamp != null) {
+          print('$tag 🕒 Timestamp original: $timestamp');
+        }
 
-        print('📦 Response: $response Endpoint: $endpoint');
+        final response = await _post(endpoint, payload);
 
         if (response != null) {
-          print('✅ Request to $endpoint processed successfully.');
-
-          // Mark the request as processed before attempting deletion
+          print('$tag ✅ [$endpoint] procesado correctamente.');
           await failedRequestsBox.put(key, {...request, 'processed': true});
-          print('📝 Marked request with key $key as processed.');
-
-          // Attempt to delete the request
+          print('$tag 📝 Request con key $key marcado como procesado.');
           await failedRequestsBox.delete(key);
-          print('🗑️ Deleted successfully processed request with key: $key.');
+          print('$tag 🗑️ Eliminado request con key $key');
 
-          if (endpoint == 'FinalizarPedido' &&
+          // 🔁 CHANGE: actualizar estado en Hive cuando FinalizarPedidoV2 (o FinalizarPedido) fue OK
+          if ((endpoint == 'FinalizarPedidoV2' ||
+                  endpoint == 'FinalizarPedido') &&
               payload.containsKey('PedidoId')) {
-            var pedidosBox = await Hive.openBox('pedidosBox');
-            int pedidoId = payload['PedidoId'];
+            final pedidosBox = await Hive.openBox('pedidosBox');
+            final pedidoId = payload['PedidoId'];
             if (pedidosBox.containsKey(pedidoId)) {
               await pedidosBox.put(pedidoId, 'Procesando');
-              print('📦 Updated pedidoId $pedidoId to "Procesando".');
+              print("📥 [HIVE] Pedido $pedidoId marcado como 'Procesando'");
+            } else {
+              print(
+                  "ℹ️ [HIVE] pedidosBox no contiene la clave $pedidoId (no se actualiza).");
             }
           }
         } else {
-          try {
-            print('⚠️ Request to $endpoint failed.');
-            print('📦 Failed request details: Key: $key, Payload: $payload');
-          } catch (e) {
-            print('❌ Error while handling failed request: $e');
-          }
+          print(
+              '$tag ⚠️ Error al procesar [$endpoint] con key $key. Se mantiene en box.');
+          print('$tag 📦 Payload: ${jsonEncode(payload)}');
         }
-      } catch (e) {
-        print('❌ Error processing request with key $key: $e');
-        print('📦 Failed request details: $request');
-        if (request['endpoint'] == 'FinalizarPedido' &&
+      } catch (e, st) {
+        print('$tag ❌ Error al procesar request con key $key: $e');
+        print(st);
+
+        // (Opcional) Mantener rollback de estado si falla FinalizarPedido/FinalizarPedidoV2
+        if ((request['endpoint'] == 'FinalizarPedidoV2' ||
+                request['endpoint'] == 'FinalizarPedido') &&
+            request['payload'] is Map &&
             request['payload'].containsKey('PedidoId')) {
-          var pedidosBox = await Hive.openBox('pedidosBox');
-          int pedidoId = request['payload']['PedidoId'];
+          final pedidoId = request['payload']['PedidoId'];
+          final pedidosBox = await Hive.openBox('pedidosBox');
           if (pedidosBox.containsKey(pedidoId)) {
             await pedidosBox.put(pedidoId, 'Enviando');
-            print('📦 Updated pedidoId $pedidoId to "Enviando" due to error.');
+            print('$tag ↩️ Pedido $pedidoId marcado como "Enviando" por error');
           }
         }
       }
     }
 
-    print('🔄 Finished processing pending requests.');
-    print(
-        '📦 Remaining requests in failedRequestsBox: ${failedRequestsBox.length}');
-    failedRequestsBox.toMap().forEach((key, value) {
-      print('📦 Remaining request key: $key, value: $value');
-    });
+    print('$tag 🏁 Procesamiento finalizado.');
+    final restantes = failedRequestsBox.length;
+    print('$tag 📦 Requests restantes en box: $restantes');
+
+    if (restantes > 0) {
+      failedRequestsBox.toMap().forEach((key, value) {
+        print(
+            '$tag 🧾 Pendiente -> Key: $key | Endpoint: ${value['endpoint']}');
+      });
+    } else {
+      print('$tag ✅ No quedan requests pendientes.');
+    }
   }
 
   static Future<Map<String, dynamic>?> _post(
@@ -318,9 +444,10 @@ class RioGasService {
         } else {
           print(
               '? Error response endpoint: $endpoint | Status Code: ${response.statusCode} | Body: ${response.body}');
-          if (endpoint != 'RegistrarCoordenadasBatch') {
-            await _saveFailedRequest(endpoint, body); // Save failed request
+          if (!_shouldSkipFailedSave(endpoint)) {
+            await _saveFailedRequest(endpoint, body);
           }
+
           await _logError(
             'HTTP Error',
             'Código de respuesta: ${response.statusCode}',
@@ -333,64 +460,18 @@ class RioGasService {
         }
       } catch (e) {
         print('? Exception occurred while sending request to $endpoint: $e');
-        await _saveFailedRequest(endpoint, body);
+        if (!_shouldSkipFailedSave(endpoint)) {
+          await _saveFailedRequest(endpoint, body);
+        }
         await _updateConnectionStatus(false);
       }
       return null;
     } catch (e) {
-      if (endpoint == 'RegistrarCoordenadas') {
-        var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-        var existingRequest = failedRequestsBox.values.firstWhere(
-          (request) =>
-              request['endpoint'] == 'RegistrarCoordenadasBatch' &&
-              request['payload']['movil'] == body['movil'] &&
-              request['payload']['DeviceId'] == body['DeviceId'],
-          orElse: () => null,
-        );
-
-        if (existingRequest != null) {
-          List<dynamic> data = existingRequest['payload']['data'];
-          // Add new entry if it doesn't already exist
-          if (!data.any((entry) =>
-              entry['Latitud'] == body['Latitud'] &&
-              entry['longitud'] == body['longitud'] &&
-              entry['FechaHora'] == body['FechaHora'])) {
-            if (data.length >= 30) {
-              data.removeAt(
-                  0); // Remove the oldest entry to maintain a limit of 30
-            }
-            data.add({
-              'Latitud': body['Latitud'],
-              'longitud': body['longitud'],
-              'FechaHora': body['FechaHora'],
-            });
-            await failedRequestsBox.put(
-                existingRequest['key'], existingRequest);
-            print('📝 Updated existing failed request with new data: $data');
-          }
-        } else {
-          // Save a new failed request
-          var newRequest = {
-            'endpoint': 'RegistrarCoordenadasBatch',
-            'payload': {
-              'token': body['token'],
-              'movil': body['movil'],
-              'DeviceId': body['DeviceId'],
-              'data': [
-                {
-                  'Latitud': body['Latitud'],
-                  'longitud': body['longitud'],
-                  'FechaHora': body['FechaHora'],
-                }
-              ],
-            },
-          };
-          await failedRequestsBox.add(newRequest);
-          print('📝 Saved new failed request: $newRequest');
-        }
-      } else if (endpoint != 'RegistrarCoordenadasBatch') {
-        await _saveFailedRequest(endpoint, body); // Save failed request
+      // 👇 No guardamos solicitudes fallidas de estos endpoints
+      if (!_shouldSkipFailedSave(endpoint)) {
+        await _saveFailedRequest(endpoint, body);
       }
+
       await _logError(
         'Exception',
         e.toString(),
@@ -398,6 +479,7 @@ class RioGasService {
         endpoint,
         jsonEncode({...body, 'token': token}),
       );
+
       return null;
     }
   }
@@ -655,6 +737,14 @@ class RioGasService {
       'Velocidad': velocidad, // Added to body
       'DistanciaRecorrida': distanciaRecorrida // Added to body
     });
+  }
+
+  static bool _shouldSkipFailedSave(String endpoint) {
+    return endpoint == 'DescargaLecturaPedidos' ||
+        endpoint == 'RegistrarCoordenadas' ||
+        endpoint == 'RegistrarCoordenadasBatch' ||
+        endpoint == 'RegistrarCierre' ||
+        endpoint == 'DescargaPedidos';
   }
 
   static Future<Map<String, dynamic>?> actualizarMoviles(

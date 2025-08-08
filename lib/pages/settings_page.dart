@@ -19,6 +19,7 @@ import 'package:android_intent_plus/flag.dart';
 import 'package:open_file/open_file.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'dart:convert';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -52,6 +53,72 @@ class _SettingsPageState extends State<SettingsPage> {
       deviceId = box.get('deviceId');
       releaseNotes = box.get('ReleaseNotes');
     });
+  }
+
+  Future<void> _showFailedRequestsCount() async {
+    const tag = '📦[FAILED_REQ]';
+
+    try {
+      final box = await Hive.openBox('failedRequestsBox');
+      final count = box.length;
+      print('$tag Entradas en failedRequestsBox: $count');
+
+      final buffer = StringBuffer();
+
+      for (int i = 0; i < count; i++) {
+        final item = box.getAt(i);
+        if (item is Map) {
+          final endpoint = item['endpoint'] ?? '??';
+          final payload = item['payload'];
+          final timestamp = item['timestamp'] ?? '-';
+          buffer.writeln(
+              '📌 [$i] ➤ $endpoint\n🕒 $timestamp\n📦 Payload: ${jsonEncode(payload)}\n');
+        } else {
+          buffer.writeln('📌 [$i] ➤ Item inválido: $item\n');
+        }
+      }
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text('Failed Requests ($count)'),
+          content: SingleChildScrollView(
+            child: SelectableText(buffer.toString()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      print('$tag Error consultando el box: $e');
+      _showMessage('Error consultando failedRequestsBox: $e');
+    }
+  }
+
+  Future<void> _clearFailedRequestsBox() async {
+    const tag = '📦[FAILED_REQ]';
+    try {
+      final box = await Hive.openBox('failedRequestsBox');
+      final countBefore = box.length;
+      await box.clear();
+      print(
+          '$tag Limpieza completada. Antes: $countBefore, Ahora: ${box.length}');
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Box limpiado. Entradas eliminadas: $countBefore')),
+      );
+    } catch (e) {
+      print('$tag Error limpiando el box: $e');
+      _showMessage('Error limpiando failedRequestsBox: $e');
+    }
   }
 
   Future<void> _loadCompletedOrdersCount() async {
@@ -897,6 +964,57 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Widget _buildFailedRequestsButtons() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ElevatedButton.icon(
+          onPressed: _showFailedRequestsCount,
+          icon: Icon(Icons.countertops, color: Colors.indigo),
+          label: Text('Contar failedRequests'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.indigo,
+            side: BorderSide(color: Colors.indigo),
+          ),
+        ),
+        SizedBox(height: 10),
+        ElevatedButton.icon(
+          onPressed: () async {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (_) => AlertDialog(
+                title: Text('Confirmar'),
+                content:
+                    Text('¿Eliminar todas las entradas de failedRequestsBox?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text('Cancelar'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: Text('Eliminar'),
+                  ),
+                ],
+              ),
+            );
+            if (confirmed == true) {
+              await _clearFailedRequestsBox();
+            }
+          },
+          icon: Icon(Icons.delete_forever, color: Colors.red),
+          label: Text('Limpiar failedRequests'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.red,
+            side: BorderSide(color: Colors.red),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildViewErrorsButton() {
     return FutureBuilder<String?>(
       future: getConstantValue('130'), // Fetch constant value
@@ -969,8 +1087,10 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(height: 10),
               _buildSuggestionsButton(),
               SizedBox(height: 10),
-              _buildViewErrorsButton(),
+              /*_buildViewErrorsButton(),
               SizedBox(height: 10),
+              _buildFailedRequestsButtons(),
+              SizedBox(height: 10),*/
               _buildPermissionsButton(), // Added Permissions button
               SizedBox(height: 10),
               // _buildMonitoreoButton(),

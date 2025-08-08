@@ -390,6 +390,10 @@ class _LoginPageState extends State<LoginPage> {
         _appNroVersion,
       );
 
+      var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
+      await failedRequestsBox.deleteFromDisk();
+
       print("Antes del login");
 
       if (response != null && response['OK'] == 99) {
@@ -398,6 +402,11 @@ class _LoginPageState extends State<LoginPage> {
         var sessionBox = await Hive.openBox('sessionBox');
         var constantBox = await Hive.openBox('constantBox');
         var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
+        var descargaLecturaPedidosBox =
+            await Hive.openBox('descargaLecturaPedidosBox');
+
+        // Borramos completamente el box del disco
+        await descargaLecturaPedidosBox.deleteFromDisk();
 
         // Eliminar los datos de sesión de Hive
         await sessionBox.deleteFromDisk();
@@ -408,6 +417,12 @@ class _LoginPageState extends State<LoginPage> {
       } else {
         if (response != null && response['OK'] == 0) {
           print("✅ Login exitoso. Verificando dispositivo...");
+
+          var descargaLecturaPedidosBox =
+              await Hive.openBox('descargaLecturaPedidosBox');
+
+          // Borramos completamente el box del disco
+          await descargaLecturaPedidosBox.deleteFromDisk();
 
           // Save the last logged-in username in Hive
           var usuarioBox = await Hive.openBox('usuarioBox');
