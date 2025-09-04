@@ -35,6 +35,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import '../services/location_service.dart'; // 🔹 Importamos LocationService
+import 'package:screen_protector/screen_protector.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -97,6 +98,9 @@ void _listenToLocationPermission() {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // ✅ Bloquear capturas de pantalla (solo Android)
+  await ScreenProtector.preventScreenshotOn(); // Android: FLAG_SECURE
+
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // 🔴 DESACTIVAR ENVÍO DE DATOS A FIREBASE
@@ -106,13 +110,14 @@ void main() async {
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
 
   // 🔹 Inicializa Hive antes de cualquier acceso a Hive.openBox()
+
   await Hive.initFlutter();
   Hive.registerAdapter(ErrorEventAdapter());
   await Hive.openBox('sessionBox');
   await Hive.openBox<ErrorEvent>('errorBox');
 
   await NotificationsService.initialize();
-
+  await RioGasService.initializeService(); // 👈 imprescindible
   bool isLoggedIn = await AuthService.checkIsLoggedIn();
 
   // 🔹 Inicializar sincronización centralizada de Hive (mensajes y pedidos)

@@ -1052,6 +1052,12 @@
       "languageVersion": "2.12"
     },
     {
+      "name": "screen_protector",
+      "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/screen_protector-1.4.2+1",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "share_plus",
       "rootUri": "file:///C:/Users/jgomez/AppData/Local/Pub/Cache/hosted/pub.dev/share_plus-10.1.4",
       "packageUri": "lib/",
@@ -1370,7 +1376,7 @@
       "languageVersion": "3.6"
     }
   ],
-  "generated": "2025-07-31T18:06:14.283659Z",
+  "generated": "2025-09-03T14:31:41.038717Z",
   "generator": "pub",
   "generatorVersion": "3.8.0-70.0.dev",
   "flutterRoot": "file:///C:/flutter",
