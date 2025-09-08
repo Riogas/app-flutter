@@ -119,9 +119,27 @@ class RioGasService {
 
   // Ensure the timer starts at least once during initialization
   static Future<void> initializeService() async {
-    // 👇 NUEVO: inicializar baseUrl dinámico
-    final dynamicUrl = await getConstantValue('600');
-    baseUrl = dynamicUrl ?? 'https://www.riogas.uy/ica_geos_/appservices/';
+    // 👇 NUEVO: inicializar baseUrl dinámico con 600 (base) + 601 (appservices)
+    final baseRootConst = (await getConstantValue('600'))?.trim();
+    final servicesPathConst = (await getConstantValue('601'))?.trim();
+
+    var baseRoot = (baseRootConst != null && baseRootConst.isNotEmpty)
+        ? baseRootConst
+        : 'https://www.riogas.uy/ica_geos_/';
+
+    var servicesPath =
+        (servicesPathConst != null && servicesPathConst.isNotEmpty)
+            ? servicesPathConst
+            : 'appservices/';
+
+    // Normalizaciones: quitar 'appservices/' del base por si viene duplicado, slashes correctos
+    baseRoot = baseRoot.replaceAll(
+        RegExp(r'appservices/?$', caseSensitive: false), '');
+    if (!baseRoot.endsWith('/')) baseRoot += '/';
+    if (servicesPath.startsWith('/')) servicesPath = servicesPath.substring(1);
+    if (!servicesPath.endsWith('/')) servicesPath += '/';
+
+    baseUrl = '$baseRoot$servicesPath';
 
     await initializeRetryInterval();
     await deleteOldRequests(); // Call the method to delete old requests
@@ -969,9 +987,26 @@ class RioGasService {
     final String fechaHasta =
         '${fechaHastaDate.year}${fechaHastaDate.month.toString().padLeft(2, '0')}${fechaHastaDate.day.toString().padLeft(2, '0')}000000';
 
+    // Construcción de URL usando constantes 600 (base) y 602 (path)
+    final baseUrlFromConst = (await getConstantValue('600'))?.trim() ?? '';
+    final reportPathFromConst =
+        (await getConstantValue('602'))?.trim() ?? 'com.icageos.urlhttprpt2sgm';
+
+    // Normalizar base: quitar sufijo appservices/, asegurar slash final
+    var base = baseUrlFromConst.isEmpty
+        ? 'https://sgm.riogas.com.uy/'
+        : baseUrlFromConst;
+    base = base.replaceAll(RegExp(r'appservices/?$', caseSensitive: false), '');
+    if (!base.endsWith('/')) base += '/';
+
+    // Normalizar path: quitar slash inicial si lo tiene
+    var path = reportPathFromConst;
+    if (path.startsWith('/')) {
+      path = path.substring(1);
+    }
+
     final url =
-        'https://www.riogas.uy/ica_geos_/com.icageos.urlhttprpt2sgm?FechaDesde=$fechaDesde&FechaHasta=$fechaHasta&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId&Tipo=RESUMIDO';
-    //'https://www.riogas.uy/ica_geos_/com.icageos.urlhttprpt2?Year=$year&Month=$month&Day=$day&Hour=$hour&Minutes=$minutes&Seconds=$seconds&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId';
+        '${base}${path}?FechaDesde=$fechaDesde&FechaHasta=$fechaHasta&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId&Tipo=RESUMIDO';
 
     print('🌐 Downloading PDF from: $url');
 
@@ -987,7 +1022,7 @@ class RioGasService {
         await file.writeAsBytes(response.bodyBytes);
         // print('✅ PDF downloaded to: $filePath');
 
-        final result = await OpenFile.open(filePath);
+        await OpenFile.open(filePath);
         // print('📂 Opened PDF with result: $result');
       } else {
         // print('❌ Failed to download PDF. Status code: ${response.statusCode}');
@@ -1160,9 +1195,7 @@ class RioGasService {
       // Filtrar errores que no han sido enviados
       List<dynamic> errorsToSend = errorBox.keys.where((key) {
         var error = errorBox.get(key);
-        return error != null &&
-            error is ErrorEvent &&
-            error.additionalInfo != 'enviadoARioGas';
+        return error != null && error.additionalInfo != 'enviadoARioGas';
       }).toList();
 
       if (errorsToSend.isEmpty) {
@@ -1172,7 +1205,7 @@ class RioGasService {
 
       for (var key in errorsToSend) {
         var error = errorBox.get(key);
-        if (error != null && error is ErrorEvent) {
+        if (error != null) {
           try {
             var sessionBox = await Hive.openBox('sessionBox');
             // Preparar el payload

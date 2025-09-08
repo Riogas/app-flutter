@@ -12,6 +12,8 @@ import '../utils/screenBlock.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import '../utils/constantes.dart';
+import 'dart:io' show Platform;
+import 'package:screen_protector/screen_protector.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
@@ -69,7 +71,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   @override
   void initState() {
     super.initState();
-    //secureScreen();
+
+    // ✅ Bloquear capturas (FLAG_SECURE) solo en Android
+    _enableScreenShield();
+
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
@@ -149,6 +154,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _movilSubscription?.cancel();
     _observacionesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _enableScreenShield() async {
+    if (Platform.isAndroid) {
+      try {
+        await ScreenProtector.preventScreenshotOn(); // Android: FLAG_SECURE
+        print('🛡️ Screenshot bloqueado (Android)');
+      } catch (e) {
+        print('❌ Error activando ScreenProtector: $e');
+      }
+    }
   }
 
   void _calcularDistanciaDesdeUbicacionCliente() async {

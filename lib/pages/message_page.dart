@@ -32,6 +32,8 @@ class _MessagePageState extends State<MessagePage> {
   final LocationService locationService =
       LocationService(); // Initialize locationService
 
+  static const int _previewChars = 20; // primeros 20 caracteres
+
   @override
   void initState() {
     super.initState();
@@ -285,27 +287,42 @@ class _MessagePageState extends State<MessagePage> {
     }
   }
 
-  void _deleteMessage(DocumentSnapshot message) async {
-    // Marcar como borrado en Hive
-    var mensajesBox = await Hive.openBox('mensajesBox');
-    if (mensajesBox.containsKey(message.id)) {
-      await mensajesBox.put(message.id, 'Borrado');
-    }
+  // New: Mostrar el contenido completo del mensaje y marcar como leído
+  Future<void> _viewMessage(DocumentSnapshot message) async {
+    // Primero mostrar el popup
+    final data = message.data() as Map<String, dynamic>;
+    final fullText = (data['Mensaje'] ?? 'Sin contenido').toString();
 
-    // Invocar el servicio de descargaLecturaMensajes igual que al marcar como leído
-    await _descargaLecturaMensajeService(message);
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Mensaje'),
+        content: SingleChildScrollView(
+          child: Text(
+            fullText,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
 
-    if (mounted) {
-      setState(() {
-        _readMessageIds.remove(message.id);
-      });
-    }
+    // Luego marcar como leído
+    if (!mounted) return;
+    await _markMessageAsRead(message);
   }
 
-  void _deleteAllMessages(List<DocumentSnapshot> messages) async {
+  // New: Marcar todos los mensajes como leídos (reemplaza la acción de borrar todo)
+  Future<void> _markAllMessagesAsRead(List<DocumentSnapshot> messages) async {
     setState(() {
       _isDeletingAll = true;
     });
+
     // Mostrar diálogo de loading modal
     showDialog(
       context: context,
@@ -315,93 +332,33 @@ class _MessagePageState extends State<MessagePage> {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 16),
-            Text('Procesando...'),
+            Text('Marcando como leído...'),
           ],
         ),
       ),
     );
 
-    // Marcar todos como borrado en Hive primero
     var mensajesBox = await Hive.openBox('mensajesBox');
-    for (var message in messages) {
-      if (mensajesBox.containsKey(message.id)) {
-        await mensajesBox.put(message.id, 'Borrado');
-      }
-    }
-    // Ejecutar todas las llamadas al servicio en paralelo
-    await Future.wait(
-        messages.map((message) => _descargaLecturaMensajeService(message)));
 
-    if (mounted) {
-      setState(() {
-        _readMessageIds.clear();
-        _isDeletingAll = false;
-      });
-      // Cerrar el diálogo de loading
-      Navigator.of(context, rootNavigator: true).pop();
-    }
-  }
+    // Filtrar mensajes que NO están borrados
+    final filtered = messages
+        .where((m) => mensajesBox.get(m.id) != 'Borrado')
+        .toList(growable: false);
 
-  // Servicio para invocar descargaLecturaMensajes (igual que en _markMessageAsRead)
-  Future<void> _descargaLecturaMensajeService(DocumentSnapshot message) async {
-    var box = await Hive.openBox('sessionBox');
-    String? escenario = box.get('escenario');
-    String? movil = box.get('movil');
-    String? username = box.get('username');
-    String? deviceId = box.get('deviceId');
-
-    if (escenario == null ||
-        movil == null ||
-        username == null ||
-        deviceId == null) {
-      print('❌ No se pudo obtener los datos necesarios de Hive.');
-      return;
+    for (var message in filtered) {
+      await mensajesBox.put(message.id, 'Leido');
     }
 
-    String latitude = '0.0';
-    String longitude = '0.0';
-    String utmX = '0.0';
-    String utmY = '0.0';
+    // Ejecutar llamadas al servicio (LECTURA) solo para los no borrados
+    await Future.wait(filtered.map((m) => _descargaLecturaMensajeService(m)));
 
-    final locationData = await locationService.getCurrentLocation();
-    if (locationData != null) {
-      latitude = locationData['latitude'].toString();
-      longitude = locationData['longitude'].toString();
-      utmX = locationData['utmX'].toString();
-      utmY = locationData['utmY'].toString();
-    }
+    if (!mounted) return;
 
-    var data = message.data() as Map<String, dynamic>;
-    final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
-    if (numericIdMatch == null) {
-      print('❌ No se pudo extraer un ID numérico del mensaje: ${message.id}');
-      return;
-    }
-    int messageId = int.parse(numericIdMatch.group(0)!);
-
-    var locationBox = await Hive.openBox('locationBox');
-    double velocidad = double.parse(
-        locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2));
-    double distanciaRecorrida =
-        locationBox.get('totalDistance', defaultValue: 0.0);
-
-    await RioGasService.descargaLecturaMensajes(
-        int.parse(escenario),
-        int.parse(movil),
-        messageId,
-        username,
-        '',
-        deviceId,
-        'LECTURA',
-        DateTime.now().toUtc().toIso8601String(),
-        '',
-        '',
-        latitude,
-        longitude,
-        utmX,
-        utmY,
-        velocidad,
-        distanciaRecorrida);
+    setState(() {
+      _readMessageIds = filtered.map((m) => m.id).toList();
+      _isDeletingAll = false;
+    });
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   void _listenToGPSChanges() {
@@ -411,6 +368,12 @@ class _MessagePageState extends State<MessagePage> {
         _isLocationServiceEnabled = status == ServiceStatus.enabled;
       });
     });
+  }
+
+  String _previewText(String text) {
+    if (text.isEmpty) return '';
+    if (text.length <= _previewChars) return text;
+    return text.substring(0, _previewChars).trimRight() + '...';
   }
 
   @override
@@ -432,13 +395,15 @@ class _MessagePageState extends State<MessagePage> {
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                              content: Text('No se pudo realizar la llamada.')),
+                            content: Text('No se pudo realizar la llamada.'),
+                          ),
                         );
                       }
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                            content: Text('Número de teléfono no disponible.')),
+                          content: Text('Número de teléfono no disponible.'),
+                        ),
                       );
                     }
                   },
@@ -454,13 +419,14 @@ class _MessagePageState extends State<MessagePage> {
                     ? null
                     : () {
                         final mensajes = _streamManager.mensajesNotifier.value;
-                        _deleteAllMessages(mensajes);
+                        _markAllMessagesAsRead(mensajes);
                       },
                 child: Row(
                   children: [
-                    Text('Borrar Todo', style: TextStyle(color: Colors.black)),
+                    Text('Marcar todo como leído',
+                        style: TextStyle(color: Colors.black)),
                     SizedBox(width: 4),
-                    Icon(Icons.delete, color: Colors.black),
+                    Icon(Icons.done_all, color: Colors.black),
                     SizedBox(width: 12),
                   ],
                 ),
@@ -514,8 +480,7 @@ class _MessagePageState extends State<MessagePage> {
                                     'Borrado';
 
                             if (isDeleted) {
-                              return SizedBox
-                                  .shrink(); // Skip rendering this card
+                              return SizedBox.shrink();
                             }
 
                             String formattedDate =
@@ -544,15 +509,19 @@ class _MessagePageState extends State<MessagePage> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.center,
                                     children: [
-                                      // Eliminado el sobre de marcar como leído
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              mensaje['Mensaje'] ??
-                                                  'Sin contenido',
+                                              _previewText(
+                                                (mensaje['Mensaje'] ??
+                                                        'Sin contenido')
+                                                    .toString(),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.clip,
                                               style: TextStyle(
                                                 fontWeight: isRead
                                                     ? FontWeight.normal
@@ -576,14 +545,33 @@ class _MessagePageState extends State<MessagePage> {
                                           ],
                                         ),
                                       ),
-                                      IconButton(
-                                        icon: Icon(
-                                          Icons.delete,
-                                          color: Colors.black,
-                                        ),
-                                        onPressed: () {
-                                          _deleteMessage(mensajes[index]);
-                                        },
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: Icon(Icons.visibility,
+                                                color: Colors.black),
+                                            tooltip: 'Ver',
+                                            onPressed: () {
+                                              _viewMessage(mensajes[index]);
+                                            },
+                                          ),
+                                          SizedBox(width: 4),
+                                          IconButton(
+                                            icon: Icon(Icons.delete,
+                                                color: Colors.black),
+                                            tooltip: 'Borrar',
+                                            onPressed: () async {
+                                              var box = await Hive.openBox(
+                                                  'mensajesBox');
+                                              await box.put(mensajes[index].id,
+                                                  'Borrado');
+                                              if (mounted) setState(() {});
+                                              await _descargaLecturaMensajeService(
+                                                  mensajes[index], 'BORRADO');
+                                            },
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -603,5 +591,69 @@ class _MessagePageState extends State<MessagePage> {
                   ),
                 ),
         ));
+  }
+
+  // Servicio para invocar descargaLecturaMensajes (igual que en _markMessageAsRead)
+  Future<void> _descargaLecturaMensajeService(
+    DocumentSnapshot message, [
+    String lectDesc = 'LECTURA',
+  ]) async {
+    var box = await Hive.openBox('sessionBox');
+    String? escenario = box.get('escenario');
+    String? movil = box.get('movil');
+    String? username = box.get('username');
+    String? deviceId = box.get('deviceId');
+
+    if (escenario == null ||
+        movil == null ||
+        username == null ||
+        deviceId == null) {
+      print('❌ No se pudo obtener los datos necesarios de Hive.');
+      return;
+    }
+
+    String latitude = '0.0';
+    String longitude = '0.0';
+    String utmX = '0.0';
+    String utmY = '0.0';
+
+    final locationData = await locationService.getCurrentLocation();
+    if (locationData != null) {
+      latitude = locationData['latitude'].toString();
+      longitude = locationData['longitude'].toString();
+      utmX = locationData['utmX'].toString();
+      utmY = locationData['utmY'].toString();
+    }
+
+    final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
+    if (numericIdMatch == null) {
+      print('❌ No se pudo extraer un ID numérico del mensaje: ${message.id}');
+      return;
+    }
+    int messageId = int.parse(numericIdMatch.group(0)!);
+
+    var locationBox = await Hive.openBox('locationBox');
+    double velocidad = double.parse(
+        locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2));
+    double distanciaRecorrida =
+        locationBox.get('totalDistance', defaultValue: 0.0);
+
+    await RioGasService.descargaLecturaMensajes(
+        int.parse(escenario),
+        int.parse(movil),
+        messageId,
+        username,
+        '',
+        deviceId,
+        lectDesc,
+        DateTime.now().toUtc().toIso8601String(),
+        '',
+        '',
+        latitude,
+        longitude,
+        utmX,
+        utmY,
+        velocidad,
+        distanciaRecorrida);
   }
 }

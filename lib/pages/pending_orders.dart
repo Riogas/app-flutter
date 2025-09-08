@@ -11,6 +11,8 @@ import 'dart:async';
 import '../services/riogas_service.dart'; // Import the RioGasService
 import 'package:geolocator/geolocator.dart'; // Import Geolocator for getting current location
 import '../services/location_service.dart'; // Import your location service
+import 'dart:io' show Platform;
+import 'package:screen_protector/screen_protector.dart';
 
 class PendingOrdersPage extends StatefulWidget {
   @override
@@ -47,6 +49,10 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   @override
   void initState() {
     super.initState();
+
+    // ✅ Bloquear capturas (FLAG_SECURE) solo en Android
+    _enableScreenShield();
+
     print('🔧 PendingOrdersPage: initState() called - Instance: ${hashCode}');
     _initializeFirebase();
     _initializeHive().then((_) {
@@ -117,6 +123,17 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     });
     sesionBox = await Hive.openBox('sessionBox');
     // Ya no es necesario inicializar ni sincronizar pedidosBox aquí, la lógica está centralizada en PersistentStreamManager
+  }
+
+  Future<void> _enableScreenShield() async {
+    if (Platform.isAndroid) {
+      try {
+        await ScreenProtector.preventScreenshotOn(); // Android: FLAG_SECURE
+        print('🛡️ Screenshot bloqueado (Android)');
+      } catch (e) {
+        print('❌ Error activando ScreenProtector: $e');
+      }
+    }
   }
 
   Map<String, Color> colorMap = {
