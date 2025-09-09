@@ -293,7 +293,7 @@ class _MessagePageState extends State<MessagePage> {
     final data = message.data() as Map<String, dynamic>;
     final fullText = (data['Mensaje'] ?? 'Sin contenido').toString();
 
-    await showDialog(
+    final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Mensaje'),
@@ -305,16 +305,31 @@ class _MessagePageState extends State<MessagePage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('Cerrar'),
+            onPressed: () => Navigator.of(context).pop('volver'),
+            child: Text('Volver'),
+          ),
+          TextButton(
+            onPressed: () async {
+              var box = await Hive.openBox('mensajesBox');
+              await box.put(message.id, 'Borrado');
+              if (mounted) setState(() {});
+              await _descargaLecturaMensajeService(message, 'BORRADO');
+              Navigator.of(context).pop('eliminar');
+            },
+            child: Text(
+              'Eliminar',
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
     );
 
-    // Luego marcar como leído
+    // Luego marcar como leído si no fue eliminado
     if (!mounted) return;
-    await _markMessageAsRead(message);
+    if (result != 'eliminar') {
+      await _markMessageAsRead(message);
+    }
   }
 
   // New: Marcar todos los mensajes como leídos (reemplaza la acción de borrar todo)
@@ -413,25 +428,7 @@ class _MessagePageState extends State<MessagePage> {
                     style: TextStyle(color: Colors.black, fontSize: 18)),
               ],
             ),
-            actions: [
-              GestureDetector(
-                onTap: _isDeletingAll
-                    ? null
-                    : () {
-                        final mensajes = _streamManager.mensajesNotifier.value;
-                        _markAllMessagesAsRead(mensajes);
-                      },
-                child: Row(
-                  children: [
-                    Text('Marcar todo como leído',
-                        style: TextStyle(color: Colors.black)),
-                    SizedBox(width: 4),
-                    Icon(Icons.done_all, color: Colors.black),
-                    SizedBox(width: 12),
-                  ],
-                ),
-              ),
-            ],
+            actions: [],
           ),
           body: _isLocationServiceEnabled
               ? ValueListenableBuilder<List<DocumentSnapshot>>(
@@ -554,21 +551,6 @@ class _MessagePageState extends State<MessagePage> {
                                             tooltip: 'Ver',
                                             onPressed: () {
                                               _viewMessage(mensajes[index]);
-                                            },
-                                          ),
-                                          SizedBox(width: 4),
-                                          IconButton(
-                                            icon: Icon(Icons.delete,
-                                                color: Colors.black),
-                                            tooltip: 'Borrar',
-                                            onPressed: () async {
-                                              var box = await Hive.openBox(
-                                                  'mensajesBox');
-                                              await box.put(mensajes[index].id,
-                                                  'Borrado');
-                                              if (mounted) setState(() {});
-                                              await _descargaLecturaMensajeService(
-                                                  mensajes[index], 'BORRADO');
                                             },
                                           ),
                                         ],

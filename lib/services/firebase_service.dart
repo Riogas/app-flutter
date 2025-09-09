@@ -402,13 +402,21 @@ class FirebaseService {
     });
 
     String collectionName = 'Pedidos-$escenarioId';
-    String fechaActualStr = DateTime.now()
-        .toUtc()
-        .subtract(Duration(hours: 3))
+    // Base en UTC-3 para armar AAAAMMDD tanto de hoy como de ayer
+    final DateTime base = DateTime.now().toUtc().subtract(Duration(hours: 3));
+    final String fechaActualStr =
+        base.toIso8601String().split('T')[0].replaceAll('-', '');
+    final String fechaAyerStr = base
+        .subtract(Duration(days: 1))
         .toIso8601String()
         .split('T')[0]
         .replaceAll('-', '');
-    int fechaActual = int.tryParse(fechaActualStr) ?? 0;
+
+    final int fechaActual = int.tryParse(fechaActualStr) ?? 0;
+    final int fechaAyer = int.tryParse(fechaAyerStr) ?? 0;
+
+    print(
+        "📅 Fechas para consulta de pedidos: hoy=$fechaActual | ayer=$fechaAyer");
 
     // Build the query
     Query pedidosQuery = _firestore
@@ -416,8 +424,8 @@ class FirebaseService {
         .where('Movil', isEqualTo: movil)
         .where('VisibleEnApp', isEqualTo: 'S')
         .where('EstadoNro', isEqualTo: 1)
-        //.where('FchPara', isLessThanOrEqualTo: fechaActual);
-        .where('FchPara', isEqualTo: fechaActual);
+        // Filtra por FchPara igual a hoy o ayer
+        .where('FchPara', whereIn: [fechaActual, fechaAyer]);
 
     Stream<List<DocumentSnapshot>> pedidosStream = pedidosQuery
         .orderBy(

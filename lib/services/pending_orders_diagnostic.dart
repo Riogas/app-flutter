@@ -179,18 +179,22 @@ class PendingOrdersDiagnostic {
       int movil = int.tryParse(box.get('movil', defaultValue: '0')) ?? 0;
 
       String collectionName = 'Pedidos-$escenarioId';
-      String fechaActualStr = DateTime.now()
-          .toUtc()
-          .subtract(Duration(hours: 3))
+      final DateTime base = DateTime.now().toUtc().subtract(Duration(hours: 3));
+      final String fechaActualStr =
+          base.toIso8601String().split('T')[0].replaceAll('-', '');
+      final String fechaAyerStr = base
+          .subtract(Duration(days: 1))
           .toIso8601String()
           .split('T')[0]
           .replaceAll('-', '');
-      int fechaActual = int.tryParse(fechaActualStr) ?? 0;
 
       print('   📊 Testing query parameters:');
       print('     Collection: $collectionName');
       print('     Movil: $movil');
-      print('     FchPara: $fechaActual');
+      print('     FchPara: $fechaActualStr');
+
+      final int fechaActual = int.tryParse(fechaActualStr) ?? 0;
+      final int fechaAyer = int.tryParse(fechaAyerStr) ?? 0;
 
       final firestore = FirebaseFirestore.instance;
 
@@ -204,7 +208,7 @@ class PendingOrdersDiagnostic {
       // Test the exact query used by the app
       final query = collectionRef
           .where('Movil', isEqualTo: movil)
-          .where('FchPara', isEqualTo: fechaActual)
+          .where('FchPara', whereIn: [fechaActual, fechaAyer])
           .where('VisibleEnApp', isEqualTo: 'S')
           .where('EstadoNro', isEqualTo: 1);
 

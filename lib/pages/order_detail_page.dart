@@ -68,11 +68,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   Stream<DocumentSnapshot?>? _movilStream;
   StreamSubscription<DocumentSnapshot?>? _movilSubscription;
 
+  VoidCallback? _movilShieldListener; // para remover listener
+
   @override
   void initState() {
     super.initState();
 
-    // ✅ Bloquear capturas (FLAG_SECURE) solo en Android
+    // ✅ Bloquear capturas (FLAG_SECURE) controlado por printScreen (solo Android)
     _enableScreenShield();
 
     _controller = WebViewController()
@@ -151,20 +153,51 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
   @override
   void dispose() {
+    // Remueve listener de printScreen
+    if (_movilShieldListener != null) {
+      _persistentStreamManager.movilNotifier
+          .removeListener(_movilShieldListener!);
+      _movilShieldListener = null;
+    }
     _movilSubscription?.cancel();
     _observacionesController.dispose();
     super.dispose();
   }
 
   Future<void> _enableScreenShield() async {
-    if (Platform.isAndroid) {
+    if (!Platform.isAndroid) return;
+
+    final manager = _persistentStreamManager;
+
+    Future<void> apply(DocumentSnapshot? doc) async {
       try {
-        await ScreenProtector.preventScreenshotOn(); // Android: FLAG_SECURE
-        print('🛡️ Screenshot bloqueado (Android)');
+        dynamic val;
+        if (doc != null) {
+          try {
+            val = doc.get('printScreen');
+          } catch (_) {
+            final data = doc.data();
+            if (data is Map<String, dynamic>) val = data['printScreen'];
+          }
+        }
+        // 'S' => permitir (OFF), 'N' => bloquear (ON), null/otros => permitir (OFF)
+        final bool shouldBlock = (val == 'N');
+        if (shouldBlock) {
+          await ScreenProtector.preventScreenshotOn();
+          print('🛡️ Screenshot bloqueado (Android)');
+        } else {
+          await ScreenProtector.preventScreenshotOff();
+          print('🛡️ Screenshot permitido (Android)');
+        }
       } catch (e) {
-        print('❌ Error activando ScreenProtector: $e');
+        print('❌ Error toggling ScreenProtector: $e');
       }
     }
+
+    await apply(manager.movilNotifier.value);
+    manager.movilNotifier.addListener(() {
+      apply(manager.movilNotifier.value);
+    });
   }
 
   void _calcularDistanciaDesdeUbicacionCliente() async {
@@ -473,7 +506,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
       print("🗃️ [HIVE] Reuniendo datos adicionales...");
       var pedidosBox = await Hive.openBox('pedidosBox');
-      var pedido = pedidosBox.get('pedido');
       var usuario = sessionBox.get('username');
       var pedidoId = widget.codPedido;
       var pedidoTpo = widget.pedidoTipo;

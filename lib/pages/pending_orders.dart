@@ -50,7 +50,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   void initState() {
     super.initState();
 
-    // ✅ Bloquear capturas (FLAG_SECURE) solo en Android
+    // ✅ Bloquear capturas (FLAG_SECURE) controlado por printScreen (solo Android)
     _enableScreenShield();
 
     print('🔧 PendingOrdersPage: initState() called - Instance: ${hashCode}');
@@ -126,14 +126,39 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   }
 
   Future<void> _enableScreenShield() async {
-    if (Platform.isAndroid) {
+    if (!Platform.isAndroid) return;
+
+    final manager = _streamManager;
+
+    Future<void> apply(DocumentSnapshot? doc) async {
       try {
-        await ScreenProtector.preventScreenshotOn(); // Android: FLAG_SECURE
-        print('🛡️ Screenshot bloqueado (Android)');
+        dynamic val;
+        if (doc != null) {
+          try {
+            val = doc.get('printScreen');
+          } catch (_) {
+            final data = doc.data();
+            if (data is Map<String, dynamic>) val = data['printScreen'];
+          }
+        }
+        // 'S' => permitir (OFF), 'N' => bloquear (ON), null/otros => permitir (OFF)
+        final bool shouldBlock = (val == 'N');
+        if (shouldBlock) {
+          await ScreenProtector.preventScreenshotOn();
+          print('🛡️ Screenshot bloqueado (Android)');
+        } else {
+          await ScreenProtector.preventScreenshotOff();
+          print('🛡️ Screenshot permitido (Android)');
+        }
       } catch (e) {
-        print('❌ Error activando ScreenProtector: $e');
+        print('❌ Error toggling ScreenProtector: $e');
       }
     }
+
+    await apply(manager.movilNotifier.value);
+    manager.movilNotifier.addListener(() {
+      apply(manager.movilNotifier.value);
+    });
   }
 
   Map<String, Color> colorMap = {

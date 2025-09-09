@@ -40,6 +40,48 @@ import 'package:screen_protector/screen_protector.dart';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
+bool? _screenSecureEnabled;
+
+Future<void> _setupScreenProtectorByMovilStream() async {
+  if (!Platform.isAndroid) return;
+
+  final manager = PersistentStreamManager();
+  try {
+    await manager.initialize(); // Asegura que los streams estén activos
+  } catch (_) {}
+
+  Future<void> apply(DocumentSnapshot? doc) async {
+    try {
+      dynamic val;
+      if (doc != null) {
+        try {
+          val = doc.get('printScreen');
+        } catch (_) {
+          final data = doc.data();
+          if (data is Map<String, dynamic>) val = data['printScreen'];
+        }
+      }
+      // 'S' => permitir (OFF), 'N' => bloquear (ON), null/otros => permitir (OFF)
+      final bool shouldBlock = (val == 'N');
+      if (_screenSecureEnabled == shouldBlock)
+        return; // evita llamadas repetidas
+      _screenSecureEnabled = shouldBlock;
+
+      if (shouldBlock) {
+        await ScreenProtector.preventScreenshotOn();
+      } else {
+        await ScreenProtector.preventScreenshotOff();
+      }
+    } catch (_) {}
+  }
+
+  await apply(manager.movilNotifier.value);
+  manager.movilNotifier.addListener(() {
+    // Ignorar el futuro; no bloquear
+    apply(manager.movilNotifier.value);
+  });
+}
+
 Future<void> _checkAndListenGpsPermissions() async {
   print('Antes de los permisos de ubicación');
   LocationPermission permission = await Geolocator.checkPermission();
@@ -98,9 +140,6 @@ void _listenToLocationPermission() {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Bloquear capturas de pantalla (solo Android)
-  await ScreenProtector.preventScreenshotOn(); // Android: FLAG_SECURE
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // 🔴 DESACTIVAR ENVÍO DE DATOS A FIREBASE
@@ -122,6 +161,9 @@ void main() async {
 
   // 🔹 Inicializar sincronización centralizada de Hive (mensajes y pedidos)
   PersistentStreamManager().initializeHiveSync();
+
+  // Control de captura de pantalla según stream de móviles
+  await _setupScreenProtectorByMovilStream();
 
   if (isLoggedIn) {
     // 🔹 Verificar y escuchar permisos de GPS
@@ -180,10 +222,10 @@ void main() async {
 }
 
 Future<void> _initializeFirebaseMessaging() async {
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
+  final FirebaseMessaging messaging = FirebaseMessaging.instance;
 
   // Solicitar permisos para iOS
-  NotificationSettings settings = await messaging.requestPermission(
+  final NotificationSettings settings = await messaging.requestPermission(
     alert: true,
     badge: true,
     sound: true,
@@ -220,7 +262,6 @@ Future<void> _initializeFirebaseMessaging() async {
   );
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
-  // Configurar el manejo de mensajes en foreground
   // Configurar el manejo de mensajes en foreground
   FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
     print('📩 [FCM FG] Mensaje recibido en foreground');
