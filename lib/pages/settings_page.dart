@@ -1087,10 +1087,10 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(height: 10),
               _buildSuggestionsButton(),
               SizedBox(height: 10),
-              /*_buildViewErrorsButton(),
-              SizedBox(height: 10),
-              _buildFailedRequestsButtons(),
-              SizedBox(height: 10),*/
+              // _buildViewErrorsButton(),
+              // SizedBox(height: 10),
+              // _buildFailedRequestsButtons(),
+              // SizedBox(height: 10),
               _buildPermissionsButton(), // Added Permissions button
               SizedBox(height: 10),
               // _buildMonitoreoButton(),

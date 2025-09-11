@@ -81,47 +81,54 @@ class RioGasService {
   static Future<void> startRetryTimer() async {
     // print('🔄 Iniciando el temporizador de reintentos.');
     if (_retryTimer != null && _retryTimer!.isActive) {
-      // Ya hay un timer activo, no iniciar otro
+      print('🔄 Timer ya está activo, no iniciando otro.');
       return;
     }
 
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-    print("📦 requestbox values: ${failedRequestsBox.values}");
+    print(
+        "📦 failedRequestsBox contiene ${failedRequestsBox.length} elementos");
+
     if (failedRequestsBox.isNotEmpty) {
-      // print('📦 Pending requests found: ${failedRequestsBox.length}');
-      //_retryTimer?.cancel(); // Cancel any existing timer
-      // print('⏱️ Existing retry timer canceled.');
-      // print('⏱️ Setting retry interval to: $retryIntervalSeconds seconds.');
-      _retryTimer = Timer.periodic(Duration(seconds: retryIntervalSeconds), (
-        timer,
-      ) async {
-        // print('🔄 Timer triggered. Executing retry timer callback.');
+      print('📦 Requests pendientes encontrados: ${failedRequestsBox.length}');
+      print(
+          '⏱️ Configurando retry timer con intervalo: $retryIntervalSeconds segundos.');
+
+      _retryTimer = Timer.periodic(Duration(seconds: retryIntervalSeconds),
+          (timer) async {
+        print('🔄 Timer ejecutándose. Procesando requests pendientes...');
         try {
           await processPendingRequests();
-          if (failedRequestsBox.isEmpty) {
+
+          // Verificar si el box está vacío después del procesamiento
+          var updatedBox = await Hive.openBox('failedRequestsBox');
+          if (updatedBox.isEmpty) {
+            print('✅ Todos los pendientes procesados. Deteniendo timer.');
             timer.cancel();
-            _retryTimer =
-                null; // 🔁 opcional, para saber que ya no hay timer activo
-            print('✅ Todos los pendientes procesados. Timer detenido.');
+            _retryTimer = null;
+          } else {
+            print('📦 Aún quedan ${updatedBox.length} requests pendientes.');
           }
         } catch (e) {
-          // print('❌ Error in retry timer callback: $e');
+          print('❌ Error en el callback del retry timer: $e');
         }
       });
-      // print(
-      //   '🔄 Retry timer started with interval: $retryIntervalSeconds seconds.',
-      // );
+
+      print('🔄 Retry timer iniciado correctamente.');
     } else {
-      // print('⚠️ No pending requests in failedRequestsBox.');
-      // print('⚠️ Retry timer will not be started.');
+      print('⚠️ No hay requests pendientes en failedRequestsBox.');
     }
   }
 
   // Ensure the timer starts at least once during initialization
   static Future<void> initializeService() async {
     // 👇 NUEVO: inicializar baseUrl dinámico con 600 (base) + 601 (appservices)
+    print('🔧 [INIT] Inicializando configuración de URLs...');
     final baseRootConst = (await getConstantValue('600'))?.trim();
     final servicesPathConst = (await getConstantValue('601'))?.trim();
+
+    print('🔧 [INIT] Constante 600 (base): "$baseRootConst"');
+    print('🔧 [INIT] Constante 601 (services): "$servicesPathConst"');
 
     var baseRoot = (baseRootConst != null && baseRootConst.isNotEmpty)
         ? baseRootConst
@@ -132,6 +139,9 @@ class RioGasService {
             ? servicesPathConst
             : 'appservices/';
 
+    print('🔧 [INIT] Base root inicial: "$baseRoot"');
+    print('🔧 [INIT] Services path inicial: "$servicesPath"');
+
     // Normalizaciones: quitar 'appservices/' del base por si viene duplicado, slashes correctos
     baseRoot = baseRoot.replaceAll(
         RegExp(r'appservices/?$', caseSensitive: false), '');
@@ -141,19 +151,46 @@ class RioGasService {
 
     baseUrl = '$baseRoot$servicesPath';
 
+    print('🔧 [INIT] Base root normalizado: "$baseRoot"');
+    print('🔧 [INIT] Services path normalizado: "$servicesPath"');
+    print('🔧 [INIT] ===== URL FINAL CONFIGURADA =====');
+    print('🔧 [INIT] baseUrl = "$baseUrl"');
+    print('🔧 [INIT] =====================================');
+
     await initializeRetryInterval();
-    await deleteOldRequests(); // Call the method to delete old requests
+    await deleteOldRequests();
+    await _setupFailedRequestsListener(); // Configurar listener separado
+
+    // Verificar si ya hay requests pendientes e iniciar timer inmediatamente
+    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+    if (failedRequestsBox.isNotEmpty) {
+      print(
+          '🔄 Hay ${failedRequestsBox.length} requests pendientes. Iniciando timer inmediatamente.');
+      await startRetryTimer();
+    }
+  }
+
+  static Future<void> _setupFailedRequestsListener() async {
     var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
-    // Listen for changes in the failedRequestsBox
-    failedRequestsBox.watch().listen((event) async {
-      if (failedRequestsBox.isNotEmpty) {
+    failedRequestsBox.watch().listen((BoxEvent event) async {
+      print(
+          '📦 Cambio detectado en failedRequestsBox: ${event.key} - ${event.value != null ? "AGREGADO" : "ELIMINADO"}');
+
+      if (event.value != null) {
+        // Se agregó un nuevo item
         print(
-          '📦 Detected new data in failedRequestsBox. Starting retry timer.',
-        );
+            '📦 Nuevo request agregado. Total en box: ${failedRequestsBox.length}');
         await startRetryTimer();
       } else {
-        // print('📦 failedRequestsBox is empty. No retry timer will be started.');
+        // Se eliminó un item
+        print(
+            '📦 Request eliminado. Total en box: ${failedRequestsBox.length}');
+        if (failedRequestsBox.isEmpty) {
+          print('📦 Box vacío, deteniendo timer si existe.');
+          _retryTimer?.cancel();
+          _retryTimer = null;
+        }
       }
     });
   }
@@ -165,6 +202,7 @@ class RioGasService {
     if (endpoint == null || payload == null) return;
 
     final failedRequestsBox = await Hive.openBox('failedRequestsBox');
+    print('📦 Intentando guardar request fallido: $endpoint');
 
     // Para FinalizarPedidoV2 deduplicamos por firma JSON del payload
     if (endpoint == 'FinalizarPedidoV2') {
@@ -181,7 +219,8 @@ class RioGasService {
       });
 
       if (exists) {
-        // print('⚠️ Duplicate FinalizarPedidoV2 detected, not saving again.');
+        print(
+            '⚠️ Duplicate FinalizarPedidoV2 detectado, no se guarda nuevamente.');
         return;
       }
 
@@ -191,6 +230,8 @@ class RioGasService {
         'signature': newSignature,
         'timestamp': DateTime.now().toIso8601String(),
       });
+      print(
+          '✅ Request FinalizarPedidoV2 guardado. Total en box: ${failedRequestsBox.length}');
       return;
     }
 
@@ -207,13 +248,72 @@ class RioGasService {
       }
     });
 
-    if (exists) return;
+    if (exists) {
+      print('⚠️ Request duplicado detectado para $endpoint, no se guarda.');
+      return;
+    }
 
     await failedRequestsBox.add({
       'endpoint': endpoint,
       'payload': payload,
       'timestamp': DateTime.now().toIso8601String(),
     });
+
+    print(
+        '✅ Request $endpoint guardado exitosamente. Total en box: ${failedRequestsBox.length}');
+  }
+
+  // Método para verificar conectividad RioGas en tiempo real
+  static Future<bool> _checkRioGasConnectivity() async {
+    try {
+      print('🔍 [RioGasService] Chequeando conectividad RioGas...');
+      var sessionBox = await Hive.openBox('sessionBox');
+      var deviceId = sessionBox.get('deviceId');
+
+      if (deviceId == null || (deviceId is String && deviceId.isEmpty)) {
+        print(
+            '❌ [RioGasService] No deviceId found for RioGas connectivity check');
+        return false;
+      }
+
+      print('📱 [RioGasService] Usando deviceId: $deviceId');
+
+      // Crear el body que se va a enviar
+      Map<String, dynamic> requestBody = {'DeviceId': deviceId, 'token': token};
+      print(
+          '📤 [RioGasService] Body completo a enviar: ${jsonEncode(requestBody)}');
+      print('🌐 [RioGasService] URL completa: ${baseUrl}ValidarDispositivo');
+
+      var response = await validarDispositivo(deviceId);
+
+      print(
+          '📥 [RioGasService] Respuesta COMPLETA del servicio: ${response != null ? jsonEncode(response) : 'NULL'}');
+
+      if (response == null) {
+        print('❌ [RioGasService] RioGas response is null');
+        return false;
+      }
+
+      bool isConnected = response['Existe'] == true ||
+          response['success'] == true ||
+          response['OK'] == 0 ||
+          response['ok'] == 0;
+
+      print('🔍 [RioGasService] Evaluando respuesta:');
+      print('   - response["Existe"]: ${response['Existe']}');
+      print('   - response["success"]: ${response['success']}');
+      print('   - response["OK"]: ${response['OK']}');
+      print('   - response["ok"]: ${response['ok']}');
+      print('   - Resultado final isConnected: $isConnected');
+
+      print(
+          '🌐 [RioGasService] RioGas connectivity result: ${isConnected ? "✅ Connected" : "❌ Disconnected"}');
+      return isConnected;
+    } catch (e) {
+      print('❌ [RioGasService] RioGas connectivity error: $e');
+      await _logError('RioGasService Connectivity Error', e.toString());
+      return false;
+    }
   }
 
   static Future<void> processPendingRequests() async {
@@ -223,45 +323,24 @@ class RioGasService {
 
     final failedRequestsBox = await Hive.openBox('failedRequestsBox');
     final conexionBox = await Hive.openBox('conexionBox');
-    var isConnected = conexionBox.get('conexionRioGas', defaultValue: false);
 
-    // Si no hay conexión, intentamos validar el dispositivo para reestablecerla
-    if (!isConnected) {
-      print('$tag ⚠️ Sin conexión a RioGas. Intentando validar dispositivo...');
+    // Verificar conectividad REAL antes de procesar
+    print('$tag 🔍 Verificando conectividad RioGas en tiempo real...');
+    bool isConnected = await _checkRioGasConnectivity();
 
-      final sessionBox = await Hive.openBox('sessionBox');
-      final deviceId = sessionBox.get('deviceId');
-
-      if (deviceId == null || (deviceId is String && deviceId.isEmpty)) {
-        print(
-            '$tag ❌ deviceId no encontrado en sessionBox. Abortando procesamiento.');
-        return;
-      }
-
-      try {
-        final response = await validarDispositivo(deviceId);
-        final success = response != null &&
-            (response['Existe'] == true ||
-                response['success'] == true ||
-                response['OK'] == 0 ||
-                response['ok'] == 0);
-
-        if (success) {
-          print(
-              '$tag ✅ Dispositivo validado. Marcando conexionRioGas=true y continuando.');
-          await conexionBox.put('conexionRioGas', true);
-          await conexionBox.put(
-              'conexionRioGasTimestamp', DateTime.now().toIso8601String());
-          isConnected = true;
-        } else {
-          print('$tag ❌ Validación de dispositivo fallida. No se continuará.');
-          return;
-        }
-      } catch (e, st) {
-        print('$tag ❌ Error validando dispositivo: $e');
-        print(st);
-        return;
-      }
+    if (isConnected) {
+      print(
+          '$tag ✅ RioGas conectado. Marcando en conexionBox y continuando...');
+      await conexionBox.put('conexionRioGas', true);
+      await conexionBox.put(
+          'conexionRioGasTimestamp', DateTime.now().toIso8601String());
+    } else {
+      print(
+          '$tag ❌ RioGas desconectado. Marcando en conexionBox y abortando...');
+      await conexionBox.put('conexionRioGas', false);
+      print(
+          '$tag ℹ️ El ConnectionCheck se encargará de reestablecer la conexión.');
+      return;
     }
 
     print('$tag 🔍 Recuperando requests pendientes...');
@@ -283,6 +362,11 @@ class RioGasService {
 
     print(
         '$tag 📋 Se encontraron ${pendingRequests.length} requests pendientes.');
+
+    if (pendingRequests.isEmpty) {
+      print('$tag ✅ No hay requests pendientes para procesar.');
+      return;
+    }
 
     for (var entry in pendingRequests) {
       // delay defensivo para no saturar el backend
@@ -319,8 +403,6 @@ class RioGasService {
 
         if (response != null) {
           print('$tag ✅ [$endpoint] procesado correctamente.');
-          await failedRequestsBox.put(key, {...request, 'processed': true});
-          print('$tag 📝 Request con key $key marcado como procesado.');
           await failedRequestsBox.delete(key);
           print('$tag 🗑️ Eliminado request con key $key');
 
@@ -342,10 +424,20 @@ class RioGasService {
           print(
               '$tag ⚠️ Error al procesar [$endpoint] con key $key. Se mantiene en box.');
           print('$tag 📦 Payload: ${jsonEncode(payload)}');
+
+          // Si falla, marcar conexión como perdida para que ConnectionCheck tome control
+          await conexionBox.put('conexionRioGas', false);
+          print(
+              '$tag ❌ Marcando conexionRioGas=false debido a fallo en request.');
+          break; // Salir del bucle para que ConnectionCheck maneje la reconexión
         }
       } catch (e, st) {
         print('$tag ❌ Error al procesar request con key $key: $e');
         print(st);
+
+        // Marcar conexión como perdida en caso de excepción
+        await conexionBox.put('conexionRioGas', false);
+        print('$tag ❌ Marcando conexionRioGas=false debido a excepción.');
 
         // (Opcional) Mantener rollback de estado si falla FinalizarPedido/FinalizarPedidoV2
         if ((request['endpoint'] == 'FinalizarPedidoV2' ||
@@ -359,6 +451,7 @@ class RioGasService {
             print('$tag ↩️ Pedido $pedidoId marcado como "Enviando" por error');
           }
         }
+        break; // Salir del bucle
       }
     }
 
@@ -445,23 +538,40 @@ class RioGasService {
       }
 
       try {
-        print('🌐 Sending request to endpoint: $endpoint with payload: $body');
+        // Construir la URL completa
+        final fullUrl = '$baseUrl$endpoint';
+        final finalBody = {...body, 'token': token};
+        final bodyJson = jsonEncode(finalBody);
+
+        print('🌐 [HTTP_POST] ===== DETALLES COMPLETOS DEL REQUEST =====');
+        print('🌐 [HTTP_POST] Endpoint solicitado: $endpoint');
+        print('🌐 [HTTP_POST] baseUrl configurado: $baseUrl');
+        print('🌐 [HTTP_POST] URL COMPLETA: $fullUrl');
+        print('🌐 [HTTP_POST] Headers: ${jsonEncode(headers)}');
+        print('🌐 [HTTP_POST] Body original recibido: ${jsonEncode(body)}');
+        print('🌐 [HTTP_POST] Body final con token: $bodyJson');
+        print('🌐 [HTTP_POST] Enviando request...');
+
         final response = await http.post(
-          Uri.parse('$baseUrl$endpoint'),
+          Uri.parse(fullUrl),
           headers: headers,
-          body: jsonEncode({...body, 'token': token}),
+          body: bodyJson,
         );
 
-        print('📦 Response endpoint: $endpoint | $response.body ');
+        print('📦 [HTTP_POST] ===== RESPUESTA RECIBIDA =====');
+        print('📦 [HTTP_POST] Status Code: ${response.statusCode}');
+        print('📦 [HTTP_POST] Response Headers: ${response.headers}');
+        print('📦 [HTTP_POST] Response Body: ${response.body}');
 
         if (response.statusCode == 200) {
-          print('? Response endpoint: $endpoint | ${response.body}');
+          print('✅ [HTTP_POST] Request exitoso para $endpoint');
           _lastErrorTime = null; // Reset error tracking on success
           await _updateConnectionStatus(true); // Update connection status
           return jsonDecode(response.body);
         } else {
-          print(
-              '? Error response endpoint: $endpoint | Status Code: ${response.statusCode} | Body: ${response.body}');
+          print('❌ [HTTP_POST] Error HTTP para $endpoint');
+          print('❌ [HTTP_POST] Status Code: ${response.statusCode}');
+          print('❌ [HTTP_POST] Response Body: ${response.body}');
           if (!_shouldSkipFailedSave(endpoint)) {
             await _saveFailedRequest(endpoint, body);
           }
@@ -471,10 +581,11 @@ class RioGasService {
             'Código de respuesta: ${response.statusCode}',
             response.body,
             endpoint,
-            jsonEncode({...body}),
+            bodyJson,
           );
-          print(
-              '? Error response endpoint: $endpoint | Status Code: ${response.statusCode} | Body: ${response.body}');
+
+          // Marcar conexión como perdida en errores HTTP
+          await _updateConnectionStatus(false);
         }
       } catch (e) {
         print('? Exception occurred while sending request to $endpoint: $e');
@@ -498,6 +609,8 @@ class RioGasService {
         jsonEncode({...body, 'token': token}),
       );
 
+      // Marcar conexión como perdida en excepciones
+      await _updateConnectionStatus(false);
       return null;
     }
   }
