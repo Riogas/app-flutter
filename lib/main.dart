@@ -35,6 +35,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import '../services/location_service.dart'; // 🔹 Importamos LocationService
+import '../services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogSyncService
 import 'package:screen_protector/screen_protector.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -157,6 +158,13 @@ void main() async {
 
   await NotificationsService.initialize();
   await RioGasService.initializeService(); // 👈 imprescindible
+
+  // 🔹 Inicializar servicio de sincronización de logs nativos
+  await NativeLogSyncService.initialize();
+
+  // 🔍 Mostrar logs sincronizados para debugging (temporal)
+  await NativeLogSyncService.displaySyncedLogs();
+
   bool isLoggedIn = await AuthService.checkIsLoggedIn();
 
   // 🔹 Inicializar sincronización centralizada de Hive (mensajes y pedidos)

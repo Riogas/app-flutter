@@ -115,23 +115,62 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
     // Suscribirse al stream de moviles para obtener DistanciaMaxMtsCumpPedidos
     // Si necesitas la distancia máxima, puedes obtenerla del movilNotifier
+    print("🚀 [INIT] Inicializando listener de movilNotifier...");
+
+    // Log del estado inicial
+    final initialSnapshot = _persistentStreamManager.movilNotifier.value;
+    print(
+        "🔍 [INIT] Estado inicial del movilNotifier: ${initialSnapshot?.exists}");
+
     _persistentStreamManager.movilNotifier.addListener(() {
       final movilSnapshot = _persistentStreamManager.movilNotifier.value;
+      print(
+          "🔍 [FIRESTORE DEBUG] Movil snapshot existe: ${movilSnapshot?.exists}");
+
       if (movilSnapshot != null && movilSnapshot.exists) {
         final data = movilSnapshot.data() as Map<String, dynamic>?;
+        print("🔍 [FIRESTORE DEBUG] Data completa: $data");
+        print(
+            "🔍 [FIRESTORE DEBUG] Claves disponibles: ${data?.keys.toList()}");
+
         if (data != null && data.containsKey('DistanciaMaxMtsCumpPedidos')) {
           final value = data['DistanciaMaxMtsCumpPedidos'];
-          if (value is int && value > 0) {
+          print(
+              "🔍 [FIRESTORE DEBUG] DistanciaMaxMtsCumpPedidos encontrado: $value (tipo: ${value.runtimeType})");
+
+          // Intentar convertir el valor a int, aceptando int, double o string
+          int? distanciaInt;
+          if (value is int) {
+            distanciaInt = value;
+            print("🔍 [FIRESTORE DEBUG] Valor es int directo: $distanciaInt");
+          } else if (value is double) {
+            distanciaInt = value.toInt();
+            print(
+                "🔍 [FIRESTORE DEBUG] Valor es double, convertido a int: $distanciaInt");
+          } else if (value is String) {
+            distanciaInt = int.tryParse(value);
+            print(
+                "🔍 [FIRESTORE DEBUG] Valor es string, parseado a int: $distanciaInt");
+          } else {
+            print(
+                "🔍 [FIRESTORE DEBUG] Valor es de tipo no esperado: ${value.runtimeType}");
+          }
+
+          if (distanciaInt != null && distanciaInt > 0) {
             if (mounted) {
               setState(() {
-                _distanciaMaxMtsCumpPedidos = value;
+                _distanciaMaxMtsCumpPedidos = distanciaInt;
               });
+              print(
+                  "✅ [FIRESTORE] DistanciaMaxMtsCumpPedidos configurado: $distanciaInt metros");
             }
           } else {
             if (mounted) {
               setState(() {
                 _distanciaMaxMtsCumpPedidos = null;
               });
+              print(
+                  "⚠️ [FIRESTORE] DistanciaMaxMtsCumpPedidos inválido o <= 0: $value");
             }
           }
         } else {
@@ -139,6 +178,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             setState(() {
               _distanciaMaxMtsCumpPedidos = null;
             });
+            print(
+                "⚠️ [FIRESTORE] DistanciaMaxMtsCumpPedidos no encontrado en documento");
+            print(
+                "🔍 [FIRESTORE DEBUG] Campos disponibles: ${data?.keys.join(', ') ?? 'ninguno'}");
           }
         }
       } else {
@@ -146,6 +189,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           setState(() {
             _distanciaMaxMtsCumpPedidos = null;
           });
+          print("❌ [FIRESTORE] Documento de móvil no existe o es null");
         }
       }
     });
@@ -455,8 +499,207 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     );
   }
 
-  void _checkConstantAndProceed(BuildContext context) async {
+  /**
+   * Valida distancia y permisos ANTES de mostrar el diálogo de finalización
+   * Retorna true si puede proceder, false si debe bloquear
+   */
+  Future<bool> _validateBeforeShowingDialog() async {
+    print("🔍 [PRE-VALIDATION] Iniciando validación previa...");
+
+    // 🆕 VERIFICAR ESTADO ACTUAL DE LA VARIABLE ANTES DE VALIDAR
+    print(
+        "🔍 [PRE-STATE] Estado actual de _distanciaMaxMtsCumpPedidos: $_distanciaMaxMtsCumpPedidos");
+    print(
+        "🔍 [PRE-STATE] Tipo de _distanciaMaxMtsCumpPedidos: ${_distanciaMaxMtsCumpPedidos.runtimeType}");
+
+    // 🆕 VERIFICAR ESTADO DEL MOVILNOTIFIER
+    final currentSnapshot = _persistentStreamManager.movilNotifier.value;
+    print(
+        "🔍 [PRE-STATE] movilNotifier snapshot existe: ${currentSnapshot?.exists}");
+    if (currentSnapshot?.exists == true) {
+      final data = currentSnapshot!.data() as Map<String, dynamic>?;
+      print("🔍 [PRE-STATE] Datos actuales del documento: $data");
+      if (data?.containsKey('DistanciaMaxMtsCumpPedidos') == true) {
+        print(
+            "🔍 [PRE-STATE] DistanciaMaxMtsCumpPedidos en Firestore: ${data!['DistanciaMaxMtsCumpPedidos']}");
+
+        // 🆕 FORZAR ACTUALIZACIÓN SI HAY DISCREPANCIA
+        if (_distanciaMaxMtsCumpPedidos == null &&
+            data['DistanciaMaxMtsCumpPedidos'] != null) {
+          print(
+              "🔧 [PRE-FIX] Detectada discrepancia, forzando actualización...");
+          final value = data['DistanciaMaxMtsCumpPedidos'];
+          int? distanciaInt;
+          if (value is int) {
+            distanciaInt = value;
+          } else if (value is double) {
+            distanciaInt = value.toInt();
+          } else if (value is String) {
+            distanciaInt = int.tryParse(value);
+          }
+
+          if (distanciaInt != null && distanciaInt > 0) {
+            setState(() {
+              _distanciaMaxMtsCumpPedidos = distanciaInt;
+            });
+            print(
+                "✅ [PRE-FIX] _distanciaMaxMtsCumpPedidos actualizado a: $distanciaInt");
+          }
+        }
+      }
+    }
+
+    try {
+      // Obtener datos necesarios para validación
+      var sessionBox = await Hive.openBox('sessionBox');
+      var usuario = sessionBox.get('username');
+      String movil = sessionBox.get('movil').toString();
+
+      String lat = '0.0';
+      String lng = '0.0';
+
+      // Obtener ubicación actual
+      print("📍 [PRE-GPS] Solicitando ubicación actual...");
+      try {
+        var currentLocation = await LocationService()
+            .getCurrentLocation()
+            .timeout(Duration(seconds: 5));
+        if (currentLocation != null) {
+          lat = currentLocation['latitude'].toString();
+          lng = currentLocation['longitude'].toString();
+          print("✅ [PRE-GPS] Ubicación obtenida: Lat: $lat, Lng: $lng");
+        } else {
+          print(
+              "⚠️ [PRE-GPS] No se obtuvo ubicación, se usará 0.0 por defecto.");
+        }
+      } catch (e) {
+        print(
+            "❌ [PRE-GPS] Error al obtener ubicación: $e. Se continuará sin GPS.");
+      }
+
+      // Calcular distancia al cliente
+      double distanciaEnMetros = 0;
+      if (widget.ubicacion != null && lat != '0.0' && lng != '0.0') {
+        double latCliente = widget.ubicacion!.latitude;
+        double lngCliente = widget.ubicacion!.longitude;
+        double latActual = double.tryParse(lat) ?? 0.0;
+        double lngActual = double.tryParse(lng) ?? 0.0;
+
+        distanciaEnMetros = Geolocator.distanceBetween(
+          latActual,
+          lngActual,
+          latCliente,
+          lngCliente,
+        );
+        print("📏 [PRE-DISTANCIA] Distancia al cliente: $distanciaEnMetros m");
+        print(
+            "📍 [PRE-COORDENADAS] Cliente: ($latCliente, $lngCliente) | Actual: ($latActual, $lngActual)");
+      } else {
+        print(
+            "⚠️ [PRE-DISTANCIA] No se puede calcular distancia al cliente sin GPS.");
+        print(
+            "📍 [PRE-COORDENADAS] Cliente: ${widget.ubicacion?.latitude ?? 'N/A'}, ${widget.ubicacion?.longitude ?? 'N/A'} | GPS: $lat, $lng");
+      }
+
+      String? CalculoDistancia = await getConstantValue('260');
+      print("📐 [PRE-VALOR 260] CalculoDistancia = $CalculoDistancia");
+
+      // ===== VALIDACIÓN MEJORADA DE DISTANCIA =====
+      print("🔍 [PRE-VALIDACIÓN] Iniciando validación de distancia...");
+      print("📏 [PRE-DATOS] Distancia actual: $distanciaEnMetros m");
+      print(
+          "📋 [PRE-DATOS] Distancia máxima permitida: $_distanciaMaxMtsCumpPedidos m");
+      print(
+          "⚙️ [PRE-DATOS] CalculoDistancia (Constante 260): '$CalculoDistancia'");
+      print(
+          "📱 [PRE-DATOS] PedidoID: ${widget.codPedido} | Usuario: $usuario | Móvil: $movil");
+      print(
+          "🎯 [PRE-ESTADO] ¿Dentro del rango?: ${_distanciaMaxMtsCumpPedidos != null && distanciaEnMetros <= _distanciaMaxMtsCumpPedidos! ? 'SÍ' : 'NO'}");
+
+      // Verificar si debe validar distancia
+      bool debeValidarDistancia = CalculoDistancia == 'S';
+      print("🔧 [PRE-CONTROL] ¿Debe validar distancia? $debeValidarDistancia");
+
+      if (debeValidarDistancia) {
+        // Solo validar si tenemos una configuración válida de distancia máxima
+        if (_distanciaMaxMtsCumpPedidos != null &&
+            _distanciaMaxMtsCumpPedidos! > 0) {
+          // Verificar primero que tengamos ubicación GPS válida (sin GPS no podemos validar distancia)
+          if (lat == '0.0' || lng == '0.0') {
+            print(
+                "❌ [PRE-ERROR] GPS desactivado o no disponible para validación de distancia");
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'No se puede geolocalizar el móvil para finalizar el pedido. Por favor verifique que el GPS esté activado.'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 5),
+              ),
+            );
+            return false;
+          }
+
+          // Verificar que tengamos ubicación GPS válida para calcular distancia
+          if (distanciaEnMetros <= 0) {
+            print("❌ [PRE-ERROR] No se pudo calcular distancia al cliente");
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Error: No se pudo calcular la distancia al cliente para validar la ubicación.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return false;
+          }
+
+          // Validar distancia máxima permitida
+          if (distanciaEnMetros > _distanciaMaxMtsCumpPedidos!) {
+            print(
+                "❌ [PRE-VALIDACIÓN FALLIDA] Distancia excedida: $distanciaEnMetros > $_distanciaMaxMtsCumpPedidos");
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'No puede finalizar el pedido. Su distancia al cliente (${distanciaEnMetros.toStringAsFixed(0)}m) supera el máximo permitido.'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 5),
+              ),
+            );
+            return false;
+          }
+
+          print(
+              "✅ [PRE-VALIDACIÓN EXITOSA] Distancia dentro del rango permitido");
+        } else {
+          print(
+              "⚠️ [PRE-OMITIDO] Validación de distancia omitida: DistanciaMaxMtsCumpPedidos es null o <= 0 ($_distanciaMaxMtsCumpPedidos)");
+        }
+      } else {
+        print(
+            "⚠️ [PRE-OMITIDO] Validación de distancia deshabilitada por configuración");
+      }
+
+      print(
+          "🚀 [PRE-CONTINUAR] Todas las validaciones pasaron, puede proceder");
+      return true;
+    } catch (e) {
+      print("❌ [PRE-ERROR] Error en validación previa: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error interno al validar. Inténtelo nuevamente.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+  }
+
+  void _finalizeOrder() async {
     print("🟢 [INIT] Iniciando verificación de constante 70...");
+
+    // Debug: Verificar estado de distancia máxima
+    print(
+        "🔍 [DEBUG] Estado actual de _distanciaMaxMtsCumpPedidos: $_distanciaMaxMtsCumpPedidos");
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -538,14 +781,40 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       }
 
       var locationBox = await Hive.openBox('locationBox');
-      double velocidad = locationBox.get('lastSpeed', defaultValue: 0.0);
-      double distanciaRecorrida =
-          locationBox.get('totalDistance', defaultValue: 0.0);
+
+      // 🆕 DEBUGGING DETALLADO DE SINCRONIZACIÓN
+      print("🔍 [FINALIZE_SYNC] Verificando contenido de locationBox...");
+      final allKeys = locationBox.keys.toList();
+      print("🔍 [FINALIZE_SYNC] Claves disponibles en locationBox: $allKeys");
+
+      final rawSpeed = locationBox.get('lastSpeed', defaultValue: 0.0);
+      final rawDistance = locationBox.get('totalDistance', defaultValue: 0.0);
+
+      print(
+          "🔍 [FINALIZE_SYNC] Valor crudo lastSpeed: $rawSpeed (tipo: ${rawSpeed.runtimeType})");
+      print(
+          "🔍 [FINALIZE_SYNC] Valor crudo totalDistance: $rawDistance (tipo: ${rawDistance.runtimeType})");
+
+      double velocidad = double.parse(rawSpeed.toStringAsFixed(2));
+      double distanciaRecorrida = double.parse(rawDistance.toStringAsFixed(6));
+
+      print("🔍 [FINALIZE_SYNC] Velocidad procesada: $velocidad");
+      print("🔍 [FINALIZE_SYNC] Distancia procesada: $distanciaRecorrida");
+
+      // 🆕 VERIFICAR SI EXISTEN OTROS POSIBLES NOMBRES DE CLAVES
+      for (String key in allKeys) {
+        if (key.toLowerCase().contains('distance') ||
+            key.toLowerCase().contains('speed')) {
+          final value = locationBox.get(key);
+          print(
+              "🔍 [FINALIZE_SYNC] Clave relacionada encontrada: $key = $value");
+        }
+      }
 
       print(
           "🚗 [MOVIMIENTO] Velocidad: $velocidad m/s | Distancia: $distanciaRecorrida m");
 
-      // Cálculo de distancia al cliente
+      // Cálculo de distancia al cliente para el API (la validación ya se hizo)
       double distanciaEnMetros = 0;
       if (widget.ubicacion != null && lat != '0.0' && lng != '0.0') {
         double latCliente = widget.ubicacion!.latitude;
@@ -559,28 +828,60 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           latCliente,
           lngCliente,
         );
-        print("📏 [DISTANCIA] Distancia al cliente: $distanciaEnMetros m");
-      } else {
         print(
-            "⚠️ [DISTANCIA] No se puede calcular distancia al cliente sin GPS.");
+            "📏 [DISTANCIA] Distancia al cliente para API: $distanciaEnMetros m");
       }
 
       String? CalculoDistancia = await getConstantValue('260');
       print("📐 [VALOR 260] CalculoDistancia = $CalculoDistancia");
 
-      if (_distanciaMaxMtsCumpPedidos != null &&
-          distanciaEnMetros > _distanciaMaxMtsCumpPedidos! &&
-          CalculoDistancia == 'S') {
+      // La validación de distancia ya se hizo en _validateBeforeShowingDialog()
+      print(
+          "🚀 [CONTINUAR] Procediendo con finalización del pedido (validación previa exitosa)...");
+
+      // 🆕 GENERAR INAUX1 E INAUX2 PARA FINALIZACIÓN
+      String inAux1 = movil; // Número del móvil
+      String inAux2 = '';
+
+      try {
         print(
-            "❌ [VALIDACIÓN] Fuera del rango permitido ($distanciaEnMetros > $_distanciaMaxMtsCumpPedidos)");
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'La distancia al cliente es mayor a la permitida para finalizar el pedido.'),
-          ),
-        );
-        return;
+            "🔧 [FINALIZE] Generando string de estado del móvil para INAux2...");
+
+        // Estado de la aplicación
+        String appState =
+            "active"; // Siempre active cuando la app está funcionando
+
+        // Estado de notificaciones
+        String notificaciones = "ON";
+
+        // Estado de permisos de ubicación
+        String permisos = "UNKNOWN";
+        try {
+          if (lat != '0.0' && lng != '0.0') {
+            permisos =
+                "FULL(FINE+COARSE+BACK)"; // Si tenemos ubicación, asumimos permisos completos
+          } else {
+            permisos = "DENIED";
+          }
+        } catch (e) {
+          permisos = "UNKNOWN";
+        }
+
+        // Estado del GPS
+        String gpsState = (lat != '0.0' && lng != '0.0') ? "ON" : "OFF";
+
+        // Retry y Reset
+        String retry = "0";
+        String reset = "No";
+
+        // Construir el string completo
+        inAux2 =
+            "MoveITEstado: $appState | Notificaciones: $notificaciones | Permisos: $permisos | GPS: $gpsState | Retry: $retry | Reset: $reset";
+
+        print("✅ [FINALIZE] INAux2 generado: $inAux2");
+      } catch (e) {
+        print("❌ [FINALIZE] Error generando string de estado: $e");
+        inAux2 = "Error generando estado";
       }
 
       print("📤 [API] Enviando datos a RioGasService.finalizarPedido...");
@@ -598,8 +899,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         DateTime.now().toUtc().toIso8601String(),
         movil,
         distanciaEnMetros,
-        '',
-        '',
+        inAux1,
+        inAux2,
         lat,
         lng,
         utmx,
@@ -655,6 +956,22 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 padding: const EdgeInsets.all(16.0),
                 child: ElevatedButton.icon(
                   onPressed: () async {
+                    // ===== VALIDACIÓN PREVIA ANTES DEL POPUP =====
+                    print("🟢 [BUTTON] Botón 'Finalizar Pedido' presionado");
+
+                    // Ejecutar validación de distancia y permisos primero
+                    bool canProceed = await _validateBeforeShowingDialog();
+
+                    if (!canProceed) {
+                      print(
+                          "❌ [VALIDATION] Validación falló, no se mostrará el diálogo");
+                      return; // No mostrar el diálogo si la validación falla
+                    }
+
+                    print(
+                        "✅ [VALIDATION] Validación exitosa, mostrando diálogo de selección");
+
+                    // Si la validación pasó, mostrar el diálogo
                     await showDialog(
                       context: context,
                       builder: (BuildContext context) {
@@ -729,19 +1046,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                 ),
                                 TextButton(
                                   onPressed: () async {
-                                    if (_selectedSubEstado == 'Cumplido') {
-                                      print('Opción seleccionada: Cumplido');
-                                      _checkConstantAndProceed(
-                                        context,
-                                      ); // Check constant 70
-                                    } else {
-                                      print(
-                                        'Opción seleccionada: $_selectedSubEstado',
-                                      );
-                                      _checkConstantAndProceed(
-                                        context,
-                                      ); // Check constant 70
-                                    }
+                                    // Ya no necesitamos validación aquí, se hizo antes
+                                    print(
+                                        'Opción seleccionada: $_selectedSubEstado');
+                                    Navigator.of(context)
+                                        .pop(); // Cerrar diálogo
+                                    _finalizeOrder(); // Proceder con finalización
                                   },
                                   child: Text('Confirmar'),
                                 ),

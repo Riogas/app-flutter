@@ -518,13 +518,81 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
       try {
         final locationBox = await Hive.openBox('locationBox');
-        velocidad = double.parse(
-          locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2),
-        );
-        distanciaRecorrida =
-            locationBox.get('totalDistance', defaultValue: 0.0);
+
+        // 🆕 DEBUGGING DETALLADO DE SINCRONIZACIÓN
+        print("🔍 [SYNC_DEBUG] Verificando contenido de locationBox...");
+        final allKeys = locationBox.keys.toList();
+        print("🔍 [SYNC_DEBUG] Claves disponibles en locationBox: $allKeys");
+
+        final rawSpeed = locationBox.get('lastSpeed', defaultValue: 0.0);
+        final rawDistance = locationBox.get('totalDistance', defaultValue: 0.0);
+
+        print(
+            "🔍 [SYNC_DEBUG] Valor crudo lastSpeed: $rawSpeed (tipo: ${rawSpeed.runtimeType})");
+        print(
+            "🔍 [SYNC_DEBUG] Valor crudo totalDistance: $rawDistance (tipo: ${rawDistance.runtimeType})");
+
+        velocidad = double.parse(rawSpeed.toStringAsFixed(2));
+        distanciaRecorrida = double.parse(rawDistance.toStringAsFixed(6));
+
+        print("🔍 [SYNC_DEBUG] Velocidad procesada: $velocidad");
+        print("🔍 [SYNC_DEBUG] Distancia procesada: $distanciaRecorrida");
+
+        // 🆕 VERIFICAR SI EXISTEN OTROS POSIBLES NOMBRES DE CLAVES
+        for (String key in allKeys) {
+          if (key.toLowerCase().contains('distance') ||
+              key.toLowerCase().contains('speed')) {
+            final value = locationBox.get(key);
+            print(
+                "🔍 [SYNC_DEBUG] Clave relacionada encontrada: $key = $value");
+          }
+        }
       } catch (e) {
-        print("⚠️ Error leyendo datos de velocidad/distancia en Hive: $e");
+        print(
+            "❌ [SYNC_DEBUG] Error leyendo datos de velocidad/distancia en Hive: $e");
+      }
+
+      // 🆕 GENERAR STRING DE ESTADO DEL MÓVIL PARA INAUX2
+      try {
+        print("🔧 Generando string de estado del móvil para INAux2...");
+
+        // Estado de la aplicación
+        String appState =
+            "active"; // Siempre active cuando la app está funcionando
+
+        // Estado de notificaciones (simulado)
+        String notificaciones = "ON"; // Podríamos verificar permisos reales
+
+        // Estado de permisos de ubicación
+        String permisos = "UNKNOWN";
+        try {
+          // Aquí podrías agregar verificación real de permisos si tienes acceso a platform channels
+          if (latitud != '0.0' && longitud != '0.0') {
+            permisos =
+                "FULL(FINE+COARSE+BACK)"; // Si tenemos ubicación, asumimos permisos completos
+          } else {
+            permisos = "DENIED";
+          }
+        } catch (e) {
+          permisos = "UNKNOWN";
+        }
+
+        // Estado del GPS
+        String gpsState =
+            (latitud != '0.0' && longitud != '0.0') ? "ON" : "OFF";
+
+        // Retry y Reset (por ahora valores fijos)
+        String retry = "0";
+        String reset = "No";
+
+        // Construir el string completo
+        inAux2 =
+            "MoveITEstado: $appState | Notificaciones: $notificaciones | Permisos: $permisos | GPS: $gpsState | Retry: $retry | Reset: $reset";
+
+        print("✅ INAux2 generado: $inAux2");
+      } catch (e) {
+        print("❌ Error generando string de estado: $e");
+        inAux2 = "Error generando estado";
       }
 
       print("📤 Enviando datos a RioGasService...");

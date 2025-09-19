@@ -20,6 +20,7 @@ import 'package:open_file/open_file.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
+import '../services/native_log_sync_service.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -1093,6 +1094,8 @@ class _SettingsPageState extends State<SettingsPage> {
               // SizedBox(height: 10),
               _buildPermissionsButton(), // Added Permissions button
               SizedBox(height: 10),
+              _buildNativeLogsButton(), // Added Native Logs button
+              SizedBox(height: 10),
               // _buildMonitoreoButton(),
               // SizedBox(height: 10),
               _buildLogoutButton(),
@@ -1498,5 +1501,210 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildNativeLogsButton() {
+    return Center(
+      child: ElevatedButton.icon(
+        onPressed: _showNativeLogsDialog,
+        icon: Icon(Icons.storage, color: Colors.orange),
+        label: Text('Ver Logs del Sistema'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.orange,
+          side: BorderSide(color: Colors.orange),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showNativeLogsDialog() async {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Logs del Sistema'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('¿Qué logs deseas ver?',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(height: 15),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _showHiveLogs();
+                  },
+                  icon: Icon(Icons.smartphone, color: Colors.blue),
+                  label: Text('Logs Sincronizados (Hive)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade50,
+                    foregroundColor: Colors.blue,
+                    minimumSize: Size(double.infinity, 45),
+                  ),
+                ),
+                SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _showSQLiteLogs();
+                  },
+                  icon: Icon(Icons.data_usage, color: Colors.green),
+                  label: Text('Base SQLite (Nativo)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade50,
+                    foregroundColor: Colors.green,
+                    minimumSize: Size(double.infinity, 45),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showHiveLogs() async {
+    try {
+      await NativeLogSyncService.displaySyncedLogs();
+      _showMessage('📱 Logs de Hive mostrados en consola');
+    } catch (e) {
+      _showMessage('❌ Error mostrando logs de Hive: $e');
+    }
+  }
+
+  Future<void> _showSQLiteLogs() async {
+    try {
+      const platform = MethodChannel('background_service');
+      final result = await platform.invokeMethod('getUnsyncedLogs');
+
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          final unsyncedLogs = Map<String, dynamic>.from(result as Map);
+          final events = (unsyncedLogs['events'] as List? ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+          final errors = (unsyncedLogs['errors'] as List? ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+          final metrics = (unsyncedLogs['metrics'] as List? ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+
+          return AlertDialog(
+            title: Text('🗄️ Base SQLite (Nativo)'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        '📊 Total: ${events.length} eventos, ${errors.length} errores, ${metrics.length} métricas',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    SizedBox(height: 10),
+                    if (events.isNotEmpty) ...[
+                      Text('🎯 EVENTOS (${events.length}):',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, color: Colors.blue)),
+                      ...events.map((event) => Card(
+                            margin: EdgeInsets.symmetric(vertical: 2),
+                            child: Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      'ID: ${event['id']} | ${event['eventType']}',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  Text(
+                                      'Fecha: ${DateTime.fromMillisecondsSinceEpoch(event['timestamp'] ?? 0)}'),
+                                  Text('Datos: ${event['data']}'),
+                                ],
+                              ),
+                            ),
+                          )),
+                      SizedBox(height: 10),
+                    ],
+                    if (errors.isNotEmpty) ...[
+                      Text('❌ ERRORES (${errors.length}):',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, color: Colors.red)),
+                      ...errors.map((error) => Card(
+                            margin: EdgeInsets.symmetric(vertical: 2),
+                            child: Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      'ID: ${error['id']} | ${error['errorType']}',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  Text(
+                                      'Fecha: ${DateTime.fromMillisecondsSinceEpoch(error['timestamp'] ?? 0)}'),
+                                  Text('Mensaje: ${error['errorMessage']}'),
+                                ],
+                              ),
+                            ),
+                          )),
+                      SizedBox(height: 10),
+                    ],
+                    if (metrics.isNotEmpty) ...[
+                      Text('📍 MÉTRICAS (${metrics.length}):',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green)),
+                      ...metrics.map((metric) => Card(
+                            margin: EdgeInsets.symmetric(vertical: 2),
+                            child: Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('ID: ${metric['id']}',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  Text(
+                                      'Fecha: ${DateTime.fromMillisecondsSinceEpoch(metric['timestamp'] ?? 0)}'),
+                                  Text(
+                                      'Ubicación: ${metric['latitude']}, ${metric['longitude']}'),
+                                  Text(
+                                      'Proveedor: ${metric['provider']} | Precisión: ${metric['accuracy']}m'),
+                                ],
+                              ),
+                            ),
+                          )),
+                    ],
+                    if (events.isEmpty && errors.isEmpty && metrics.isEmpty)
+                      Center(child: Text('No hay logs en la base SQLite')),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text('Cerrar'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      _showMessage('❌ Error obteniendo logs SQLite: $e');
+    }
   }
 }
