@@ -503,8 +503,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
    * Valida distancia y permisos ANTES de mostrar el diálogo de finalización
    * Retorna true si puede proceder, false si debe bloquear
    */
-  Future<bool> _validateBeforeShowingDialog() async {
-    print("🔍 [PRE-VALIDATION] Iniciando validación previa...");
+  // Resultado de validación con mensaje de error
+  // quickCheck: si es true, solo verifica GPS/permisos sin geolocalizar (más rápido)
+  Future<Map<String, dynamic>> _validateBeforeShowingDialog(
+      {bool showErrors = true, bool quickCheck = false}) async {
+    print(
+        "🔍 [PRE-VALIDATION] Iniciando validación previa... (showErrors: $showErrors, quickCheck: $quickCheck)");
 
     // 🆕 VERIFICAR ESTADO ACTUAL DE LA VARIABLE ANTES DE VALIDAR
     print(
@@ -550,7 +554,70 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     }
 
     try {
-      // Obtener datos necesarios para validación
+      // ===========
+      // 💥 PASO 1: VERIFICAR GPS Y PERMISOS PRIMERO (antes de pedir ubicación)
+      // ===========
+      print("🔍 [PRE-GPS-CHECK] Verificando estado del GPS...");
+      bool isGpsEnabled = await Geolocator.isLocationServiceEnabled();
+      print(
+          "📍 [PRE-GPS-STATUS] Servicios de ubicación habilitados: $isGpsEnabled");
+
+      if (!isGpsEnabled) {
+        // GPS desactivado por el usuario - BLOQUEAR
+        print("❌ [PRE-GPS-BLOCKED] GPS desactivado por el usuario");
+        String errorMsg =
+            'Para finalizar el pedido debe activar el GPS en la configuración de su dispositivo.';
+        if (showErrors) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+        return {'success': false, 'errorMessage': errorMsg};
+      }
+
+      // GPS está activado - verificar permisos
+      LocationPermission permission = await Geolocator.checkPermission();
+      print("🔐 [PRE-PERMISSION] Permisos de ubicación: $permission");
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        print(
+            "🔐 [PRE-PERMISSION-REQUESTED] Permisos solicitados: $permission");
+      }
+
+      if (permission == LocationPermission.deniedForever ||
+          permission == LocationPermission.denied) {
+        print("❌ [PRE-PERMISSION-BLOCKED] Permisos denegados permanentemente");
+        String errorMsg =
+            'Los permisos de ubicación están denegados. Debe habilitarlos en configuración para finalizar el pedido.';
+        if (showErrors) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+        return {'success': false, 'errorMessage': errorMsg};
+      }
+
+      // ===========
+      // 💥 PASO 2: Si es quickCheck, salir aquí SIN pedir ubicación
+      // ===========
+      if (quickCheck) {
+        print(
+            "✅ [QUICK-CHECK] GPS activo y permisos OK - saltando geolocalización");
+        return {'success': true, 'errorMessage': ''};
+      }
+
+      // ===========
+      // 💥 PASO 3: Ahora sí, pedir ubicación (solo si pasaron GPS y permisos)
+      // ===========
       var sessionBox = await Hive.openBox('sessionBox');
       var usuario = sessionBox.get('username');
       String movil = sessionBox.get('movil').toString();
@@ -558,23 +625,25 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       String lat = '0.0';
       String lng = '0.0';
 
-      // Obtener ubicación actual
-      print("📍 [PRE-GPS] Solicitando ubicación actual...");
+      print("📍 [PRE-GPS] Solicitando ubicación actual (timeout: 8s)...");
       try {
         var currentLocation = await LocationService()
             .getCurrentLocation()
-            .timeout(Duration(seconds: 5));
+            .timeout(Duration(seconds: 8));
         if (currentLocation != null) {
           lat = currentLocation['latitude'].toString();
           lng = currentLocation['longitude'].toString();
           print("✅ [PRE-GPS] Ubicación obtenida: Lat: $lat, Lng: $lng");
         } else {
           print(
-              "⚠️ [PRE-GPS] No se obtuvo ubicación, se usará 0.0 por defecto.");
+              "⚠️ [PRE-GPS] No se obtuvo ubicación (null). Continuamos sin bloquear.");
         }
+      } on TimeoutException {
+        print(
+            "⏳ [PRE-GPS] Timeout al obtener ubicación. Continuamos sin bloquear.");
       } catch (e) {
         print(
-            "❌ [PRE-GPS] Error al obtener ubicación: $e. Se continuará sin GPS.");
+            "❌ [PRE-GPS] Error al obtener ubicación: $e. Continuamos sin bloquear.");
       }
 
       // Calcular distancia al cliente
@@ -604,7 +673,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       String? CalculoDistancia = await getConstantValue('260');
       print("📐 [PRE-VALOR 260] CalculoDistancia = $CalculoDistancia");
 
-      // ===== VALIDACIÓN MEJORADA DE DISTANCIA =====
+      String? mensajeDistancia = await getConstantValue('610');
+      print("📝 [PRE-VALOR 610] mensajeDistancia = $mensajeDistancia");
+
+      // ===== VALIDACIÓN DE DISTANCIA =====
       print("🔍 [PRE-VALIDACIÓN] Iniciando validación de distancia...");
       print("📏 [PRE-DATOS] Distancia actual: $distanciaEnMetros m");
       print(
@@ -613,8 +685,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           "⚙️ [PRE-DATOS] CalculoDistancia (Constante 260): '$CalculoDistancia'");
       print(
           "📱 [PRE-DATOS] PedidoID: ${widget.codPedido} | Usuario: $usuario | Móvil: $movil");
-      print(
-          "🎯 [PRE-ESTADO] ¿Dentro del rango?: ${_distanciaMaxMtsCumpPedidos != null && distanciaEnMetros <= _distanciaMaxMtsCumpPedidos! ? 'SÍ' : 'NO'}");
 
       // Verificar si debe validar distancia
       bool debeValidarDistancia = CalculoDistancia == 'S';
@@ -624,51 +694,50 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         // Solo validar si tenemos una configuración válida de distancia máxima
         if (_distanciaMaxMtsCumpPedidos != null &&
             _distanciaMaxMtsCumpPedidos! > 0) {
-          // Verificar primero que tengamos ubicación GPS válida (sin GPS no podemos validar distancia)
+          // GPS activado y con permisos - ahora verificar coordenadas
           if (lat == '0.0' || lng == '0.0') {
             print(
-                "❌ [PRE-ERROR] GPS desactivado o no disponible para validación de distancia");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    'No se puede geolocalizar el móvil para finalizar el pedido. Por favor verifique que el GPS esté activado.'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 5),
-              ),
-            );
-            return false;
-          }
-
-          // Verificar que tengamos ubicación GPS válida para calcular distancia
-          if (distanciaEnMetros <= 0) {
-            print("❌ [PRE-ERROR] No se pudo calcular distancia al cliente");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    'Error: No se pudo calcular la distancia al cliente para validar la ubicación.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            return false;
-          }
-
-          // Validar distancia máxima permitida
-          if (distanciaEnMetros > _distanciaMaxMtsCumpPedidos!) {
+                "⚠️ [PRE-GPS-NO-COORDS] GPS activo pero sin coordenadas válidas - se permitirá finalizar");
+            // GPS está activo pero no se obtuvieron coordenadas - PERMITIR
+          } else {
+            // GPS activo con coordenadas válidas - validar distancia
             print(
-                "❌ [PRE-VALIDACIÓN FALLIDA] Distancia excedida: $distanciaEnMetros > $_distanciaMaxMtsCumpPedidos");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    'No puede finalizar el pedido. Su distancia al cliente (${distanciaEnMetros.toStringAsFixed(0)}m) supera el máximo permitido.'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 5),
-              ),
-            );
-            return false;
-          }
+                "📍 [PRE-GPS-VALID] GPS activo con coordenadas válidas - validando distancia");
 
-          print(
-              "✅ [PRE-VALIDACIÓN EXITOSA] Distancia dentro del rango permitido");
+            // Verificar que se pudo calcular distancia al cliente
+            if (distanciaEnMetros <= 0) {
+              print(
+                  "⚠️ [PRE-WARNING] No se pudo calcular distancia al cliente - se permitirá finalizar");
+            } else {
+              // Validar distancia máxima permitida
+              if (distanciaEnMetros > _distanciaMaxMtsCumpPedidos!) {
+                print(
+                    "❌ [PRE-VALIDACIÓN FALLIDA] Distancia excedida: $distanciaEnMetros > $_distanciaMaxMtsCumpPedidos");
+
+                // Obtener mensaje desde constante 610
+                String mensaje = mensajeDistancia ??
+                    'No puede finalizar el pedido. Su distancia al cliente (${distanciaEnMetros.toStringAsFixed(0)}m) supera el máximo permitido.';
+
+                // Reemplazar placeholder {distancia} con el valor real si existe
+                mensaje = mensaje.replaceAll(
+                    '{distancia}', distanciaEnMetros.toStringAsFixed(0));
+
+                if (showErrors) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(mensaje),
+                      backgroundColor: Colors.red,
+                      duration: Duration(seconds: 5),
+                    ),
+                  );
+                }
+                return {'success': false, 'errorMessage': mensaje};
+              }
+
+              print(
+                  "✅ [PRE-VALIDACIÓN EXITOSA] Distancia dentro del rango permitido");
+            }
+          }
         } else {
           print(
               "⚠️ [PRE-OMITIDO] Validación de distancia omitida: DistanciaMaxMtsCumpPedidos es null o <= 0 ($_distanciaMaxMtsCumpPedidos)");
@@ -680,16 +749,19 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
       print(
           "🚀 [PRE-CONTINUAR] Todas las validaciones pasaron, puede proceder");
-      return true;
+      return {'success': true, 'errorMessage': ''};
     } catch (e) {
       print("❌ [PRE-ERROR] Error en validación previa: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error interno al validar. Inténtelo nuevamente.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return false;
+      String errorMsg = 'Error interno al validar. Inténtelo nuevamente.';
+      if (showErrors) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return {'success': false, 'errorMessage': errorMsg};
     }
   }
 
@@ -760,11 +832,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       String utmx = '0.0';
       String utmy = '0.0';
 
-      print("📍 [GPS] Solicitando ubicación actual...");
+      print("📍 [GPS] Solicitando ubicación actual (timeout: 15s)...");
       try {
         var currentLocation = await LocationService()
             .getCurrentLocation()
-            .timeout(Duration(seconds: 5));
+            .timeout(Duration(seconds: 15));
         if (currentLocation != null) {
           lat = currentLocation['latitude'].toString();
           lng = currentLocation['longitude'].toString();
@@ -774,10 +846,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           print(
               "✅ [GPS] Ubicación obtenida: Lat: $lat, Lng: $lng, UTMX: $utmx, UTMY: $utmy");
         } else {
-          print("⚠️ [GPS] No se obtuvo ubicación, se usará 0.0 por defecto.");
+          print(
+              "⚠️ [GPS] No se obtuvo ubicación después de 15 segundos, se usará 0.0 por defecto.");
         }
       } catch (e) {
-        print("❌ [GPS] Error al obtener ubicación: $e. Se continuará sin GPS.");
+        print(
+            "❌ [GPS] Error/Timeout al obtener ubicación después de 15 segundos: $e. Se continuará sin GPS.");
       }
 
       var locationBox = await Hive.openBox('locationBox');
@@ -859,7 +933,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         try {
           if (lat != '0.0' && lng != '0.0') {
             permisos =
-                "FULL(FINE+COARSE+BACK)"; // Si tenemos ubicación, asumimos permisos completos
+                "FULL"; // Si tenemos ubicación, asumimos permisos completos
           } else {
             permisos = "DENIED";
           }
@@ -876,7 +950,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
         // Construir el string completo
         inAux2 =
-            "MoveITEstado: $appState | Notificaciones: $notificaciones | Permisos: $permisos | GPS: $gpsState | Retry: $retry | Reset: $reset";
+            "Estado: $appState | Notificaciones: $notificaciones | Permisos: $permisos | GPS: $gpsState | Retry: $retry | Reset: $reset";
 
         print("✅ [FINALIZE] INAux2 generado: $inAux2");
       } catch (e) {
@@ -959,10 +1033,63 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                     // ===== VALIDACIÓN PREVIA ANTES DEL POPUP =====
                     print("🟢 [BUTTON] Botón 'Finalizar Pedido' presionado");
 
-                    // Ejecutar validación de distancia y permisos primero
-                    bool canProceed = await _validateBeforeShowingDialog();
+                    // 1️⃣ QUICK CHECK PRIMERO: Verificar GPS y permisos (instantáneo)
+                    print('⚡ [QUICK-CHECK] Verificando GPS y permisos...');
+                    Map<String, dynamic> quickCheckResult =
+                        await _validateBeforeShowingDialog(
+                            showErrors: true, quickCheck: true);
 
-                    if (!canProceed) {
+                    if (!quickCheckResult['success']) {
+                      print(
+                          '❌ [QUICK-CHECK FALLIDO] GPS desactivado o permisos denegados');
+                      // El error ya se mostró con showErrors: true
+                      return;
+                    }
+
+                    print('✅ [QUICK-CHECK OK] GPS activo y permisos OK');
+
+                    // 2️⃣ Mostrar loading SOLO para la geolocalización
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (BuildContext context) {
+                        return Center(
+                          child: Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20.0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 16),
+                                  Text(
+                                    'Validando ubicación GPS...',
+                                    style: TextStyle(fontSize: 16),
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Por favor espere',
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+
+                    // 3️⃣ FULL CHECK: Ejecutar validación completa (geolocalización + distancia)
+                    Map<String, dynamic> validationResult =
+                        await _validateBeforeShowingDialog(showErrors: true);
+
+                    // Cerrar el loading de forma segura
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    }
+
+                    if (!validationResult['success']) {
                       print(
                           "❌ [VALIDATION] Validación falló, no se mostrará el diálogo");
                       return; // No mostrar el diálogo si la validación falla
@@ -1046,12 +1173,49 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                 ),
                                 TextButton(
                                   onPressed: () async {
-                                    // Ya no necesitamos validación aquí, se hizo antes
                                     print(
-                                        'Opción seleccionada: $_selectedSubEstado');
-                                    Navigator.of(context)
-                                        .pop(); // Cerrar diálogo
-                                    _finalizeOrder(); // Proceder con finalización
+                                        '🔄 [REVALIDACIÓN] Iniciando validación en popup de confirmación...');
+                                    print(
+                                        '📋 [POPUP-DATA] Opción seleccionada: $_selectedSubEstado');
+
+                                    // Cerrar el popup primero
+                                    Navigator.of(context).pop();
+
+                                    // 1️⃣ QUICK CHECK: Verificar GPS y permisos PRIMERO (instantáneo, sin loading)
+                                    print(
+                                        '⚡ [QUICK-CHECK] Verificando GPS y permisos...');
+                                    Map<String, dynamic> quickCheckResult =
+                                        await _validateBeforeShowingDialog(
+                                            showErrors: true, quickCheck: true);
+
+                                    if (!quickCheckResult['success']) {
+                                      print(
+                                          '❌ [QUICK-CHECK FALLIDO] GPS desactivado o permisos denegados');
+                                      // El error ya se mostró con showErrors: true
+                                      return;
+                                    }
+
+                                    print(
+                                        '✅ [QUICK-CHECK OK] GPS activo y permisos OK');
+
+                                    // 2️⃣ FULL CHECK: Ahora sí, geolocalizar y validar distancia (sin loading también)
+                                    print(
+                                        '📍 [FULL-CHECK] Geolocalizando y validando distancia...');
+                                    Map<String, dynamic> fullCheckResult =
+                                        await _validateBeforeShowingDialog(
+                                            showErrors: true);
+
+                                    if (!fullCheckResult['success']) {
+                                      print(
+                                          '❌ [FULL-CHECK FALLIDO] Validación de distancia falló');
+                                      // El error ya se mostró con showErrors: true
+                                      return;
+                                    }
+
+                                    // Si todo OK, proceder con finalización
+                                    print(
+                                        '✅ [REVALIDACIÓN EXITOSA] Procediendo con finalización...');
+                                    _finalizeOrder();
                                   },
                                   child: Text('Confirmar'),
                                 ),

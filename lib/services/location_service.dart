@@ -378,17 +378,11 @@ class LocationService {
     }
 
     try {
-      print(
-          "📍 [GPS] Solicitando posición actual con timeout de 5 segundos...");
+      print("📍 [GPS] Solicitando posición actual...");
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
-        forceAndroidLocationManager: true,
-      ).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          print("⏰ [GPS] Timeout al obtener la posición.");
-          throw TimeoutException("Timeout al obtener la posición GPS.");
-        },
+        forceAndroidLocationManager:
+            false, // Cambiado a false para usar Google Play Services (más rápido)
       );
 
       print(

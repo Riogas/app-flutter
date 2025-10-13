@@ -569,7 +569,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           // Aquí podrías agregar verificación real de permisos si tienes acceso a platform channels
           if (latitud != '0.0' && longitud != '0.0') {
             permisos =
-                "FULL(FINE+COARSE+BACK)"; // Si tenemos ubicación, asumimos permisos completos
+                "FULL"; // Si tenemos ubicación, asumimos permisos completos
           } else {
             permisos = "DENIED";
           }
@@ -587,7 +587,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
         // Construir el string completo
         inAux2 =
-            "MoveITEstado: $appState | Notificaciones: $notificaciones | Permisos: $permisos | GPS: $gpsState | Retry: $retry | Reset: $reset";
+            "Estado: $appState | Notificaciones: $notificaciones | Permisos: $permisos | GPS: $gpsState | Retry: $retry | Reset: $reset";
 
         print("✅ INAux2 generado: $inAux2");
       } catch (e) {
