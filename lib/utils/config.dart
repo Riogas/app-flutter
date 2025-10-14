@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive/hive.dart';
 
 class Config {
   // Credenciales de conexión a Firestore
@@ -7,6 +8,53 @@ class Config {
   static String firestorePassword = "";
 
   // Agrega más variables globales según sea necesario
+
+  /// Guarda las credenciales en Hive para persistencia entre reinicios
+  static Future<void> saveCredentials(String email, String password) async {
+    try {
+      final box = await Hive.openBox('authBox');
+      await box.put('firestoreEmail', email);
+      await box.put('firestorePassword', password);
+      firestoreEmail = email;
+      firestorePassword = password;
+      print('✅ [CONFIG] Credenciales guardadas en Hive');
+    } catch (e) {
+      print('❌ [CONFIG] Error guardando credenciales: $e');
+    }
+  }
+
+  /// Carga las credenciales desde Hive al iniciar la app
+  static Future<void> loadCredentials() async {
+    try {
+      final box = await Hive.openBox('authBox');
+      firestoreEmail = box.get('firestoreEmail', defaultValue: "");
+      firestorePassword = box.get('firestorePassword', defaultValue: "");
+
+      if (firestoreEmail.isNotEmpty && firestorePassword.isNotEmpty) {
+        print('✅ [CONFIG] Credenciales cargadas desde Hive: $firestoreEmail');
+      } else {
+        print('⚠️ [CONFIG] No hay credenciales guardadas en Hive');
+      }
+    } catch (e) {
+      print('❌ [CONFIG] Error cargando credenciales: $e');
+      firestoreEmail = "";
+      firestorePassword = "";
+    }
+  }
+
+  /// Limpia las credenciales (para logout)
+  static Future<void> clearCredentials() async {
+    try {
+      final box = await Hive.openBox('authBox');
+      await box.delete('firestoreEmail');
+      await box.delete('firestorePassword');
+      firestoreEmail = "";
+      firestorePassword = "";
+      print('✅ [CONFIG] Credenciales limpiadas');
+    } catch (e) {
+      print('❌ [CONFIG] Error limpiando credenciales: $e');
+    }
+  }
 }
 
 Future<void> registerOrReuseUser(String email, String password) async {
@@ -27,8 +75,7 @@ Future<void> registerOrReuseUser(String email, String password) async {
     String uid = loginCredential.user!.uid;
     print("✅ Usuario ya existía. UID: $uid");
 
-    Config.firestoreEmail = email;
-    Config.firestorePassword = password;
+    await Config.saveCredentials(email, password);
 
     final docRef = FirebaseFirestore.instance
         .collection('Roles')
@@ -89,8 +136,7 @@ Future<void> registerOrReuseUser(String email, String password) async {
           .signInWithEmailAndPassword(email: email, password: password);
 
       print("✅ Usuario relogueado correctamente.");
-      Config.firestoreEmail = email;
-      Config.firestorePassword = password;
+      await Config.saveCredentials(email, password);
     }
   } on FirebaseAuthException catch (e) {
     print("⚠️ Error al intentar login con FirebaseAuth: ${e.code}");
@@ -124,8 +170,7 @@ Future<void> registerOrReuseUser(String email, String password) async {
 
         print("✅ UID guardado en Firestore en Roles/editor/users/$uid");
 
-        Config.firestoreEmail = email;
-        Config.firestorePassword = password;
+        await Config.saveCredentials(email, password);
 
         // Cerrar sesión del usuario auxiliar
         await FirebaseAuth.instance.signOut();

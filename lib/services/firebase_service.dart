@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
 import 'dart:convert'; // Para calcular el tamaño de los datos
+import 'dart:async'; // Para Timer
 import '../utils/error_event.dart';
 import '../utils/config.dart'; // Importa el archivo de configuración
 import '../utils/constantes.dart'; // Importa la función getConstantValue
@@ -32,6 +33,12 @@ class FirebaseService {
   static int streamCount = 0;
   static Map<String, int> streamCounters = {};
 
+  // Control para el listener de auth state
+  static bool _authListenerInitialized = false;
+
+  // Timer para refresh proactivo del token
+  static Timer? _tokenRefreshTimer;
+
   Future<void> initializeFirebase() async {
     //WidgetsFlutterBinding.ensureInitialized();
 
@@ -44,20 +51,179 @@ class FirebaseService {
       await _logError('Firebase Initialization Error', e.toString());
     }*/
 
+    // Cargar credenciales guardadas antes de intentar login
+    await Config.loadCredentials();
+
     // Autenticar al usuario
     await signInWithEmailAndPassword();
+
+    // Inicializar listener de auth state (solo una vez)
+    _setupAuthStateListener();
+
+    // Iniciar refresh proactivo del token
+    startProactiveTokenRefresh();
+  }
+
+  /// Configura el listener de cambios en el estado de autenticación
+  void _setupAuthStateListener() {
+    if (_authListenerInitialized) {
+      print('ℹ️ [FIREBASE_SERVICE] Listener de auth ya inicializado');
+      return;
+    }
+
+    FirebaseAuth.instance.authStateChanges().listen((User? user) async {
+      if (user == null) {
+        print('🔴 [FIREBASE_SERVICE] Usuario desautenticado o token expirado');
+        print('   Timestamp: ${DateTime.now().toIso8601String()}');
+
+        // Intentar re-autenticar si hay credenciales guardadas
+        if (Config.firestoreEmail.isNotEmpty &&
+            Config.firestorePassword.isNotEmpty) {
+          print(
+              '🔄 [FIREBASE_SERVICE] Intentando re-autenticación automática...');
+          await signInWithEmailAndPassword();
+        } else {
+          print('⚠️ [FIREBASE_SERVICE] No hay credenciales para re-autenticar');
+        }
+      } else {
+        print('✅ [FIREBASE_SERVICE] Usuario autenticado: ${user.email}');
+        print('   UID: ${user.uid}');
+        print('   Timestamp: ${DateTime.now().toIso8601String()}');
+        _user = user;
+      }
+    }, onError: (error) {
+      print('❌ [FIREBASE_SERVICE] Error en authStateChanges: $error');
+    });
+
+    _authListenerInitialized = true;
+    print('✅ [FIREBASE_SERVICE] Listener de auth state inicializado');
+  }
+
+  /// Inicia el timer para refresh proactivo del token cada 45 minutos
+  /// Esto previene que el token expire (expira a la 1 hora)
+  void startProactiveTokenRefresh() {
+    // Cancelar timer existente si hay
+    _tokenRefreshTimer?.cancel();
+
+    // Crear nuevo timer que se ejecuta cada 45 minutos
+    _tokenRefreshTimer =
+        Timer.periodic(const Duration(minutes: 45), (timer) async {
+      print('⏰ [FIREBASE_SERVICE] Timer de refresh de token ejecutado');
+      print('   Timestamp: ${DateTime.now().toIso8601String()}');
+
+      bool refreshed = await refreshAuthToken();
+
+      if (refreshed) {
+        print('✅ [FIREBASE_SERVICE] Token refrescado proactivamente');
+      } else {
+        print('❌ [FIREBASE_SERVICE] Falló el refresh proactivo del token');
+      }
+    });
+
+    print(
+        '✅ [FIREBASE_SERVICE] Timer de refresh proactivo iniciado (cada 45 min)');
+  }
+
+  /// Detiene el timer de refresh proactivo
+  void stopProactiveTokenRefresh() {
+    _tokenRefreshTimer?.cancel();
+    _tokenRefreshTimer = null;
+    print('🛑 [FIREBASE_SERVICE] Timer de refresh proactivo detenido');
+  }
+
+  /// Refresca el token del usuario actual
+  /// Llama a este método antes de operaciones críticas o periódicamente
+  Future<bool> refreshAuthToken() async {
+    try {
+      final User? currentUser = FirebaseAuth.instance.currentUser;
+
+      if (currentUser == null) {
+        print(
+            '⚠️ [FIREBASE_SERVICE] No hay usuario autenticado para refrescar token');
+
+        // Intentar re-autenticar
+        if (Config.firestoreEmail.isNotEmpty &&
+            Config.firestorePassword.isNotEmpty) {
+          print('🔄 [FIREBASE_SERVICE] Intentando re-autenticación...');
+          await signInWithEmailAndPassword();
+          return FirebaseAuth.instance.currentUser != null;
+        }
+
+        return false;
+      }
+
+      print(
+          '🔄 [FIREBASE_SERVICE] Refrescando token para: ${currentUser.email}');
+
+      // getIdToken(true) fuerza el refresh del token
+      String? token = await currentUser.getIdToken(true);
+
+      if (token != null) {
+        print('✅ [FIREBASE_SERVICE] Token refrescado exitosamente');
+        print('   Timestamp: ${DateTime.now().toIso8601String()}');
+        return true;
+      } else {
+        print('❌ [FIREBASE_SERVICE] No se pudo obtener el token');
+        return false;
+      }
+    } catch (e) {
+      print('❌ [FIREBASE_SERVICE] Error refrescando token: $e');
+      await _logError('Token Refresh Error', e.toString());
+      return false;
+    }
+  }
+
+  /// Verifica si el usuario está autenticado y el token es válido
+  /// Retorna true si está todo OK, false si necesita re-autenticación
+  Future<bool> ensureAuthenticated() async {
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      print(
+          '⚠️ [FIREBASE_SERVICE] Usuario no autenticado, intentando login...');
+      await signInWithEmailAndPassword();
+      return FirebaseAuth.instance.currentUser != null;
+    }
+
+    // Verificar si el token necesita refresh (opcional, getIdToken lo hace automáticamente)
+    try {
+      String? token =
+          await currentUser.getIdToken(false); // false = usa cache si es válido
+      return token != null;
+    } catch (e) {
+      print('❌ [FIREBASE_SERVICE] Error verificando autenticación: $e');
+      // Intentar refresh
+      return await refreshAuthToken();
+    }
   }
 
   Future<void> signInWithEmailAndPassword() async {
     try {
+      // Verificar que las credenciales no estén vacías
+      if (Config.firestoreEmail.isEmpty || Config.firestorePassword.isEmpty) {
+        print(
+            '⚠️ [FIREBASE_SERVICE] Credenciales vacías, no se puede hacer login');
+        print(
+            '   Email: "${Config.firestoreEmail}", Password: "${Config.firestorePassword}"');
+        await _logError('Firebase Auth Error',
+            'Credenciales vacías - Usuario no ha hecho login');
+        return;
+      }
+
+      print(
+          '🔐 [FIREBASE_SERVICE] Intentando login con: ${Config.firestoreEmail}');
+
       UserCredential userCredential =
           await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: Config.firestoreEmail, // Utiliza la variable global
         password: Config.firestorePassword, // Utiliza la variable global
       );
       _user = userCredential.user;
+      print('✅ [FIREBASE_SERVICE] Usuario autenticado: ${_user?.email}');
       // print("User signed in: ${_user?.email}");
     } on FirebaseAuthException catch (e) {
+      print(
+          '❌ [FIREBASE_SERVICE] Error de autenticación: ${e.code} - ${e.message}');
       // print("Error signing in: $e");
       await _logError('Firebase Auth Error', e.toString());
     }

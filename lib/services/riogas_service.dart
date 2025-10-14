@@ -57,7 +57,12 @@ class RioGasService {
     });
   }
 
-  static late final String baseUrl;
+  static late final String _baseUrl;
+  static bool _isInitialized =
+      false; // 🆕 Flag para prevenir doble inicialización
+
+  static String get baseUrl => _baseUrl;
+
   /* aca la constante */
   static const Map<String, String> headers = {
     'accept': 'application/json',
@@ -122,6 +127,12 @@ class RioGasService {
 
   // Ensure the timer starts at least once during initialization
   static Future<void> initializeService() async {
+    // 🆕 PROTECCIÓN: Evitar doble inicialización
+    if (_isInitialized) {
+      print('⚠️ [INIT] RioGasService ya está inicializado, saltando...');
+      return;
+    }
+
     // 👇 NUEVO: inicializar baseUrl dinámico con 600 (base) + 601 (appservices)
     print('🔧 [INIT] Inicializando configuración de URLs...');
     final baseRootConst = (await getConstantValue('600'))?.trim();
@@ -149,15 +160,18 @@ class RioGasService {
     if (servicesPath.startsWith('/')) servicesPath = servicesPath.substring(1);
     if (!servicesPath.endsWith('/')) servicesPath += '/';
 
-    baseUrl = '$baseRoot$servicesPath';
+    _baseUrl = '$baseRoot$servicesPath';
 
     print('🔧 [INIT] Base root normalizado: "$baseRoot"');
     print('🔧 [INIT] Services path normalizado: "$servicesPath"');
     print('🔧 [INIT] ===== URL FINAL CONFIGURADA =====');
-    print('🔧 [INIT] baseUrl = "$baseUrl"');
+    print('🔧 [INIT] baseUrl = "$_baseUrl"');
     print('🔧 [INIT] =====================================');
 
     await initializeRetryInterval();
+
+    _isInitialized = true; // 🆕 Marcar como inicializado
+    print('✅ [INIT] RioGasService inicializado correctamente');
     await deleteOldRequests();
     await _setupFailedRequestsListener(); // Configurar listener separado
 
