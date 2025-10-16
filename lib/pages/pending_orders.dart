@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/firebase_service.dart';
 import '../services/persistent_stream_manager.dart';
 import '../services/pending_orders_diagnostic.dart'; // Add diagnostic import
@@ -611,12 +612,20 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
       if (llamarws == 'S')
         try {
+          // Recuperar el último check del servicio desde Hive
+          final sessionBox = await Hive.openBox('sessionBox');
+          final lastServiceCheck =
+              sessionBox.get('lastServiceCheck', defaultValue: 'NOCHECK');
+
+          print(
+              "🔍 Usando NroSesion desde lastServiceCheck: $lastServiceCheck");
+
           await RioGasService.descargaLecturaPedidos(
             escenarioId,
             pedidoId,
             pedidoTpo,
             username!,
-            'NroSesion', // TODO: usar real si se tiene
+            lastServiceCheck, // ✅ Usar el estado del servicio como NroSesion
             deviceId!,
             lectDesc,
             fechaHoraCmbEst,
@@ -757,12 +766,18 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         };
       }).toList();
 
+      // Recuperar el último check del servicio desde Hive
+      final lastServiceCheck =
+          sessionBox.get('lastServiceCheck', defaultValue: 'NOCHECK');
+      print(
+          "$tag 🔍 Usando NroSesion desde lastServiceCheck: $lastServiceCheck");
+
       await RioGasService.descargaPedidos(
         escenarioId,
         sdtPedidos,
         pedidoTpo,
         username!,
-        'NroSesion', // TODO: reemplazar si hay sesión real
+        lastServiceCheck, // ✅ Usar el estado del servicio como NroSesion
         deviceId!,
         'DESCARGA',
         fechaHoraCmbEst,

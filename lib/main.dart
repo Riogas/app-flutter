@@ -755,9 +755,319 @@ Future<bool> _checkActiveSession(
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final bool isLoggedIn;
   MyApp({required this.isLoggedIn});
+
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  Timer? _notificationCheckTimer;
+  bool _isCheckingPermissions = false;
+  bool _dialogShown = false;
+  DateTime? _lastDialogDismissed;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startNotificationMonitoring();
+  }
+
+  @override
+  void dispose() {
+    _notificationCheckTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Verificar permisos cuando la app vuelve al foreground
+    if (state == AppLifecycleState.resumed) {
+      Future.delayed(Duration(milliseconds: 500), () {
+        _checkNotificationPermissions();
+      });
+    }
+  }
+
+  void _startNotificationMonitoring() {
+    // Verificación inicial de notificaciones
+    Future.delayed(Duration(seconds: 1), () {
+      _checkNotificationPermissions();
+    });
+
+    // Verificación inicial de optimización de batería
+    Future.delayed(Duration(seconds: 2), () {
+      _checkBatteryOptimization();
+    });
+
+    // Verificación periódica cada 5 segundos
+    _notificationCheckTimer = Timer.periodic(Duration(seconds: 5), (timer) {
+      _checkNotificationPermissions();
+    });
+  }
+
+  Future<void> _checkNotificationPermissions() async {
+    if (_isCheckingPermissions) return;
+    _isCheckingPermissions = true;
+
+    try {
+      // Verificar si las notificaciones están habilitadas
+      final status = await permission_handler.Permission.notification.status;
+
+      if (!status.isGranted) {
+        // Si el diálogo fue cerrado hace menos de 3 segundos, esperar
+        if (_lastDialogDismissed != null) {
+          final timeSinceDismissed =
+              DateTime.now().difference(_lastDialogDismissed!);
+          if (timeSinceDismissed.inSeconds < 3) {
+            _isCheckingPermissions = false;
+            return;
+          }
+        }
+
+        // Mostrar diálogo solo si no está ya visible
+        if (!_dialogShown && navigatorKey.currentContext != null) {
+          _dialogShown = true;
+          await _showNotificationPermissionDialog();
+        }
+      } else {
+        _dialogShown = false;
+      }
+    } catch (e) {
+      print('❌ Error verificando permisos de notificación: $e');
+    } finally {
+      _isCheckingPermissions = false;
+    }
+  }
+
+  Future<void> _checkBatteryOptimization() async {
+    if (!Platform.isAndroid) return;
+
+    try {
+      final platform = MethodChannel('background_service');
+      final bool isIgnoring =
+          await platform.invokeMethod('checkBatteryOptimization');
+
+      print('🔋 Battery optimization status: $isIgnoring');
+
+      if (!isIgnoring) {
+        // Si el diálogo fue cerrado hace menos de 3 segundos, esperar
+        if (_lastDialogDismissed != null) {
+          final timeSinceDismissed =
+              DateTime.now().difference(_lastDialogDismissed!);
+          if (timeSinceDismissed.inSeconds < 3) {
+            return;
+          }
+        }
+
+        // Mostrar diálogo solo si no está ya visible
+        if (!_dialogShown && navigatorKey.currentContext != null) {
+          _dialogShown = true;
+          await _showBatteryOptimizationDialog();
+        }
+      }
+    } catch (e) {
+      print('❌ Error verificando optimización de batería: $e');
+    }
+  }
+
+  Future<void> _showNotificationPermissionDialog() async {
+    if (navigatorKey.currentContext == null) {
+      _dialogShown = false;
+      return;
+    }
+
+    return showDialog<void>(
+      context: navigatorKey.currentContext!,
+      barrierDismissible: false, // No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async {
+            // No permitir cerrar con botón de atrás
+            _lastDialogDismissed = DateTime.now();
+            _dialogShown = false;
+            return true;
+          },
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.notifications_off, color: Colors.red, size: 30),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '⚠️ Notificaciones Deshabilitadas',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Las notificaciones son OBLIGATORIAS para el funcionamiento de la aplicación.',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  '📍 Sin notificaciones activas, el servicio de ubicación NO funcionará correctamente.',
+                  style: TextStyle(fontSize: 14),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  '🚫 La aplicación no puede continuar sin este permiso.',
+                  style: TextStyle(fontSize: 14, color: Colors.red),
+                ),
+                SizedBox(height: 15),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange, width: 2),
+                  ),
+                  child: Text(
+                    'Por favor, activa las notificaciones en la configuración de Android.',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.settings, color: Colors.white),
+                label: Text('Abrir Configuración',
+                    style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () async {
+                  _lastDialogDismissed = DateTime.now();
+                  _dialogShown = false;
+                  Navigator.of(context).pop();
+
+                  // Abrir configuración de la app
+                  await permission_handler.openAppSettings();
+
+                  // Esperar 3 segundos antes de volver a verificar
+                  await Future.delayed(Duration(seconds: 3));
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    ).then((_) {
+      _dialogShown = false;
+      _lastDialogDismissed = DateTime.now();
+    });
+  }
+
+  Future<void> _showBatteryOptimizationDialog() async {
+    if (navigatorKey.currentContext == null) {
+      _dialogShown = false;
+      return;
+    }
+
+    return showDialog<void>(
+      context: navigatorKey.currentContext!,
+      barrierDismissible: false, // No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async {
+            // No permitir cerrar con botón de atrás
+            _lastDialogDismissed = DateTime.now();
+            _dialogShown = false;
+            return true;
+          },
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.battery_alert, color: Colors.orange, size: 30),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '🔋 Optimización de Batería',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'La app necesita estar excluida de la optimización de batería para funcionar correctamente.',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  '📍 Sin esta exclusión, el sistema puede matar el servicio de ubicación en segundo plano.',
+                  style: TextStyle(fontSize: 14),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  '🚫 Esto impedirá el envío de coordenadas cuando la app esté cerrada.',
+                  style: TextStyle(fontSize: 14, color: Colors.red),
+                ),
+                SizedBox(height: 15),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange, width: 2),
+                  ),
+                  child: Text(
+                    'Por favor, permite que la app funcione sin restricciones de batería.',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.settings, color: Colors.white),
+                label: Text('Configurar Ahora',
+                    style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () async {
+                  _lastDialogDismissed = DateTime.now();
+                  _dialogShown = false;
+                  Navigator.of(context).pop();
+
+                  try {
+                    // Llamar al método nativo para abrir configuración
+                    final platform = MethodChannel('background_service');
+                    await platform
+                        .invokeMethod('requestBatteryOptimizationExemption');
+                  } catch (e) {
+                    print('❌ Error abriendo configuración de batería: $e');
+                  }
+
+                  // Esperar 3 segundos antes de volver a verificar
+                  await Future.delayed(Duration(seconds: 3));
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    ).then((_) {
+      _dialogShown = false;
+      _lastDialogDismissed = DateTime.now();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -765,7 +1075,7 @@ class MyApp extends StatelessWidget {
       title: 'MoveIT',
       theme: ThemeData(primarySwatch: Colors.blue),
       navigatorKey: navigatorKey,
-      home: isLoggedIn ? HomePage() : LoginPage(),
+      home: widget.isLoggedIn ? HomePage() : LoginPage(),
       onGenerateRoute: (RouteSettings settings) {
         if (settings.name == '/login') {
           final args = settings.arguments as Map<String, dynamic>?;

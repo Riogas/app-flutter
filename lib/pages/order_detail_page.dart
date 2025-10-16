@@ -1,5 +1,6 @@
 import 'package:MoveIT/services/location_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firebase_service.dart';
@@ -76,6 +77,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
     // ✅ Bloquear capturas (FLAG_SECURE) controlado por printScreen (solo Android)
     _enableScreenShield();
+
+    // 🆕 Verificar y reiniciar servicio de coordenadas si está muerto
+    _checkAndRestartLocationService();
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -193,6 +197,102 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         }
       }
     });
+  }
+
+  // 🆕 Método para verificar y reiniciar el servicio de coordenadas si está muerto
+  Future<void> _checkAndRestartLocationService() async {
+    const tag = '🔄[SERVICE_CHECK]';
+    String statusCode = 'E'; // E = Error por defecto
+
+    try {
+      print('$tag Verificando estado del servicio de ubicación...');
+
+      const platform = MethodChannel('background_service');
+      final result =
+          await platform.invokeMethod('checkAndRestartLocationService');
+
+      if (result is Map) {
+        final status = result['status'];
+        final message = result['message'];
+        final restarted = result['restarted'] ?? false;
+
+        print('$tag Estado: $status - $message');
+
+        // Determinar código de estado
+        if (status == 'disabled') {
+          statusCode = 'D'; // D = Disabled
+        } else if (restarted == true) {
+          statusCode = 'R'; // R = Restarted
+        } else if (status == 'active') {
+          statusCode = 'A'; // A = Active
+        } else if (status == 'never_started') {
+          statusCode = 'N'; // N = Never started
+        } else {
+          statusCode = 'U'; // U = Unknown
+        }
+
+        if (restarted == true) {
+          print('$tag ✅ Servicio reiniciado automáticamente');
+          // Mostrar un SnackBar al usuario
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text('Servicio de ubicación reiniciado'),
+                    ),
+                  ],
+                ),
+                duration: Duration(seconds: 3),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } else if (status == 'active') {
+          print('$tag ✅ Servicio activo y funcionando correctamente');
+        } else if (status == 'disabled') {
+          print('$tag ⚠️ Servicio deshabilitado manualmente, no se reinicia');
+        } else if (status == 'never_started') {
+          print(
+              '$tag ⚠️ Servicio nunca iniciado, usuario debe activarlo manualmente');
+        }
+      }
+    } catch (e) {
+      print('$tag ❌ Error verificando servicio: $e');
+      statusCode = 'E'; // E = Error
+    } finally {
+      // Guardar registro compacto en Hive (15 caracteres: timestamp + código)
+      try {
+        final now = DateTime.now();
+        final timestamp =
+            '${now.year.toString().substring(2)}${now.month.toString().padLeft(2, '0')}'
+            '${now.day.toString().padLeft(2, '0')}${now.hour.toString().padLeft(2, '0')}'
+            '${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+        final checkRecord =
+            '$timestamp$statusCode'; // Ej: "250116143025R" (13 chars)
+
+        final sessionBox = await Hive.openBox('sessionBox');
+        await sessionBox.put('lastServiceCheck', checkRecord);
+
+        final statusDesc = {
+              'A': 'Activo',
+              'R': 'Reiniciado',
+              'D': 'Deshabilitado',
+              'N': 'Nunca iniciado',
+              'E': 'Error',
+              'U': 'Desconocido'
+            }[statusCode] ??
+            'Desconocido';
+
+        print('$tag 💾 Guardado en Hive: $checkRecord ($statusDesc)');
+      } catch (e) {
+        print('$tag ❌ Error guardando en Hive: $e');
+      }
+    }
   }
 
   @override
