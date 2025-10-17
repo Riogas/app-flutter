@@ -1008,16 +1008,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 15),
-                Text(
-                  '📍 Sin esta exclusión, el sistema puede matar el servicio de ubicación en segundo plano.',
-                  style: TextStyle(fontSize: 14),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  '🚫 Esto impedirá el envío de coordenadas cuando la app esté cerrada.',
-                  style: TextStyle(fontSize: 14, color: Colors.red),
-                ),
-                SizedBox(height: 15),
                 Container(
                   padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
