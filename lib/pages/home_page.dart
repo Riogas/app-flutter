@@ -13,6 +13,7 @@ import '../services/session_service.dart';
 import '../services/firebase_service.dart';
 import '../services/location_service.dart'; // 🔹 Importamos LocationService
 import '../services/riogas_service.dart'; // 🔹 Importamos LocationService
+import '../services/debug_config_manager.dart'; // 🆕 Sistema de logging remoto
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart'; // Import Geolocator for Position
 import 'package:MoveIT/pages/login_page.dart';
@@ -672,6 +673,14 @@ class _HomePageState extends State<HomePage>
               await Hive.openBox(
                 'mensajesBox',
               ).then((box) => box.clear()); // Clear mensajesBox
+
+              // 🆕 Detener sistema de logging remoto
+              try {
+                await DebugConfigManager.stopListening();
+                print('✅ [DEBUG_CONFIG] Sistema de logging remoto detenido');
+              } catch (e) {
+                print('⚠️ [DEBUG_CONFIG] Error deteniendo logging remoto: $e');
+              }
 
               // Cancel all active streams and listeners
               _ordersSubscription?.cancel();

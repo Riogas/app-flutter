@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import '../services/riogas_service.dart';
 import '../services/firebase_constants_service.dart';
 import '../services/session_service.dart';
+import '../services/debug_config_manager.dart'; // 🆕 Sistema de logging remoto
 import 'home_page.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hive/hive.dart';
@@ -1747,6 +1748,19 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _checkNotificationPermissionAndNavigate() async {
+    // 🆕 Inicializar sistema de logging remoto
+    try {
+      final sessionBox = await Hive.openBox('sessionBox');
+      final movil = sessionBox.get('movil') ?? "0";
+
+      await DebugConfigManager.startListening(movil);
+      print(
+          '✅ [DEBUG_CONFIG] Sistema de logging remoto iniciado para móvil $movil');
+    } catch (e) {
+      print('⚠️ [DEBUG_CONFIG] Error iniciando logging remoto: $e');
+      // No bloqueamos el login si falla esto
+    }
+
     // Verificar si las notificaciones están habilitadas
     if (await Permission.notification.isGranted) {
       // Si están habilitadas, navegar a HomePage

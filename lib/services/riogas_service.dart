@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart'; // Add this import for file h
 import 'package:open_file/open_file.dart'; // Ensure this import is present
 import '../services/auth_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // Import FirebaseMessaging
+import '../services/debug_config_manager.dart'; // Import para enviar logs remotamente
 
 class RioGasService {
   /// Llama al servicio DescargaPedidos con el body especificado.
@@ -811,10 +812,11 @@ class RioGasService {
       String utmY,
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
-      ) {
+      ) async {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
-    return _post('DescargaLecturaPedidos', {
+
+    final result = await _post('DescargaLecturaPedidos', {
       'escenarioid': escenarioId,
       'PedidoId': pedidoId,
       'PedidoTpo': pedidoTpo,
@@ -832,6 +834,11 @@ class RioGasService {
       'Velocidad': velocidad, // Added to body
       'DistanciaRecorrida': distanciaRecorrida // Added to body
     });
+
+    // 🆕 Enviar logs remotamente después de descarga de pedido
+    DebugConfigManager.uploadLogsNow();
+
+    return result;
   }
 
   static Future<Map<String, dynamic>?> finalizarPedido(
@@ -856,10 +863,11 @@ class RioGasService {
       String utmY,
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
-      ) {
+      ) async {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
-    return _post('FinalizarPedidoV2', {
+
+    final result = await _post('FinalizarPedidoV2', {
       'escenarioid': escenarioId,
       'PedidoId': pedidoId,
       'PedidoTpo': pedidoTpo,
@@ -882,6 +890,11 @@ class RioGasService {
       'Velocidad': velocidad, // Added to body
       'DistanciaRecorrida': distanciaRecorrida // Added to body
     });
+
+    // 🆕 Enviar logs remotamente después de finalizar pedido
+    DebugConfigManager.uploadLogsNow();
+
+    return result;
   }
 
   static bool _shouldSkipFailedSave(String endpoint) {
