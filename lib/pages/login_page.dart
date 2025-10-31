@@ -1098,6 +1098,24 @@ class _LoginPageState extends State<LoginPage> {
                         } catch (e) {
                           print(
                               '⚠️ Error guardando móvil en SharedPreferences nativo: $e');
+                          // Enviar error a Android para que CriticalLogger lo registre
+                          try {
+                            const platform = MethodChannel(
+                                'com.riogas.appmovil/shared_prefs');
+                            await platform
+                                .invokeMethod('criticalLogFromFlutter', {
+                              'type': 'SharedPreferencesError',
+                              'movil': selectedMovil ?? 'unknown',
+                              'error': e.toString(),
+                              'context':
+                                  'Error guardando móvil en SharedPreferences desde Flutter (login_page)',
+                            });
+                            print(
+                                '✅ Error enviado a CriticalLogger en Android');
+                          } catch (err) {
+                            print(
+                                '⚠️ Error enviando log crítico a Android: $err');
+                          }
                         }
 
                         String hoy = DateTime.now()
