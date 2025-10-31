@@ -15,6 +15,7 @@ import 'dart:async';
 import '../utils/constantes.dart';
 import 'dart:io' show Platform;
 import 'package:screen_protector/screen_protector.dart';
+import '../services/debug_config_manager.dart'; // 🆕 Debug logging
 
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
@@ -207,16 +208,46 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     try {
       print('$tag Verificando estado del servicio de ubicación...');
 
+      // ✅ Obtener parámetros desde Hive (source of truth)
+      final sessionBox = await Hive.openBox('sessionBox');
+      final movil = sessionBox.get('movil')?.toString() ?? '';
+      final escenario = sessionBox.get('escenario')?.toString() ?? '';
+      final usuario = sessionBox.get('usuario')?.toString() ?? '';
+      final deviceId = sessionBox.get('deviceId')?.toString() ?? '';
+      final intervalMinutes = sessionBox.get('intervalMinutes') ?? 3;
+
+      // Validar que movil no esté vacío
+      if (movil.isEmpty) {
+        print(
+            '$tag ❌ CRITICAL: movil vacío en Hive, no se puede validar servicio');
+        statusCode = 'E'; // E = Error
+        return;
+      }
+
+      print('$tag Validando servicio con movil: $movil');
+
       const platform = MethodChannel('background_service');
       final result =
-          await platform.invokeMethod('checkAndRestartLocationService');
+          await platform.invokeMethod('checkAndRestartLocationService', {
+        'movil': movil,
+        'escenario': escenario,
+        'usuario': usuario,
+        'deviceId': deviceId,
+        'interval': intervalMinutes,
+      });
 
       if (result is Map) {
         final status = result['status'];
         final message = result['message'];
         final restarted = result['restarted'] ?? false;
+        final movilValidated = result['movil_validated'] ?? false;
+        final restartReason = result['restart_reason'] ?? '';
 
-        print('$tag Estado: $status - $message');
+        print(
+            '$tag Estado: $status - $message (movil_validated: $movilValidated)');
+        if (restartReason.isNotEmpty) {
+          print('$tag Razón de reinicio: $restartReason');
+        }
 
         // Determinar código de estado
         if (status == 'disabled') {
@@ -1089,6 +1120,31 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           await pedidosBox.put(pedidoId, 'Procesando');
           print("📥 [HIVE] Pedido $pedidoId marcado como 'Procesando'");
         }
+
+        // 🆕 ENVÍO DE LOGS DESPUÉS DE FINALIZAR PEDIDO
+        // Envía logs a n8n solo si han pasado 10 minutos desde el último envío
+        // Esto sirve como respaldo cuando WorkManager de Kotlin no puede ejecutarse
+        try {
+          print(
+              "📤 [DEBUG] Intentando enviar logs después de finalizar pedido...");
+          final logsSent = await DebugConfigManager.uploadLogsNow();
+          if (logsSent) {
+            print("✅ [DEBUG] Logs enviados exitosamente a n8n");
+          } else {
+            final minutesRemaining =
+                DebugConfigManager.getMinutesUntilNextUpload();
+            if (minutesRemaining != null && minutesRemaining > 0) {
+              print(
+                  "⏳ [DEBUG] Logs NO enviados (throttle activo: faltan $minutesRemaining min)");
+            } else {
+              print("⚠️ [DEBUG] Logs NO enviados (error o throttle en 0 min)");
+            }
+          }
+        } catch (e) {
+          print("⚠️ [DEBUG] Error enviando logs: $e");
+          // No afecta el flujo del usuario, el error es silencioso
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Visita finalizada con éxito.')),
         );

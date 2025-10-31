@@ -25,7 +25,7 @@ Cada vez que se accede a `order_detail_page.dart`, el sistema verifica automáti
 |--------|--------|-------------|
 | `A` | **Active** | Servicio activo y funcionando correctamente |
 | `R` | **Restarted** | Servicio fue reiniciado automáticamente porque estaba detenido |
-| `D` | **Disabled** | Servicio deshabilitado manualmente por el usuario |
+| `D` | **Disabled** | Servicio deshabilitado al cerrar sesión (manual o automático) |
 | `N` | **Never Started** | Servicio nunca fue iniciado por el usuario |
 | `E` | **Error** | Error al verificar el estado del servicio |
 | `U` | **Unknown** | Estado desconocido (caso excepcional) |
@@ -124,14 +124,22 @@ Cada vez que se accede a `order_detail_page.dart`, el sistema verifica automáti
 ### Caso 3: Servicio Deshabilitado por Usuario
 
 ```
-1. Usuario deshabilitó servicio manualmente (toggle en configuración)
-2. Usuario entra a order_detail_page.dart
-3. Sistema verifica servicio → está deshabilitado
-4. NO se reinicia (respeta decisión del usuario)
-5. Guarda en Hive: "250116144012D"
-6. Usuario toca pedido en pending_orders
-7. Se envía descargaLectura con NroSesion="250116144012D"
-8. Servidor sabe: "El usuario deshabilitó el servicio manualmente"
+1. Usuario cierra sesión desde settings_page.dart (botón "Cerrar Sesión")
+   O sistema hace logout automático (sesión expirada, error auth)
+2. Sistema ejecuta stopLocationService() antes de logout
+3. Se marca service_disabled = true en SharedPreferences
+4. Usuario vuelve a iniciar sesión
+5. Usuario entra a order_detail_page.dart
+6. Sistema verifica servicio → está deshabilitado
+7. NO se reinicia (porque fue detenido intencionalmente al logout)
+8. Guarda en Hive: "250116144012D"
+9. Usuario toca pedido en pending_orders
+10. Se envía descargaLectura con NroSesion="250116144012D"
+11. Servidor sabe: "El servicio se detuvo al cerrar sesión (no reiniciado aún)"
+
+NOTA: El servicio se reactivará automáticamente cuando el usuario:
+- Entre a pending_orders.dart (inicia servicio al cargar pedidos)
+- O cuando el sistema detecte actividad de pedidos
 ```
 
 ### Caso 4: Error en Verificación

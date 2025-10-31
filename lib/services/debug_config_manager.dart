@@ -17,14 +17,13 @@ class DebugConfigManager {
   static StreamSubscription<DocumentSnapshot>? _debugConfigSubscription;
   static String? _currentMovil;
   static bool _isInitialized = false;
+  static DateTime? _lastUploadTime; // Timestamp del último envío exitoso
 
   /// Inicia el listener de Firestore para el móvil especificado
   /// Debe llamarse después del login
   static Future<void> startListening(String movil) async {
-    if (_isInitialized && _currentMovil == movil) {
-      debugPrint('[$TAG] Ya está escuchando para móvil $movil');
-      return;
-    }
+    // 🆕 SIEMPRE reiniciar el listener (no confiar en flags de estado)
+    debugPrint('[$TAG] 🔄 Reiniciando listener para móvil $movil (forzado)');
 
     // Detener listener anterior si existe
     await stopListening();
@@ -32,7 +31,9 @@ class DebugConfigManager {
     _currentMovil = movil;
     _isInitialized = true;
 
-    debugPrint('[$TAG] Iniciando listener para móvil $movil');
+    debugPrint('[$TAG] 🚀 Iniciando listener para móvil $movil');
+    debugPrint('[$TAG]    - Colección: Moviles-1000');
+    debugPrint('[$TAG]    - Documento: Moviles-$movil');
 
     try {
       // Escuchar cambios en el documento del móvil
@@ -43,6 +44,7 @@ class DebugConfigManager {
           .snapshots()
           .listen(
         (snapshot) {
+          debugPrint('[$TAG] 🔔 Evento recibido desde Firestore');
           _onDebugConfigChanged(snapshot);
         },
         onError: (error) {
@@ -77,29 +79,57 @@ class DebugConfigManager {
 
   /// Procesa cambios en el documento de Firestore
   static void _onDebugConfigChanged(DocumentSnapshot snapshot) {
+    debugPrint('[$TAG] 📡 Procesando cambio de configuración...');
+    debugPrint('[$TAG]    - Documento existe: ${snapshot.exists}');
+    debugPrint('[$TAG]    - Móvil actual: $_currentMovil');
+    debugPrint('[$TAG]    - Document ID: ${snapshot.id}');
+
     if (!snapshot.exists) {
-      debugPrint('[$TAG] Documento no existe para móvil $_currentMovil');
+      debugPrint('[$TAG] ❌ Documento NO existe para móvil $_currentMovil');
+      debugPrint(
+          '[$TAG]    - Ruta esperada: Moviles-1000/Moviles-$_currentMovil');
+      debugPrint(
+          '[$TAG]    - Verifica que el documento esté creado en Firestore');
       return;
     }
 
     try {
       final data = snapshot.data() as Map<String, dynamic>?;
+
+      debugPrint('[$TAG] 📄 Data recibida:');
+      debugPrint('[$TAG]    - Raw data: $data');
+
       if (data == null) {
-        debugPrint('[$TAG] Data es null');
+        debugPrint('[$TAG] ⚠️ Data es null (documento existe pero vacío)');
         return;
       }
 
       // Leer flag debugMode (por defecto false)
-      final bool debugMode = data['debugMode'] ?? false;
+      final debugModeRaw = data['debugMode'];
+      final bool debugMode = debugModeRaw is bool ? debugModeRaw : false;
       final String debugLevel = data['debugLevel'] ?? 'INFO';
 
+      debugPrint('[$TAG] 🔍 Campos detectados:');
       debugPrint(
-          '[$TAG] 📡 Configuración recibida: debugMode=$debugMode, level=$debugLevel');
+          '[$TAG]    - debugMode (raw): $debugModeRaw (tipo: ${debugModeRaw.runtimeType})');
+      debugPrint('[$TAG]    - debugMode (parsed): $debugMode');
+      debugPrint('[$TAG]    - debugLevel: $debugLevel');
+
+      if (debugModeRaw != null && debugModeRaw is! bool) {
+        debugPrint('[$TAG] ⚠️ ADVERTENCIA: debugMode NO es boolean!');
+        debugPrint('[$TAG]    - Tipo actual: ${debugModeRaw.runtimeType}');
+        debugPrint('[$TAG]    - Valor: $debugModeRaw');
+        debugPrint('[$TAG]    - Debe ser boolean true/false en Firestore');
+      }
+
+      debugPrint('[$TAG] ✅ Configuración válida detectada');
+      debugPrint('[$TAG]    - debugMode=$debugMode, level=$debugLevel');
 
       // Comunicar cambio a la capa nativa (Kotlin)
       _notifyNativeLayer(debugMode, debugLevel);
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('[$TAG] ❌ Error procesando cambio de config: $e');
+      debugPrint('[$TAG]    - StackTrace: $stackTrace');
     }
   }
 
@@ -161,14 +191,68 @@ class DebugConfigManager {
 
   /// Fuerza el envío inmediato de logs al servidor (sin esperar los 10 minutos)
   /// Útil para enviar logs en momentos críticos (ej: después de DescargaLecturaPedidos o FinalizarPedido)
-  static Future<void> uploadLogsNow() async {
+  ///
+  /// **THROTTLE:** Solo envía si han pasado 10 minutos desde el último envío exitoso
+  /// para evitar duplicados con el WorkManager automático de Kotlin.
+  ///
+  /// Parámetros:
+  /// - [force]: Si es true, ignora el throttle y envía siempre (default: false)
+  ///
+  /// Retorna:
+  /// - true: Logs enviados exitosamente
+  /// - false: No se enviaron (throttle activo o error)
+  static Future<bool> uploadLogsNow({bool force = false}) async {
     try {
+      // Verificar throttle de 10 minutos (a menos que sea forzado)
+      if (!force && _lastUploadTime != null) {
+        final timeSinceLastUpload = DateTime.now().difference(_lastUploadTime!);
+        final minutesSinceLastUpload = timeSinceLastUpload.inMinutes;
+
+        if (minutesSinceLastUpload < 10) {
+          debugPrint(
+              '[$TAG] ⏳ Throttle activo: último envío hace $minutesSinceLastUpload min');
+          debugPrint(
+              '[$TAG]    - Faltan ${10 - minutesSinceLastUpload} min para próximo envío permitido');
+          return false;
+        }
+      }
+
       debugPrint('[$TAG] 🚀 Enviando logs inmediatamente...');
+      debugPrint('[$TAG]    - Forzado: $force');
+      debugPrint(
+          '[$TAG]    - Último envío: ${_lastUploadTime?.toString() ?? "nunca"}');
+
       await _channel.invokeMethod('uploadLogsNow');
+
+      // Actualizar timestamp del último envío exitoso
+      _lastUploadTime = DateTime.now();
+
       debugPrint('[$TAG] ✅ Logs enviados exitosamente');
+      debugPrint(
+          '[$TAG]    - Próximo envío permitido: ${DateTime.now().add(const Duration(minutes: 10))}');
+
+      return true;
     } catch (e) {
       debugPrint('[$TAG] ⚠️ Error enviando logs: $e');
+      return false;
     }
+  }
+
+  /// Limpia el timestamp del último envío (útil para testing o reset manual)
+  static void resetUploadThrottle() {
+    _lastUploadTime = null;
+    debugPrint('[$TAG] 🔄 Throttle de upload reseteado');
+  }
+
+  /// Obtiene el tiempo restante hasta el próximo envío permitido (en minutos)
+  /// Retorna null si no hay throttle activo
+  static int? getMinutesUntilNextUpload() {
+    if (_lastUploadTime == null) return null;
+
+    final timeSinceLastUpload = DateTime.now().difference(_lastUploadTime!);
+    final minutesRemaining = 10 - timeSinceLastUpload.inMinutes;
+
+    return minutesRemaining > 0 ? minutesRemaining : 0;
   }
 
   /// Verifica si el manager está escuchando

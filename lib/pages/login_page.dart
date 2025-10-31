@@ -1087,6 +1087,19 @@ class _LoginPageState extends State<LoginPage> {
                         await box.put('movil', selectedMovil);
                         await userbox.put('movil', selectedMovil);
 
+                        // 🆕 Guardar móvil en SharedPreferences nativo (Android) para CriticalLogger
+                        try {
+                          const platform =
+                              MethodChannel('com.riogas.appmovil/shared_prefs');
+                          await platform.invokeMethod(
+                              'saveMovil', {'movil': selectedMovil});
+                          print(
+                              '✅ Móvil guardado en SharedPreferences nativo: $selectedMovil');
+                        } catch (e) {
+                          print(
+                              '⚠️ Error guardando móvil en SharedPreferences nativo: $e');
+                        }
+
                         String hoy = DateTime.now()
                             .toUtc()
                             .toIso8601String()
@@ -1451,13 +1464,35 @@ class _LoginPageState extends State<LoginPage> {
                     Navigator.of(context)
                         .pop(); // Cierra el diálogo de progreso
 
-                    final result = await OpenFile.open(filePath);
+                    // 🆕 Usar instalador nativo en lugar de OpenFile para evitar "error de paquetes"
+                    try {
+                      const platform = MethodChannel('apk_installer');
+                      final result = await platform.invokeMethod('installApk', {
+                        'filePath': filePath,
+                      });
 
-                    var box = await Hive.openBox('sessionBox');
-                    box.clear();
+                      print('✅ APK enviado al instalador nativo: $result');
 
-                    if (result.type != ResultType.done) {
-                      _showMessage('No se pudo abrir el archivo descargado.');
+                      // Limpiar sesión antes de cerrar la app (la actualización reiniciará la app)
+                      var box = await Hive.openBox('sessionBox');
+                      box.clear();
+
+                      // Informar al usuario que la instalación comenzó
+                      _showMessage(
+                          'Instalación iniciada. La app se reiniciará al completar.');
+                    } on PlatformException catch (e) {
+                      print('❌ Error en instalador nativo: ${e.message}');
+
+                      // Fallback: Intentar con OpenFile (método anterior)
+                      final result = await OpenFile.open(filePath);
+
+                      var box = await Hive.openBox('sessionBox');
+                      box.clear();
+
+                      if (result.type != ResultType.done) {
+                        _showMessage(
+                            'No se pudo abrir el archivo descargado. Error: ${e.message}');
+                      }
                     }
                   } catch (e) {
                     Navigator.of(context)

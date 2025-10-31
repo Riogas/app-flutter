@@ -109,6 +109,9 @@ class _HomePageState extends State<HomePage>
       });
     }
 
+    // 🆕 Inicializar sistema de logging remoto (en caso de que app se haya cerrado y reabierto)
+    _initDebugConfigListener();
+
     // 🔹 Initialize message counter notifier
     _messageCountNotifier = ValueNotifier<int>(0);
     // 🔹 Initialize pending orders counter notifier
@@ -173,6 +176,30 @@ class _HomePageState extends State<HomePage>
     //_initializeRetryInterval();
 
     _initGpsListener();
+  }
+
+  /// 🆕 Inicializa el listener de debug config desde Firestore
+  /// Se ejecuta en initState de HomePage para detectar cambios de debugMode
+  /// incluso si la app fue cerrada y reabierta sin hacer login de nuevo
+  Future<void> _initDebugConfigListener() async {
+    try {
+      final sessionBox = await Hive.openBox('sessionBox');
+      final movil = sessionBox.get('movil');
+
+      if (movil == null || movil == "0") {
+        print(
+            '⚠️ [DEBUG_CONFIG] No hay móvil en sesión, saltando inicialización');
+        return;
+      }
+
+      // Forzar reinicio del listener (en caso de que app se cerró y reabrió)
+      await DebugConfigManager.startListening(movil);
+      print(
+          '✅ [DEBUG_CONFIG] Listener reiniciado en HomePage para móvil $movil');
+    } catch (e) {
+      print('⚠️ [DEBUG_CONFIG] Error reiniciando listener en HomePage: $e');
+      // No bloqueamos la inicialización de HomePage si falla esto
+    }
   }
 
   Future<void> _initializeRetryInterval() async {

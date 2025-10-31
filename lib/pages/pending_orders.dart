@@ -303,6 +303,43 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     final startedAt = DateTime.now();
 
     try {
+      // 🆕 VERIFICAR Y REINICIAR SERVICIO GPS ANTES DE DESCARGAR
+      print(
+          '$tag 🔄 Verificando estado del servicio GPS antes de descargar...');
+      try {
+        const platform = MethodChannel('background_service');
+        final result =
+            await platform.invokeMethod('checkAndRestartLocationService');
+
+        if (result is Map) {
+          final status = result['status'];
+          final restarted = result['restarted'] ?? false;
+          final message = result['message'] ?? '';
+
+          print('$tag ✅ Estado del servicio: $status');
+
+          if (restarted == true) {
+            print(
+                '$tag 🚀 Servicio GPS reiniciado automáticamente antes de descarga');
+
+            // Informar al usuario si hay contexto disponible
+            if (context != null && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content:
+                      Text('Servicio GPS activado para descarga de pedidos'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          }
+        }
+      } catch (e) {
+        print(
+            '$tag ⚠️ Error verificando servicio GPS: $e (continuando con descarga)');
+      }
+
       final pedidos = PersistentStreamManager().pedidos;
       print('$tag ▶️ Iniciando DESCARGA de pedidos (${pedidos.length})...');
 
