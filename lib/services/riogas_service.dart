@@ -13,9 +13,10 @@ import 'package:open_file/open_file.dart'; // Ensure this import is present
 import '../services/auth_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // Import FirebaseMessaging
 import '../services/debug_config_manager.dart'; // Import para enviar logs remotamente
+import 'package:flutter/services.dart'; // Import para MethodChannel
 
 class RioGasService {
-  /// Llama al servicio DescargaPedidos con el body especificado.
+  /// Llama al servicio DescargaPedidosV2 con el body especificado.
   /// [sdtPedidos] debe ser una lista de mapas con la clave 'PedidoId'.
   static Future<Map<String, dynamic>?> descargaPedidos(
     int escenarioId,
@@ -34,10 +35,21 @@ class RioGasService {
     String utmY,
     double velocidad,
     double distanciaRecorrida,
-  ) {
+  ) async {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
-    return _post('DescargaPedidos', {
+
+    // 🚩 Obtener flag 'services_need_restart' desde SharedPreferences nativo
+    bool despertar = false;
+    try {
+      final servicesNeedRestart = await getServicesNeedRestart();
+      despertar = servicesNeedRestart ?? false;
+      print('🚩 [DescargaPedidosV2] Despertar servicios: $despertar');
+    } catch (e) {
+      print('❌ [DescargaPedidosV2] Error obteniendo flag despertar: $e');
+    }
+
+    return _post('DescargaPedidosV2', {
       'token': token,
       'escenarioid': escenarioId,
       'sdtPedidos': sdtPedidos,
@@ -55,14 +67,23 @@ class RioGasService {
       'utmY': utmY,
       'Velocidad': velocidad,
       'DistanciaRecorrida': distanciaRecorrida,
+      'Despertar': despertar // 🆕 Flag para despertar servicios
     });
   }
 
-  static late final String _baseUrl;
+  static late final String _baseUrlProduction;
   static bool _isInitialized =
       false; // 🆕 Flag para prevenir doble inicialización
 
-  static String get baseUrl => _baseUrl;
+  // 🌍 Getter dinámico que devuelve la URL según el ambiente
+  static String get baseUrl {
+    // Si está en desarrollo, usar URLs de desarrollo
+    if (AppEnvironment.isDevelopment) {
+      return '${AppEnvironment.devBaseRoot}${AppEnvironment.devServicesPath}';
+    }
+    // Si está en producción, usar la URL configurada desde constantes
+    return _baseUrlProduction;
+  }
 
   /* aca la constante */
   static const Map<String, String> headers = {
@@ -161,12 +182,15 @@ class RioGasService {
     if (servicesPath.startsWith('/')) servicesPath = servicesPath.substring(1);
     if (!servicesPath.endsWith('/')) servicesPath += '/';
 
-    _baseUrl = '$baseRoot$servicesPath';
+    _baseUrlProduction = '$baseRoot$servicesPath';
 
     print('🔧 [INIT] Base root normalizado: "$baseRoot"');
     print('🔧 [INIT] Services path normalizado: "$servicesPath"');
     print('🔧 [INIT] ===== URL FINAL CONFIGURADA =====');
-    print('🔧 [INIT] baseUrl = "$_baseUrl"');
+    print('🔧 [INIT] baseUrl PRODUCCIÓN = "$_baseUrlProduction"');
+    print(
+        '🔧 [INIT] baseUrl DESARROLLO = "${AppEnvironment.devBaseRoot}${AppEnvironment.devServicesPath}"');
+    print('🌍 [INIT] Ambiente actual: ${AppEnvironment.environmentName}');
     print('🔧 [INIT] =====================================');
 
     await initializeRetryInterval();
@@ -210,61 +234,226 @@ class RioGasService {
     });
   }
 
+  /// Envía el error a n8n para monitoreo centralizado
+  static Future<void> _sendErrorToN8n(
+    String endpoint,
+    Map<String, dynamic> payload,
+    String errorMessage,
+  ) async {
+    try {
+      print('📤 [N8N_ERROR] Enviando error a n8n: $endpoint');
+
+      final sessionBox = await Hive.openBox('sessionBox');
+      final String? movil = sessionBox.get('movil');
+      final String? username = sessionBox.get('username');
+      final String? deviceId = sessionBox.get('deviceId');
+      final String? escenario = sessionBox.get('escenario');
+
+      // Construir payload para n8n
+      final n8nPayload = {
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'endpoint': endpoint,
+        'errorMessage': errorMessage,
+        'payload': payload,
+        'movilId': movil,
+        'username': username,
+        'deviceId': deviceId,
+        'escenarioId': escenario,
+        'appVersion': '1.0.0', // Puedes obtenerlo de package_info si lo tienes
+      };
+
+      final response = await http
+          .post(
+            Uri.parse('https://n8n.riogas.com.uy/webhook/ProcesarErrores'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(n8nPayload),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print('✅ [N8N_ERROR] Error enviado exitosamente a n8n');
+        print('✅ [N8N_ERROR] Response: ${response.body}');
+      } else {
+        print(
+            '⚠️ [N8N_ERROR] n8n respondió con código: ${response.statusCode}');
+        print('⚠️ [N8N_ERROR] Response: ${response.body}');
+      }
+    } on TimeoutException {
+      print('⏰ [N8N_ERROR] Timeout enviando error a n8n (10s)');
+    } on SocketException {
+      print('❌ [N8N_ERROR] Sin conexión a internet para enviar a n8n');
+    } catch (e) {
+      print('❌ [N8N_ERROR] Error enviando a n8n: $e');
+      // No lanzamos excepción para no interrumpir el guardado en failedRequestsBox
+    }
+  }
+
   static Future<void> _saveFailedRequest(
     String? endpoint,
-    Map<String, dynamic>? payload,
-  ) async {
+    Map<String, dynamic>? payload, {
+    String? errorMessage, // 🆕 Mensaje de error opcional
+  }) async {
     if (endpoint == null || payload == null) return;
 
     final failedRequestsBox = await Hive.openBox('failedRequestsBox');
-    print('📦 Intentando guardar request fallido: $endpoint');
+    print('📦 [SAVE_FAILED] Intentando guardar request fallido: $endpoint');
+    print('📦 [SAVE_FAILED] Total actual en box: ${failedRequestsBox.length}');
+    if (errorMessage != null) {
+      print('📦 [SAVE_FAILED] Error: $errorMessage');
+    }
 
-    // Para FinalizarPedidoV2 deduplicamos por firma JSON del payload
-    if (endpoint == 'FinalizarPedidoV2') {
-      final newSignature = jsonEncode(payload); // firma simple y suficiente
+    // Para endpoints V3 (y V2 legacy) deduplicamos por firma JSON del payload
+    final v3Endpoints = [
+      'FinalizarPedidoV3',
+      'FinalizarPedidoV2',
+      'DescargaPedidosV2',
+      'DescargaPedidos',
+      'DescargaLecturaMensajesV2',
+      'DescargaLecturaMensajes',
+      'DescargaLecturaPedidosV2',
+      'DescargaLecturaPedidos'
+    ];
 
-      final exists = failedRequestsBox.values.any((request) {
-        try {
-          final map = Map<String, dynamic>.from(request as Map);
-          return map['endpoint'] == 'FinalizarPedidoV2' &&
-              map['signature'] == newSignature;
-        } catch (_) {
-          return false;
-        }
-      });
+    if (v3Endpoints.contains(endpoint)) {
+      // 🎯 Deduplicación por LÓGICA DE NEGOCIO (ID del recurso)
+      // En lugar de comparar todo el payload, solo comparamos el identificador único
 
-      if (exists) {
-        print(
-            '⚠️ Duplicate FinalizarPedidoV2 detectado, no se guarda nuevamente.');
-        return;
+      // 1️⃣ Extraer el ID relevante según el endpoint
+      String? businessKey;
+      String businessKeyName = '';
+
+      if (endpoint.contains('FinalizarPedido')) {
+        businessKey = payload['PedidoId']?.toString();
+        businessKeyName = 'PedidoId';
+      } else if (endpoint.contains('DescargaPedidos') ||
+          endpoint.contains('DescargaLecturaPedidos')) {
+        businessKey = payload['PedidoId']?.toString();
+        businessKeyName = 'PedidoId';
+      } else if (endpoint.contains('DescargaLecturaMensajes')) {
+        businessKey = payload['MessageId']?.toString();
+        businessKeyName = 'MessageId';
       }
 
+      if (businessKey == null) {
+        print('⚠️ [DEDUP_CHECK] No se pudo extraer ID de negocio del payload');
+        // Si no hay ID, no podemos deduplicar, guardamos el request
+      } else {
+        print('🔍 [DEDUP_CHECK] Endpoint V3 detectado: $endpoint');
+        print(
+            '🔍 [DEDUP_CHECK] Clave de negocio: $businessKeyName = $businessKey');
+        print(
+            '🔍 [DEDUP_CHECK] Buscando duplicados en ${failedRequestsBox.length} requests...');
+
+        // 2️⃣ Buscar duplicados comparando endpoint + ID de negocio
+        final exists = failedRequestsBox.values.any((request) {
+          try {
+            final map = Map<String, dynamic>.from(request as Map);
+
+            // Debe ser el mismo endpoint (o su versión V2/V3)
+            final savedEndpoint = map['endpoint'] as String;
+            final isSameEndpointFamily =
+                (endpoint.contains('FinalizarPedido') &&
+                        savedEndpoint.contains('FinalizarPedido')) ||
+                    (endpoint.contains('DescargaPedidos') &&
+                        savedEndpoint.contains('DescargaPedidos')) ||
+                    (endpoint.contains('DescargaLecturaPedidos') &&
+                        savedEndpoint.contains('DescargaLecturaPedidos')) ||
+                    (endpoint.contains('DescargaLecturaMensajes') &&
+                        savedEndpoint.contains('DescargaLecturaMensajes'));
+
+            if (!isSameEndpointFamily) {
+              return false; // Diferente familia de endpoint, no es duplicado
+            }
+
+            // Extraer el ID del request guardado
+            final savedPayload =
+                Map<String, dynamic>.from(map['payload'] as Map);
+            final savedBusinessKey = savedPayload[businessKeyName]?.toString();
+
+            final isDuplicate = savedBusinessKey == businessKey;
+
+            if (isDuplicate) {
+              print('🔍 [DEDUP_CHECK] ⚠️ DUPLICADO ENCONTRADO!');
+              print('🔍 [DEDUP_CHECK]    - Endpoint guardado: $savedEndpoint');
+              print(
+                  '🔍 [DEDUP_CHECK]    - $businessKeyName guardado: $savedBusinessKey');
+              print(
+                  '🔍 [DEDUP_CHECK]    - Timestamp guardado: ${map['timestamp']}');
+              print(
+                  '🔍 [DEDUP_CHECK]    - ✅ Mismo recurso, NO se debe duplicar');
+            }
+
+            return isDuplicate;
+          } catch (e) {
+            print('🔍 [DEDUP_CHECK] ⚠️ Error comparando request: $e');
+            return false;
+          }
+        });
+
+        if (exists) {
+          print(
+              '⚠️ [DEDUP_BLOCKED] Request duplicado detectado para $endpoint');
+          print(
+              '⚠️ [DEDUP_BLOCKED] $businessKeyName: $businessKey ya está en cola de reintentos');
+          print(
+              '⚠️ [DEDUP_BLOCKED] ✅ Control de duplicados funcionando correctamente!');
+          return;
+        }
+      }
+
+      // 3️⃣ No es duplicado, guardar el request
       await failedRequestsBox.add({
         'endpoint': endpoint,
         'payload': payload,
-        'signature': newSignature,
+        'businessKey': businessKey, // 🆕 Guardar el ID para referencia
+        'businessKeyName': businessKeyName, // 🆕 Guardar el nombre del campo
         'timestamp': DateTime.now().toIso8601String(),
       });
-      print(
-          '✅ Request FinalizarPedidoV2 guardado. Total en box: ${failedRequestsBox.length}');
+      print('✅ [SAVED] Request $endpoint guardado exitosamente');
+      print('✅ [SAVED] $businessKeyName: $businessKey');
+      print('✅ [SAVED] Total en box: ${failedRequestsBox.length}');
+
+      // 🆕 Enviar error a n8n después de guardar exitosamente
+      await _sendErrorToN8n(
+        endpoint,
+        payload,
+        errorMessage ?? 'Error desconocido - request fallido',
+      );
+
       return;
     }
 
     // Resto de endpoints (salvo los prohibidos que ya filtramos antes)
+    print('🔍 [DEDUP_CHECK] Endpoint no-V3: $endpoint');
+    print(
+        '🔍 [DEDUP_CHECK] Buscando duplicados en ${failedRequestsBox.length} requests...');
+
     final exists = failedRequestsBox.values.any((request) {
       try {
         final map = Map<String, dynamic>.from(request as Map);
         // dedupe básico por endpoint+payload textual
-        return map['endpoint'] == endpoint &&
+        final isDuplicate = map['endpoint'] == endpoint &&
             Map<String, dynamic>.from(map['payload'] as Map).toString() ==
                 payload.toString();
+
+        if (isDuplicate) {
+          print('🔍 [DEDUP_CHECK] ⚠️ DUPLICADO ENCONTRADO!');
+          print('🔍 [DEDUP_CHECK]    - Endpoint guardado: ${map['endpoint']}');
+          print(
+              '🔍 [DEDUP_CHECK]    - Timestamp guardado: ${map['timestamp']}');
+        }
+
+        return isDuplicate;
       } catch (_) {
         return false;
       }
     });
 
     if (exists) {
-      print('⚠️ Request duplicado detectado para $endpoint, no se guarda.');
+      print(
+          '⚠️ [DEDUP_BLOCKED] Request duplicado detectado para $endpoint, NO se guarda.');
+      print(
+          '⚠️ [DEDUP_BLOCKED] ✅ Control de duplicados funcionando correctamente!');
       return;
     }
 
@@ -274,8 +463,15 @@ class RioGasService {
       'timestamp': DateTime.now().toIso8601String(),
     });
 
-    print(
-        '✅ Request $endpoint guardado exitosamente. Total en box: ${failedRequestsBox.length}');
+    print('✅ [SAVED] Request $endpoint guardado exitosamente');
+    print('✅ [SAVED] Total en box: ${failedRequestsBox.length}');
+
+    // 🆕 Enviar error a n8n después de guardar exitosamente
+    await _sendErrorToN8n(
+      endpoint,
+      payload,
+      errorMessage ?? 'Error desconocido - request fallido',
+    );
   }
 
   // Método para verificar conectividad RioGas en tiempo real
@@ -588,7 +784,11 @@ class RioGasService {
           print('❌ [HTTP_POST] Status Code: ${response.statusCode}');
           print('❌ [HTTP_POST] Response Body: ${response.body}');
           if (!_shouldSkipFailedSave(endpoint)) {
-            await _saveFailedRequest(endpoint, body);
+            await _saveFailedRequest(
+              endpoint,
+              body,
+              errorMessage: 'HTTP ${response.statusCode}: ${response.body}',
+            );
           }
 
           await _logError(
@@ -603,9 +803,13 @@ class RioGasService {
           await _updateConnectionStatus(false);
         }
       } catch (e) {
-        print('? Exception occurred while sending request to $endpoint: $e');
+        print('❌ Exception occurred while sending request to $endpoint: $e');
         if (!_shouldSkipFailedSave(endpoint)) {
-          await _saveFailedRequest(endpoint, body);
+          await _saveFailedRequest(
+            endpoint,
+            body,
+            errorMessage: 'Exception: $e',
+          );
         }
         await _updateConnectionStatus(false);
       }
@@ -613,7 +817,13 @@ class RioGasService {
     } catch (e) {
       // 👇 No guardamos solicitudes fallidas de estos endpoints
       if (!_shouldSkipFailedSave(endpoint)) {
-        await _saveFailedRequest(endpoint, body);
+        await _saveFailedRequest(
+          endpoint,
+          body,
+          errorMessage: e is SocketException
+              ? 'Network issue: Sin conexión a internet'
+              : 'Exception: $e',
+        );
       }
 
       await _logError(
@@ -772,10 +982,22 @@ class RioGasService {
       String utmY,
       double velocidad, // Added parameter
       double distanciaRecorrida // Added parameter
-      ) {
+      ) async {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
-    return _post('DescargaLecturaMensajes', {
+
+    // 🚩 Obtener flag 'services_need_restart' desde SharedPreferences nativo
+    bool despertar = false;
+    try {
+      final servicesNeedRestart = await getServicesNeedRestart();
+      despertar = servicesNeedRestart ?? false;
+      print('🚩 [DescargaLecturaMensajesV2] Despertar servicios: $despertar');
+    } catch (e) {
+      print(
+          '❌ [DescargaLecturaMensajesV2] Error obteniendo flag despertar: $e');
+    }
+
+    return _post('DescargaLecturaMensajesV2', {
       'escenarioid': escenarioId,
       'MovilId': movilId,
       'MessageId': messageId,
@@ -791,7 +1013,8 @@ class RioGasService {
       'utmX': utmX,
       'utmY': utmY,
       'Velocidad': velocidad, // Added to body
-      'DistanciaRecorrida': distanciaRecorrida // Added to body
+      'DistanciaRecorrida': distanciaRecorrida, // Added to body
+      'Despertar': despertar // 🆕 Flag para despertar servicios
     });
   }
 
@@ -816,7 +1039,17 @@ class RioGasService {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
 
-    final result = await _post('DescargaLecturaPedidos', {
+    // 🚩 Obtener flag 'services_need_restart' desde SharedPreferences nativo
+    bool despertar = false;
+    try {
+      final servicesNeedRestart = await getServicesNeedRestart();
+      despertar = servicesNeedRestart ?? false;
+      print('🚩 [DescargaLecturaPedidosV2] Despertar servicios: $despertar');
+    } catch (e) {
+      print('❌ [DescargaLecturaPedidosV2] Error obteniendo flag despertar: $e');
+    }
+
+    final result = await _post('DescargaLecturaPedidosV2', {
       'escenarioid': escenarioId,
       'PedidoId': pedidoId,
       'PedidoTpo': pedidoTpo,
@@ -832,7 +1065,8 @@ class RioGasService {
       'utmX': utmX,
       'utmY': utmY,
       'Velocidad': velocidad, // Added to body
-      'DistanciaRecorrida': distanciaRecorrida // Added to body
+      'DistanciaRecorrida': distanciaRecorrida, // Added to body
+      'Despertar': despertar // 🆕 Flag para despertar servicios
     });
 
     // 🆕 Enviar logs remotamente después de descarga de pedido
@@ -867,7 +1101,17 @@ class RioGasService {
     velocidad = double.parse(velocidad.toStringAsFixed(2));
     distanciaRecorrida = double.parse(distanciaRecorrida.toStringAsFixed(2));
 
-    final result = await _post('FinalizarPedidoV2', {
+    // 🚩 Obtener flag 'services_need_restart' desde SharedPreferences nativo
+    bool despertar = false;
+    try {
+      final servicesNeedRestart = await getServicesNeedRestart();
+      despertar = servicesNeedRestart ?? false;
+      print('🚩 [FinalizarPedidoV3] Despertar servicios: $despertar');
+    } catch (e) {
+      print('❌ [FinalizarPedidoV3] Error obteniendo flag despertar: $e');
+    }
+
+    final result = await _post('FinalizarPedidoV3', {
       'escenarioid': escenarioId,
       'PedidoId': pedidoId,
       'PedidoTpo': pedidoTpo,
@@ -887,8 +1131,9 @@ class RioGasService {
       'longitud': longitud,
       'utmX': utmX,
       'utmY': utmY,
-      'Velocidad': velocidad, // Added to body
-      'DistanciaRecorrida': distanciaRecorrida // Added to body
+      'Velocidad': velocidad,
+      'DistanciaRecorrida': distanciaRecorrida,
+      'Despertar': despertar // 🆕 Flag para despertar servicios
     });
 
     // 🆕 Enviar logs remotamente después de finalizar pedido
@@ -899,10 +1144,12 @@ class RioGasService {
 
   static bool _shouldSkipFailedSave(String endpoint) {
     return endpoint == 'DescargaLecturaPedidos' ||
+        endpoint == 'DescargaLecturaPedidosV2' ||
         endpoint == 'RegistrarCoordenadas' ||
         endpoint == 'RegistrarCoordenadasBatch' ||
         endpoint == 'RegistrarCierre' ||
-        endpoint == 'DescargaPedidos';
+        endpoint == 'DescargaPedidos' ||
+        endpoint == 'DescargaPedidosV2';
   }
 
   static Future<Map<String, dynamic>?> actualizarMoviles(
@@ -1317,6 +1564,51 @@ class RioGasService {
     });
   }
 
+  /// � ActualizarTokenFCM - Actualizar token FCM en el backend
+  ///
+  /// Sincroniza el token FCM cuando:
+  /// - Firebase rota el token automáticamente
+  /// - Se detecta que el token fue invalidado
+  /// - Se fuerza renovación manual
+  ///
+  /// Parámetros:
+  /// - deviceId: ID único del dispositivo
+  /// - token: Nuevo token FCM
+  static Future<Map<String, dynamic>?> actualizarTokenFCM({
+    required String deviceId,
+    required String token,
+  }) async {
+    print('🔑 [RIOGAS_SERVICE] Actualizando token FCM para device: $deviceId');
+    print('🔑 [RIOGAS_SERVICE] Token: ${token.substring(0, 20)}...');
+
+    return _post('ActualizarTokenFCM', {
+      'DeviceId': deviceId,
+      'TokenFCM': token,
+    });
+  }
+
+  /// �🚨 FCMActions - Invocar acción remota via FCM
+  ///
+  /// Permite enviar comandos FCM desde los servicios cuando detectan problemas:
+  /// - force_gps_execution: Forzar ejecución GPS inmediata
+  /// - restart_gps_service: Reiniciar servicio GPS completo
+  /// - stop_gps_service: Detener servicio GPS
+  /// - get_status: Consultar estado del servicio
+  ///
+  /// Usado por ForegroundLocationService y CriticalLogger cuando detectan
+  /// que el servicio GPS no responde o no puede auto-recuperarse
+  static Future<Map<String, dynamic>?> fcmActions({
+    required int escenarioId,
+    required String movil,
+    required String accion,
+  }) async {
+    return _post('FCMActions', {
+      'escenarioid': escenarioId,
+      'movil': movil,
+      'Accion': accion,
+    });
+  }
+
   static Future<void> monitorAndSendErrors() async {
     var errorBox = await Hive.openBox<ErrorEvent>('errorBox');
     var conexionBox = await Hive.openBox('conexionBox');
@@ -1433,5 +1725,84 @@ class RioGasService {
       'device': device,
       'usuario': usuario,
     });
+  }
+
+  // =========================================================================
+  // 🚩 MÉTODOS PARA ACCEDER A FLAGS DE ESTADO DE SERVICIOS (KOTLIN)
+  // =========================================================================
+
+  /// MethodChannel para comunicación con código nativo (Android)
+  static const _serviceStatusChannel =
+      MethodChannel('com.riogas.appmovil/service_status');
+
+  /// Obtiene el estado de la flag 'services_need_restart' desde SharedPreferences de Android
+  ///
+  /// Esta flag es actualizada por los servicios de Kotlin (GPS y CriticalLog) cuando
+  /// detectan que algún servicio está apagado.
+  ///
+  /// Returns:
+  /// - true: Algún servicio está apagado y necesita reiniciarse
+  /// - false: Todos los servicios están activos y funcionando correctamente
+  /// - null: Error al obtener el valor
+  ///
+  /// La flag respeta el cierre de sesión FCM (watchdog_disabled), por lo que
+  /// si el usuario cerró sesión, esta flag no se modificará.
+  static Future<bool?> getServicesNeedRestart() async {
+    try {
+      final bool result =
+          await _serviceStatusChannel.invokeMethod('getServicesNeedRestart');
+      print('🚩 [FLAGS] services_need_restart = $result');
+      return result;
+    } catch (e) {
+      print('❌ [FLAGS] Error obteniendo services_need_restart: $e');
+      return null;
+    }
+  }
+
+  /// Obtiene el estado completo de todos los servicios desde SharedPreferences de Android
+  ///
+  /// Returns un Map con la siguiente información:
+  /// - services_need_restart: bool - Flag principal
+  /// - last_check_timestamp: int - Timestamp de última verificación
+  /// - checked_by: String - Servicio que hizo la última verificación
+  /// - check_reason: String - Razón de la última verificación
+  /// - gps_service_status: bool - Estado del GPS Service
+  /// - gps_status_timestamp: int - Timestamp del estado GPS
+  /// - gps_checked_by: String - Quién verificó el GPS
+  /// - critical_log_status: bool - Estado del CriticalLog Service
+  /// - critical_log_timestamp: int - Timestamp del estado CriticalLog
+  /// - critical_log_checked_by: String - Quién verificó CriticalLog
+  /// - watchdog_disabled: bool - Si el watchdog está deshabilitado (cierre sesión)
+  static Future<Map<String, dynamic>?> getFullServiceStatus() async {
+    try {
+      final Map<dynamic, dynamic> result =
+          await _serviceStatusChannel.invokeMethod('getFullServiceStatus');
+      final Map<String, dynamic> status = Map<String, dynamic>.from(result);
+
+      print('🚩 [FLAGS] Estado completo de servicios:');
+      print('   - services_need_restart: ${status['services_need_restart']}');
+      print('   - gps_service_status: ${status['gps_service_status']}');
+      print('   - critical_log_status: ${status['critical_log_status']}');
+      print('   - watchdog_disabled: ${status['watchdog_disabled']}');
+      print('   - checked_by: ${status['checked_by']}');
+
+      return status;
+    } catch (e) {
+      print('❌ [FLAGS] Error obteniendo estado completo de servicios: $e');
+      return null;
+    }
+  }
+
+  /// Limpia todas las flags de estado de servicios
+  /// Útil al iniciar sesión o reiniciar la aplicación
+  static Future<bool> clearAllServiceFlags() async {
+    try {
+      await _serviceStatusChannel.invokeMethod('clearAllServiceFlags');
+      print('🚩 [FLAGS] Todas las flags de servicios limpiadas');
+      return true;
+    } catch (e) {
+      print('❌ [FLAGS] Error limpiando flags de servicios: $e');
+      return false;
+    }
   }
 }

@@ -32,6 +32,9 @@ class _MessagePageState extends State<MessagePage> {
   final LocationService locationService =
       LocationService(); // Initialize locationService
 
+  // ✅ Flag para prevenir múltiples llamadas simultáneas de lectura
+  bool _isMarkingAsRead = false;
+
   static const int _previewChars = 20; // primeros 20 caracteres
 
   @override
@@ -170,120 +173,139 @@ class _MessagePageState extends State<MessagePage> {
   }*/
 
   Future<void> _markMessageAsRead(DocumentSnapshot message) async {
-    var box = await Hive.openBox('sessionBox');
-    String? escenario = box.get('escenario');
-    String? movil = box.get('movil');
-    String? username = box.get('username');
-    String? deviceId = box.get('deviceId');
-
-    // print('📦 Datos obtenidos de Hive:');
-    // print('Escenario: $escenario');
-    // print('Movil: $movil');
-    // print('Username: $username');
-    // print('DeviceId: $deviceId');
-
-    if (escenario == null ||
-        movil == null ||
-        username == null ||
-        deviceId == null) {
-      print('❌ No se pudo obtener los datos necesarios de Hive.');
+    // ✅ Prevenir múltiples llamadas simultáneas
+    if (_isMarkingAsRead) {
+      print("⚠️ [LECTURA] Ya hay una lectura en curso, ignorando...");
       return;
     }
 
-    String latitude = '0.0';
-    String longitude = '0.0';
-    String utmX = '0.0';
-    String utmY = '0.0';
+    setState(() => _isMarkingAsRead = true);
 
-    // Invoca el método para obtener la ubicación
-    final locationData = await locationService.getCurrentLocation();
+    try {
+      // ✅ Capturar timestamp AL INICIO para evitar duplicados
+      final String capturedTimestamp = DateTime.now().toUtc().toIso8601String();
+      print("🕒 [TIMESTAMP] Capturado timestamp único: $capturedTimestamp");
 
-    if (locationData != null) {
-      latitude = locationData['latitude'].toString();
-      longitude = locationData['longitude'].toString();
-      utmX = locationData['utmX'].toString();
-      utmY = locationData['utmY'].toString();
+      var box = await Hive.openBox('sessionBox');
+      String? escenario = box.get('escenario');
+      String? movil = box.get('movil');
+      String? username = box.get('username');
+      String? deviceId = box.get('deviceId');
 
-      print('Latitud: $latitude, Longitud: $longitude');
-      print('UTMX: $utmX, UTMY: $utmY');
-    } else {
-      print('No se pudo obtener la ubicación.');
-    }
+      // print('📦 Datos obtenidos de Hive:');
+      // print('Escenario: $escenario');
+      // print('Movil: $movil');
+      // print('Username: $username');
+      // print('DeviceId: $deviceId');
 
-    // print(
-    //   '📍 Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
-    // );
+      if (escenario == null ||
+          movil == null ||
+          username == null ||
+          deviceId == null) {
+        print('❌ No se pudo obtener los datos necesarios de Hive.');
+        return;
+      }
 
-    var data = message.data() as Map<String, dynamic>;
+      String latitude = '0.0';
+      String longitude = '0.0';
+      String utmX = '0.0';
+      String utmY = '0.0';
 
-    // Extract numeric part from message.id
-    final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
-    if (numericIdMatch == null) {
-      print('❌ No se pudo extraer un ID numérico del mensaje: ${message.id}');
-      return;
-    }
-    int messageId = int.parse(numericIdMatch.group(0)!);
+      // Invoca el método para obtener la ubicación
+      final locationData = await locationService.getCurrentLocation();
 
-    if (data.containsKey('FchHoraLeido')) {
-      // print('📨 Mensaje ya leído: $messageId');
-      return;
-    }
+      if (locationData != null) {
+        latitude = locationData['latitude'].toString();
+        longitude = locationData['longitude'].toString();
+        utmX = locationData['utmX'].toString();
+        utmY = locationData['utmY'].toString();
 
-    // print('📨 Marcando mensaje como leído: $messageId');
-    //await _firebaseService.markMessageAsRead(message.id);
+        print('Latitud: $latitude, Longitud: $longitude');
+        print('UTMX: $utmX, UTMY: $utmY');
+      } else {
+        print('No se pudo obtener la ubicación.');
+      }
 
-    // Open mensajesBox and update the message state to "Leido"
-    var mensajesBox = await Hive.openBox('mensajesBox');
-    //if (mensajesBox.containsKey(message.id)) {
-    await mensajesBox.put(message.id, 'Leido');
-    // print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
-    //}
+      // print(
+      //   '📍 Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
+      // );
 
-    var locationBox = await Hive.openBox('locationBox');
-    double velocidad = double.parse(
-        locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2));
-    double distanciaRecorrida =
-        locationBox.get('totalDistance', defaultValue: 0.0);
+      var data = message.data() as Map<String, dynamic>;
 
-    print('📨 Enviando datos al servicio descargaLecturaMensajes:');
-    print('EscenarioId: ${int.parse(escenario)}');
-    print('MovilId: ${int.parse(movil)}');
-    print('MessageId: $messageId');
-    print('Usuario: $username');
-    print('NroSesion: ');
-    print('TermMobileEquipo: $deviceId');
-    print('LectDesc: LECTURA');
-    print('FechaHoraCmbEst: ${DateTime.now().toUtc().toIso8601String()}');
-    print('INAux1: ');
-    print('INAux2: ');
-    print('Latitud: ${latitude}');
-    print('Longitud: ${longitude}');
-    print('Velocidad: $velocidad');
-    print('DistanciaRecorrida: $distanciaRecorrida');
+      // Extract numeric part from message.id
+      final numericIdMatch = RegExp(r'\d+').firstMatch(message.id);
+      if (numericIdMatch == null) {
+        print('❌ No se pudo extraer un ID numérico del mensaje: ${message.id}');
+        return;
+      }
+      int messageId = int.parse(numericIdMatch.group(0)!);
 
-    await RioGasService.descargaLecturaMensajes(
-        int.parse(escenario), // escenarioId
-        int.parse(movil), // movilId
-        messageId, // messageId
-        username, // usuario
-        '', // nroSesion
-        deviceId, // termMobileEquipo
-        'LECTURA', // lectDesc
-        DateTime.now().toUtc().toIso8601String(), // fechaHoraCmbEst
-        '', // inAux1
-        '', // inAux2
-        latitude, // latitud
-        longitude, // longitud
-        utmX, // utmX
-        utmY, // utmY
-        velocidad, // velocidad
-        distanciaRecorrida // distanciaRecorrida
-        );
+      if (data.containsKey('FchHoraLeido')) {
+        // print('📨 Mensaje ya leído: $messageId');
+        return;
+      }
 
-    if (mounted) {
-      setState(() {
-        _readMessageIds.add(message.id);
-      });
+      // print('📨 Marcando mensaje como leído: $messageId');
+      //await _firebaseService.markMessageAsRead(message.id);
+
+      // Open mensajesBox and update the message state to "Leido"
+      var mensajesBox = await Hive.openBox('mensajesBox');
+      //if (mensajesBox.containsKey(message.id)) {
+      await mensajesBox.put(message.id, 'Leido');
+      // print('📦 Mensaje actualizado a "Leido" en mensajesBox.');
+      //}
+
+      var locationBox = await Hive.openBox('locationBox');
+      double velocidad = double.parse(
+          locationBox.get('lastSpeed', defaultValue: 0.0).toStringAsFixed(2));
+      double distanciaRecorrida =
+          locationBox.get('totalDistance', defaultValue: 0.0);
+
+      print('📨 Enviando datos al servicio descargaLecturaMensajes:');
+      print('EscenarioId: ${int.parse(escenario)}');
+      print('MovilId: ${int.parse(movil)}');
+      print('MessageId: $messageId');
+      print('Usuario: $username');
+      print('NroSesion: ');
+      print('TermMobileEquipo: $deviceId');
+      print('LectDesc: LECTURA');
+      print('FechaHoraCmbEst: $capturedTimestamp');
+      print('INAux1: ');
+      print('INAux2: ');
+      print('Latitud: ${latitude}');
+      print('Longitud: ${longitude}');
+      print('Velocidad: $velocidad');
+      print('DistanciaRecorrida: $distanciaRecorrida');
+
+      await RioGasService.descargaLecturaMensajes(
+          int.parse(escenario), // escenarioId
+          int.parse(movil), // movilId
+          messageId, // messageId
+          username, // usuario
+          '', // nroSesion
+          deviceId, // termMobileEquipo
+          'LECTURA', // lectDesc
+          capturedTimestamp, // ✅ fechaHoraCmbEst - usar timestamp capturado
+          '', // inAux1
+          '', // inAux2
+          latitude, // latitud
+          longitude, // longitud
+          utmX, // utmX
+          utmY, // utmY
+          velocidad, // velocidad
+          distanciaRecorrida // distanciaRecorrida
+          );
+
+      if (mounted) {
+        setState(() {
+          _readMessageIds.add(message.id);
+        });
+      }
+    } finally {
+      // ✅ Siempre resetear flag, incluso si hay error
+      if (mounted) {
+        setState(() => _isMarkingAsRead = false);
+      }
     }
   }
 

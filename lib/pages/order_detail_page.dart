@@ -70,6 +70,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   Stream<DocumentSnapshot?>? _movilStream;
   StreamSubscription<DocumentSnapshot?>? _movilSubscription;
 
+  // ✅ Flag para prevenir múltiples llamadas simultáneas de finalización
+  bool _isFinalizing = false;
+
   VoidCallback? _movilShieldListener; // para remover listener
 
   @override
@@ -897,7 +900,18 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   }
 
   void _finalizeOrder() async {
+    // ✅ Prevenir múltiples llamadas simultáneas
+    if (_isFinalizing) {
+      print("⚠️ [FINALIZE] Ya hay una finalización en curso, ignorando...");
+      return;
+    }
+
+    setState(() => _isFinalizing = true);
     print("🟢 [INIT] Iniciando verificación de constante 70...");
+
+    // ✅ Capturar timestamp AL INICIO para evitar duplicados
+    final String capturedTimestamp = DateTime.now().toUtc().toIso8601String();
+    print("🕒 [TIMESTAMP] Capturado timestamp único: $capturedTimestamp");
 
     // Debug: Verificar estado de distancia máxima
     print(
@@ -1101,7 +1115,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         int.parse(_selectedSubEstado!),
         '',
         _observaciones ?? '',
-        DateTime.now().toUtc().toIso8601String(),
+        capturedTimestamp, // ✅ Usar timestamp capturado al inicio
         movil,
         distanciaEnMetros,
         inAux1,
@@ -1165,6 +1179,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         SnackBar(content: Text('Ocurrió un error inesperado.')),
       );
     } finally {
+      // ✅ Liberar flag de finalización
+      setState(() => _isFinalizing = false);
+      print("🔓 [FLAG] _isFinalizing liberado");
+
       Navigator.of(context).pop();
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => HomePage()),

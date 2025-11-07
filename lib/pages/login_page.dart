@@ -27,6 +27,8 @@ import 'package:dio/dio.dart'; // Import for Dio HTTP client
 import 'package:video_player/video_player.dart';
 import '../utils/stream_manager.dart';
 import '../services/persistent_stream_manager.dart';
+import 'package:http/http.dart' as http; // 🆕 Para verificar URLs remotas
+import '../services/fcm_token_manager.dart'; // 🔑 Para gestión automática de tokens FCM
 
 const String kLoginFlowTag = "[LOGIN_FLOW]";
 
@@ -40,24 +42,194 @@ class LoginBackground extends StatefulWidget {
 }
 
 class _LoginBackgroundState extends State<LoginBackground> {
-  late VideoPlayerController _controller;
+  VideoPlayerController? _videoController;
+  String? _imageUrl;
+  bool _isLoading = true;
+  bool _useLocalAsset = false;
+  String _backgroundType = 'video'; // 'video', 'image', 'gif'
+
+  // 🌐 URL base para backgrounds personalizados
+  static const String _remoteBaseUrl =
+      'https://www.riogas.uy/ica_geos_/static/Resources/background_delivery';
 
   @override
   void initState() {
     super.initState();
+    _loadBackground();
+  }
 
-    _controller = VideoPlayerController.asset('assets/back_video.mp4')
+  /// 🌙☀️ Determina si es de noche en Uruguay
+  ///
+  /// Considera:
+  /// - Horario de verano (primer domingo de octubre - segundo domingo de marzo)
+  /// - Noche: 20:00 - 06:00
+  /// - Día: 06:00 - 20:00
+  bool _isNightTimeInUruguay() {
+    final now = DateTime.now().toUtc();
+
+    // Uruguay está en UTC-3 (horario estándar)
+    // Durante verano (octubre-marzo): UTC-2
+    int uruguayOffset = -3;
+
+    // Determinar si estamos en horario de verano
+    final year = now.year;
+
+    // Horario de verano: primer domingo de octubre
+    final octoberFirst = DateTime.utc(year, 10, 1);
+    int daysUntilSunday = (7 - octoberFirst.weekday) % 7;
+    final summerStart = DateTime.utc(year, 10, 1 + daysUntilSunday);
+
+    // Fin horario de verano: segundo domingo de marzo del año siguiente
+    final marchFirst = DateTime.utc(year + 1, 3, 1);
+    daysUntilSunday = (7 - marchFirst.weekday) % 7;
+    final summerEnd = DateTime.utc(year + 1, 3, 1 + daysUntilSunday + 7);
+
+    // Si estamos en horario de verano, offset es -2
+    if (now.isAfter(summerStart) && now.isBefore(summerEnd)) {
+      uruguayOffset = -2;
+    }
+
+    // Convertir a hora de Uruguay
+    final uruguayTime = now.add(Duration(hours: uruguayOffset));
+    final hour = uruguayTime.hour;
+
+    // Noche: 20:00 (8 PM) hasta 06:00 (6 AM)
+    final isNight = hour >= 20 || hour < 6;
+
+    print('🕐 [LOGIN_BG] Hora UTC: ${now.hour}:${now.minute}');
+    print(
+        '🇺🇾 [LOGIN_BG] Hora Uruguay: ${uruguayTime.hour}:${uruguayTime.minute}');
+    print(
+        '🌡️ [LOGIN_BG] Offset UTC: $uruguayOffset (${uruguayOffset == -2 ? "Horario de verano" : "Horario estándar"})');
+    print(
+        '${isNight ? "🌙" : "☀️"} [LOGIN_BG] Es de ${isNight ? "NOCHE" : "DÍA"}');
+
+    return isNight;
+  }
+
+  /// 🔍 Intenta cargar background remoto, fallback a asset local
+  Future<void> _loadBackground() async {
+    // Determinar si es día o noche
+    final isNight = _isNightTimeInUruguay();
+    final timeOfDay = isNight ? 'noche' : 'dia';
+
+    print('🎨 [LOGIN_BG] Cargando background de $timeOfDay');
+
+    // 1️⃣ Intentar cargar video remoto (.mp4)
+    final videoUrl = '${_remoteBaseUrl}_$timeOfDay.mp4';
+    if (await _checkUrlExists(videoUrl)) {
+      print('📹 [LOGIN_BG] Video remoto encontrado: $videoUrl');
+      await _loadRemoteVideo(videoUrl);
+      return;
+    }
+
+    // 2️⃣ Intentar cargar GIF animado (.gif)
+    final gifUrl = '${_remoteBaseUrl}_$timeOfDay.gif';
+    if (await _checkUrlExists(gifUrl)) {
+      print('🎞️ [LOGIN_BG] GIF remoto encontrado: $gifUrl');
+      setState(() {
+        _backgroundType = 'gif';
+        _imageUrl = gifUrl;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // 3️⃣ Intentar cargar imagen estática (.png)
+    final pngUrl = '${_remoteBaseUrl}_$timeOfDay.png';
+    if (await _checkUrlExists(pngUrl)) {
+      print('🖼️ [LOGIN_BG] Imagen remota encontrada: $pngUrl');
+      setState(() {
+        _backgroundType = 'image';
+        _imageUrl = pngUrl;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // 4️⃣ Fallback: intentar sin sufijo día/noche
+    print('⚠️ [LOGIN_BG] No se encontró background específico de $timeOfDay');
+    print('🔄 [LOGIN_BG] Intentando con background genérico...');
+
+    final genericPngUrl = '$_remoteBaseUrl.png';
+    if (await _checkUrlExists(genericPngUrl)) {
+      print('🖼️ [LOGIN_BG] Imagen genérica encontrada: $genericPngUrl');
+      setState(() {
+        _backgroundType = 'image';
+        _imageUrl = genericPngUrl;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // 5️⃣ Último fallback: usar video local
+    print('📦 [LOGIN_BG] No se encontró background remoto, usando asset local');
+    await _loadLocalVideo();
+  }
+
+  /// 🌐 Verificar si una URL existe (HEAD request)
+  Future<bool> _checkUrlExists(String url) async {
+    try {
+      final response = await http.head(Uri.parse(url)).timeout(
+            Duration(seconds: 3),
+            onTimeout: () => http.Response('', 408),
+          );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// 📹 Cargar video remoto
+  Future<void> _loadRemoteVideo(String url) async {
+    try {
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(url))
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _backgroundType = 'video';
+              _isLoading = false;
+            });
+            _videoController!.setLooping(true);
+            _videoController!.setVolume(0.0);
+            _videoController!.play();
+          }
+        }).catchError((error) {
+          print('❌ [LOGIN_BG] Error cargando video remoto: $error');
+          _loadLocalVideo();
+        });
+    } catch (e) {
+      print('❌ [LOGIN_BG] Error inicializando video remoto: $e');
+      await _loadLocalVideo();
+    }
+  }
+
+  /// 📦 Cargar video local (fallback)
+  Future<void> _loadLocalVideo() async {
+    _videoController = VideoPlayerController.asset('assets/back_video.mp4')
       ..initialize().then((_) {
-        setState(() {});
-        _controller.setLooping(true);
-        _controller.setVolume(0.0); // sin sonido
-        _controller.play();
+        if (mounted) {
+          setState(() {
+            _backgroundType = 'video';
+            _useLocalAsset = true;
+            _isLoading = false;
+          });
+          _videoController!.setLooping(true);
+          _videoController!.setVolume(0.0);
+          _videoController!.play();
+        }
+      }).catchError((error) {
+        print('❌ [LOGIN_BG] Error cargando video local: $error');
+        setState(() {
+          _backgroundType = 'image';
+          _isLoading = false;
+        });
       });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _videoController?.dispose();
     super.dispose();
   }
 
@@ -66,22 +238,57 @@ class _LoginBackgroundState extends State<LoginBackground> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        _controller.value.isInitialized
-            ? FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _controller.value.size.width,
-                  height: _controller.value.size.height,
-                  child: VideoPlayer(_controller),
-                ),
-              )
-            : Container(color: Colors.black),
+        // 🎨 Renderizar según el tipo de background
+        _buildBackground(),
         Container(
           color: Colors.black.withOpacity(0.3), // capa oscura encima opcional
         ),
         widget.child,
       ],
     );
+  }
+
+  /// 🎨 Construir el widget de background según el tipo
+  Widget _buildBackground() {
+    if (_isLoading) {
+      return Container(color: Colors.black);
+    }
+
+    switch (_backgroundType) {
+      case 'video':
+        if (_videoController != null && _videoController!.value.isInitialized) {
+          return FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: _videoController!.value.size.width,
+              height: _videoController!.value.size.height,
+              child: VideoPlayer(_videoController!),
+            ),
+          );
+        }
+        return Container(color: Colors.black);
+
+      case 'image':
+      case 'gif':
+        if (_imageUrl != null) {
+          return Image.network(
+            _imageUrl!,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(color: Colors.black);
+            },
+            errorBuilder: (context, error, stackTrace) {
+              print('❌ [LOGIN_BG] Error cargando imagen: $error');
+              return Container(color: Colors.black);
+            },
+          );
+        }
+        return Container(color: Colors.black);
+
+      default:
+        return Container(color: Colors.black);
+    }
   }
 }
 
@@ -377,8 +584,21 @@ class _LoginPageState extends State<LoginPage> {
         print("✅ Permiso de notificaciones otorgado.");
 
         try {
-          String? token = await FirebaseMessaging.instance.getToken();
-          print('📲 Token FCM: $token');
+          // 🔑 Usar FCMTokenManager para obtener token válido y actualizado
+          String? token = await FCMTokenManager.getCurrentToken();
+
+          if (token != null) {
+            print('📲 Token FCM obtenido: ${token.substring(0, 20)}...');
+
+            // Validar que el token sea válido
+            bool isValid = await FCMTokenManager.isTokenValid();
+            if (!isValid) {
+              print('⚠️ Token no válido, forzando renovación...');
+              token = await FCMTokenManager.forceTokenRefresh();
+            }
+          } else {
+            print('❌ No se pudo obtener token FCM');
+          }
         } catch (e) {
           print('❌ Error al obtener token FCM: $e');
         }
@@ -504,6 +724,13 @@ class _LoginPageState extends State<LoginPage> {
                     print(
                         "🛑 Mostrando selección de móviles antes de continuar...");
 
+                    // 🌍 Si es usuario especial, mostrar selección de servidor PRIMERO
+                    if (_specialUsers.contains(_usernameController.text)) {
+                      print(
+                          '🌍 [SERVER] Usuario especial detectado: ${_usernameController.text}');
+                      await _showServerSelectionDialog();
+                    }
+
                     // 🔹 Mostrar selección de móviles antes de continuar
                     await _showMobileSelectionDialog(response);
                   }
@@ -532,6 +759,13 @@ class _LoginPageState extends State<LoginPage> {
             print(
                 "📋 Móviles disponibles para seleccionar: $_availableMoviles");
             print("🛑 Mostrando selección de móviles antes de continuar...");
+
+            // 🌍 Si es usuario especial, mostrar selección de servidor PRIMERO
+            if (_specialUsers.contains(_usernameController.text)) {
+              print(
+                  '🌍 [SERVER] Usuario especial detectado: ${_usernameController.text}');
+              await _showServerSelectionDialog();
+            }
 
             // 🔹 Mostrar selección de móviles antes de continuar
             await _showMobileSelectionDialog(response);
@@ -600,6 +834,13 @@ class _LoginPageState extends State<LoginPage> {
                           "📋 Móviles disponibles para seleccionar: $_availableMoviles");
                       print(
                           "🛑 Mostrando selección de móviles antes de continuar...");
+
+                      // 🌍 Si es usuario especial, mostrar selección de servidor PRIMERO
+                      if (_specialUsers.contains(_usernameController.text)) {
+                        print(
+                            '🌍 [SERVER] Usuario especial detectado: ${_usernameController.text}');
+                        await _showServerSelectionDialog();
+                      }
 
                       // 🔹 Mostrar selección de móviles antes de continuar
                       await _showMobileSelectionDialog(response);
@@ -960,6 +1201,95 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // 🌍 Usuarios especiales que pueden elegir servidor
+  static const List<String> _specialUsers = ['49618553', '27869041'];
+
+  /// Mostrar diálogo de selección de servidor solo para usuarios especiales
+  Future<void> _showServerSelectionDialog() async {
+    Environment selectedEnv = Environment.production; // Default: Producción
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false, // No cerrar tocando fuera
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.dns, color: Colors.blue),
+                  SizedBox(width: 10),
+                  Text('Seleccionar Servidor'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Selecciona el servidor contra el cual trabajar:',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  SizedBox(height: 20),
+                  RadioListTile<Environment>(
+                    title: Text(
+                      'Producción',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text('https://riogas.com.uy'),
+                    value: Environment.production,
+                    groupValue: selectedEnv,
+                    activeColor: Colors.green,
+                    onChanged: (Environment? value) {
+                      setState(() {
+                        selectedEnv = value!;
+                      });
+                    },
+                  ),
+                  RadioListTile<Environment>(
+                    title: Text(
+                      'Desarrollo',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text('https://riogas.desa.uy'),
+                    value: Environment.development,
+                    groupValue: selectedEnv,
+                    activeColor: Colors.orange,
+                    onChanged: (Environment? value) {
+                      setState(() {
+                        selectedEnv = value!;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: <Widget>[
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: selectedEnv == Environment.production
+                        ? Colors.green
+                        : Colors.orange,
+                  ),
+                  onPressed: () async {
+                    // 🌍 Configurar el ambiente SOLO para esta sesión (no persiste)
+                    AppEnvironment.setEnvironmentForSession(selectedEnv);
+
+                    print(
+                        '🌍 [SERVER] Servidor seleccionado: ${selectedEnv == Environment.production ? "PRODUCCIÓN" : "DESARROLLO"}');
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: Text(
+                    'Continuar',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _showMobileSelectionDialog(Map<String, dynamic> response) async {
     String? selectedMovil;
     bool isLoading = false;
@@ -1116,6 +1446,64 @@ class _LoginPageState extends State<LoginPage> {
                             print(
                                 '⚠️ Error enviando log crítico a Android: $err');
                           }
+                        }
+
+                        // 🆕 Guardar escenario en SharedPreferences nativo para FCM API
+                        try {
+                          const platform =
+                              MethodChannel('com.riogas.appmovil/shared_prefs');
+                          String escenarioValue =
+                              response['escenarioid'] == "1000"
+                                  ? "1000"
+                                  : "2000";
+                          await platform.invokeMethod(
+                              'saveEscenario', {'escenario': escenarioValue});
+                          print(
+                              '✅ Escenario guardado en SharedPreferences nativo: $escenarioValue');
+                        } catch (e) {
+                          print(
+                              '⚠️ Error guardando escenario en SharedPreferences nativo: $e');
+                        }
+
+                        // 🆕 Guardar baseUrl en SharedPreferences nativo para FCM API
+                        try {
+                          const platform =
+                              MethodChannel('com.riogas.appmovil/shared_prefs');
+
+                          // Obtener URL base desde constantes (igual que en riogas_service.dart)
+                          final baseRootConst =
+                              (await getConstantValue('600'))?.trim();
+                          final servicesPathConst =
+                              (await getConstantValue('601'))?.trim();
+
+                          var baseRoot = (baseRootConst != null &&
+                                  baseRootConst.isNotEmpty)
+                              ? baseRootConst
+                              : 'https://www.riogas.uy/ica_geos_/';
+
+                          var servicesPath = (servicesPathConst != null &&
+                                  servicesPathConst.isNotEmpty)
+                              ? servicesPathConst
+                              : 'appservices/';
+
+                          // Normalizaciones
+                          baseRoot = baseRoot.replaceAll(
+                              RegExp(r'appservices/?$', caseSensitive: false),
+                              '');
+                          if (!baseRoot.endsWith('/')) baseRoot += '/';
+                          if (servicesPath.startsWith('/'))
+                            servicesPath = servicesPath.substring(1);
+                          if (!servicesPath.endsWith('/')) servicesPath += '/';
+
+                          String fullBaseUrl = '$baseRoot$servicesPath';
+
+                          await platform.invokeMethod(
+                              'saveBaseUrl', {'baseUrl': fullBaseUrl});
+                          print(
+                              '✅ BaseUrl guardada en SharedPreferences nativo: $fullBaseUrl');
+                        } catch (e) {
+                          print(
+                              '⚠️ Error guardando baseUrl en SharedPreferences nativo: $e');
                         }
 
                         String hoy = DateTime.now()

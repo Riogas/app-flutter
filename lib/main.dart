@@ -37,6 +37,8 @@ import 'package:android_intent_plus/flag.dart';
 import '../services/location_service.dart'; // 🔹 Importamos LocationService
 import '../services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogSyncService
 import 'package:screen_protector/screen_protector.dart';
+import 'services/remote_logout_listener.dart'; // 🚨 Importar listener de logout remoto
+import 'services/fcm_token_manager.dart'; // 🔑 Importar FCM Token Manager
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -156,6 +158,9 @@ void main() async {
   await Hive.openBox('sessionBox');
   await Hive.openBox<ErrorEvent>('errorBox');
 
+  // 🌍 Inicializar ambiente de aplicación (Dev/Prod)
+  await AppEnvironment.initialize();
+
   await NotificationsService.initialize();
   await RioGasService.initializeService(); // 👈 imprescindible
 
@@ -164,6 +169,9 @@ void main() async {
 
   // 🔍 Mostrar logs sincronizados para debugging (temporal)
   await NativeLogSyncService.displaySyncedLogs();
+
+  // 🚨 Inicializar listener de logout remoto via FCM
+  await RemoteLogoutListener.initialize();
 
   bool isLoggedIn = await AuthService.checkIsLoggedIn();
 
@@ -190,7 +198,10 @@ void main() async {
   // 🔹 Inicializar Firebase Messaging
   await _initializeFirebaseMessaging();
 
-  // 🔹 Verificar configuraciones de batería y actividad en segundo plano
+  // � Inicializar FCM Token Manager (auto-renovación de tokens)
+  await _initializeFCMTokenManager();
+
+  // �🔹 Verificar configuraciones de batería y actividad en segundo plano
   //await _checkBatteryAndBackgroundSettings();
 
   // 🔹 Verificar sesión activa
@@ -307,6 +318,23 @@ Future<void> _initializeFirebaseMessaging() async {
 
   // Configurar el manejo de mensajes en background
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+}
+
+/// 🔑 Inicializar FCM Token Manager
+///
+/// Sistema automático que:
+/// - Detecta cuando Firebase rota/invalida el token
+/// - Sincroniza automáticamente con el backend
+/// - Mantiene cache local del token actual
+Future<void> _initializeFCMTokenManager() async {
+  try {
+    print('🔑 [MAIN] Inicializando FCM Token Manager...');
+    await FCMTokenManager.initialize();
+    print('✅ [MAIN] FCM Token Manager inicializado');
+  } catch (e, stackTrace) {
+    print('❌ [MAIN] Error inicializando FCM Token Manager: $e');
+    print('📚 StackTrace: $stackTrace');
+  }
 }
 
 @pragma('vm:entry-point')
@@ -1065,6 +1093,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       title: 'MoveIT',
       theme: ThemeData(primarySwatch: Colors.blue),
       navigatorKey: navigatorKey,
+      // 🌍 Banner visual si está en modo desarrollo
+      builder: (context, child) {
+        if (AppEnvironment.isDevelopment) {
+          return Banner(
+            message: 'DESARROLLO 🧪',
+            location: BannerLocation.topEnd,
+            color: Colors.orange,
+            textStyle: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+            child: child!,
+          );
+        }
+        return child!;
+      },
       home: widget.isLoggedIn ? HomePage() : LoginPage(),
       onGenerateRoute: (RouteSettings settings) {
         if (settings.name == '/login') {

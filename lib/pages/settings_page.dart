@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import '../services/native_log_sync_service.dart';
+import '../services/logout_service.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -160,134 +161,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _logout() async {
     bool? confirmLogout = await _showLogoutConfirmationDialog();
     if (confirmLogout == true) {
-      var sessionBox = await Hive.openBox('sessionBox');
-      var constantBox = await Hive.openBox('constantBox');
-      var mensajesBox = await Hive.openBox('mensajesBox'); // Open mensajesBox
-      sessionBox.put('firstLoginDone', true);
-
-      // Establecer bandera para logout controlado
-      sessionBox.put('logoutControlled', true);
-
-      final movil = sessionBox.get('movil') ?? "0";
-      final escenario = sessionBox.get('escenario') ?? "0";
-      final usuario = sessionBox.get('username') ?? "string";
-      String? idTerminal = sessionBox.get('deviceId');
-
-      final platform = MethodChannel("background_service");
-      await platform.invokeMethod("stopLocationService", {
-        "movil": movil,
-        "escenario": escenario,
-        "usuario": usuario,
-        "deviceId": "$idTerminal",
-      });
-      print("🛑 Servicio de ubicación detenido y notificación eliminada.");
-
-      // Llamar al servicio RegistrarCierre antes de cerrar sesión
-      await RioGasService.registrarCierre(
-          int.tryParse(movil ?? '0') ?? 0,
-          deviceId ?? '',
-          idUsuario ?? '',
-          DateTime.now().toIso8601String(),
-          'Controlado');
-
-      // Buscar y manejar el documento activo para el móvil y el usuario
-      String escenarioId = sessionBox.get('escenario', defaultValue: '0');
-      String movilId = sessionBox.get('movil', defaultValue: '0');
-      String fechaActualStr = DateTime.now()
-          .toUtc()
-          .subtract(Duration(hours: 3))
-          .toIso8601String()
-          .split('T')[0]
-          .replaceAll('-', '');
-
-      DocumentReference fechaDocRef = FirebaseFirestore.instance
-          .collection('Sesiones-$escenarioId')
-          .doc(fechaActualStr);
-      DocumentReference movilActivoDocRef =
-          fechaDocRef.collection('Movil-$movilId').doc('activo');
-      DocumentReference usuarioActivoDocRef =
-          fechaDocRef.collection('Usuario-$idUsuario').doc('activo');
-
-      try {
-        // Manejar el documento activo del móvil
-        DocumentSnapshot activeDocSnapshot = await movilActivoDocRef.get();
-        if (activeDocSnapshot.exists) {
-          var activeData = activeDocSnapshot.data() as Map<String, dynamic>;
-
-          // Agregar el campo "logout" con el valor "Controlado"
-          activeData['logout'] = 'Controlado';
-
-          // Crear una copia del documento "activo" con el nombre basado en la hora actual
-          String horaActual =
-              DateTime.now().toIso8601String().split('T')[1].split('.')[0];
-          DocumentReference backupDocRef =
-              fechaDocRef.collection('Movil-$movilId').doc(horaActual);
-          await backupDocRef.set(activeData);
-
-          // Eliminar el documento "activo"
-          await movilActivoDocRef.delete();
-        }
-
-        // Manejar el documento activo del usuario
-        DocumentSnapshot usuarioDocSnapshot = await usuarioActivoDocRef.get();
-        if (usuarioDocSnapshot.exists) {
-          var usuarioData = usuarioDocSnapshot.data() as Map<String, dynamic>;
-
-          // Agregar el campo "logout" con el valor "Controlado"
-          usuarioData['logout'] = 'Controlado';
-
-          // Crear una copia del documento "activo" con el nombre basado en la hora actual
-          String horaActual =
-              DateTime.now().toIso8601String().split('T')[1].split('.')[0];
-          DocumentReference usuarioBackupDocRef =
-              fechaDocRef.collection('Usuario-$idUsuario').doc(horaActual);
-          await usuarioBackupDocRef.set(usuarioData);
-
-          // Eliminar el documento "activo"
-          await usuarioActivoDocRef.delete();
-        }
-      } catch (e) {
-        print('Error al manejar los documentos activos: $e');
-      }
-
-      // Llamar a SessionService para eliminar el documento activo y crear una copia
-      SessionService sessionService = SessionService();
-      await sessionService.saveSession(
-        idUsuario: idUsuario!,
-        nomUsuario: nombreUsuario!,
-        primeraUbicacion: LatLng(
-          0,
-          0,
-        ), // Reemplaza con la ubicación real si es necesario
-        versionApp: '1.0.0', // Reemplaza con la versión real de la app
-        tipoDeCierreDeSesion: 'logoutUser',
+      // Usar el servicio centralizado de logout
+      await LogoutService.executeLogout(
+        isRemoteLogout: false,
+        nombreUsuario: nombreUsuario,
+        idUsuario: idUsuario,
+        deviceId: deviceId,
       );
-
-      // Llamar a cerrarSesion de SessionService antes de limpiar Hive
-      try {
-        final sessionService = SessionService();
-        final cerrarSesionResult = await sessionService.cerrarSesion(
-          idUsuario: idUsuario ?? '',
-          tipoDeCierreDeSesion: 'logoutUser',
-        );
-        print('Resultado cerrarSesion: $cerrarSesionResult');
-      } catch (e) {
-        print('Error al llamar a cerrarSesion: $e');
-      }
-
-      var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-
-      // Eliminar los datos de sesión de Hive
-      await sessionBox.deleteFromDisk();
-      await constantBox.deleteFromDisk();
-      await mensajesBox.deleteFromDisk();
-      await failedRequestsBox
-          .deleteFromDisk(); //Cambiar por el momento se matiene asi para no tener que hacer cambios en el resto de la app
-
-      // Cerrar la aplicación
-      Future.microtask(() {
-        exit(0);
-      });
     }
   }
 
@@ -1098,6 +978,11 @@ class _SettingsPageState extends State<SettingsPage> {
               //SizedBox(height: 10),
               // _buildMonitoreoButton(),
               // SizedBox(height: 10),
+              // 🌍 Selector de ambiente (solo para usuarios especiales)
+              if (_isSpecialUser()) ...[
+                _buildEnvironmentSelector(),
+                SizedBox(height: 10),
+              ],
               _buildLogoutButton(),
               SizedBox(height: 10),
             ],
@@ -1483,6 +1368,111 @@ class _SettingsPageState extends State<SettingsPage> {
           backgroundColor: Colors.white,
           foregroundColor: Colors.blue,
           side: BorderSide(color: Colors.blue),
+        ),
+      ),
+    );
+  }
+
+  // 🌍 Verificar si el usuario actual es uno de los usuarios especiales
+  bool _isSpecialUser() {
+    final specialUsers = ['49618553', '27861374'];
+    return idUsuario != null && specialUsers.contains(idUsuario);
+  }
+
+  // 🌍 Widget para cambiar entre ambiente de desarrollo y producción
+  Widget _buildEnvironmentSelector() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.settings_applications, color: Colors.deepPurple),
+                SizedBox(width: 10),
+                Text(
+                  'Ambiente de Aplicación',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepPurple,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  AppEnvironment.isDevelopment
+                      ? 'Desarrollo 🧪'
+                      : 'Producción ✅',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Switch(
+                  value: AppEnvironment.isDevelopment,
+                  onChanged: (value) async {
+                    final newEnvironment = value
+                        ? Environment.development
+                        : Environment.production;
+
+                    // Confirmar el cambio
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text('Cambiar Ambiente'),
+                        content: Text(
+                            '¿Deseas cambiar a modo ${value ? "DESARROLLO" : "PRODUCCIÓN"}?\n\n'
+                            'La aplicación se conectará a ${value ? "riogas.desa.uy" : "riogas.uy"}.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: Text('Cancelar'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: Text('Confirmar'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true) {
+                      await AppEnvironment.setEnvironment(newEnvironment);
+                      setState(() {}); // Refrescar UI
+
+                      // Mostrar mensaje de éxito
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '🌍 Ambiente cambiado a: ${AppEnvironment.environmentName}',
+                          ),
+                          backgroundColor: value ? Colors.orange : Colors.green,
+                        ),
+                      );
+                    }
+                  },
+                  activeColor: Colors.orange,
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Text(
+              'URL: ${RioGasService.baseUrl}',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[600],
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:hive/hive.dart';
 
 /// Gestor de configuración de debug remoto
 ///
@@ -43,9 +44,9 @@ class DebugConfigManager {
           .doc('Moviles-$movil')
           .snapshots()
           .listen(
-        (snapshot) {
+        (snapshot) async {
           debugPrint('[$TAG] 🔔 Evento recibido desde Firestore');
-          _onDebugConfigChanged(snapshot);
+          await _onDebugConfigChanged(snapshot);
         },
         onError: (error) {
           debugPrint('[$TAG] ❌ Error en stream de debug config: $error');
@@ -78,7 +79,7 @@ class DebugConfigManager {
   }
 
   /// Procesa cambios en el documento de Firestore
-  static void _onDebugConfigChanged(DocumentSnapshot snapshot) {
+  static Future<void> _onDebugConfigChanged(DocumentSnapshot snapshot) async {
     debugPrint('[$TAG] 📡 Procesando cambio de configuración...');
     debugPrint('[$TAG]    - Documento existe: ${snapshot.exists}');
     debugPrint('[$TAG]    - Móvil actual: $_currentMovil');
@@ -109,11 +110,18 @@ class DebugConfigManager {
       final bool debugMode = debugModeRaw is bool ? debugModeRaw : false;
       final String debugLevel = data['debugLevel'] ?? 'INFO';
 
+      // 🗺️ Leer flag GPSMapa (por defecto false) - controla envío de coordenadas a n8n
+      final gpsMapaRaw = data['GPSMapa'];
+      final bool gpsMapaEnabled = gpsMapaRaw is bool ? gpsMapaRaw : false;
+
       debugPrint('[$TAG] 🔍 Campos detectados:');
       debugPrint(
           '[$TAG]    - debugMode (raw): $debugModeRaw (tipo: ${debugModeRaw.runtimeType})');
       debugPrint('[$TAG]    - debugMode (parsed): $debugMode');
       debugPrint('[$TAG]    - debugLevel: $debugLevel');
+      debugPrint(
+          '[$TAG]    - GPSMapa (raw): $gpsMapaRaw (tipo: ${gpsMapaRaw.runtimeType})');
+      debugPrint('[$TAG]    - GPSMapa (parsed): $gpsMapaEnabled');
 
       if (debugModeRaw != null && debugModeRaw is! bool) {
         debugPrint('[$TAG] ⚠️ ADVERTENCIA: debugMode NO es boolean!');
@@ -122,11 +130,24 @@ class DebugConfigManager {
         debugPrint('[$TAG]    - Debe ser boolean true/false en Firestore');
       }
 
+      if (gpsMapaRaw != null && gpsMapaRaw is! bool) {
+        debugPrint('[$TAG] ⚠️ ADVERTENCIA: GPSMapa NO es boolean!');
+        debugPrint('[$TAG]    - Tipo actual: ${gpsMapaRaw.runtimeType}');
+        debugPrint('[$TAG]    - Valor: $gpsMapaRaw');
+        debugPrint('[$TAG]    - Debe ser boolean true/false en Firestore');
+      }
+
       debugPrint('[$TAG] ✅ Configuración válida detectada');
-      debugPrint('[$TAG]    - debugMode=$debugMode, level=$debugLevel');
+      debugPrint(
+          '[$TAG]    - debugMode=$debugMode, level=$debugLevel, GPSMapa=$gpsMapaEnabled');
+
+      // Guardar GPSMapa en sessionBox para acceso rápido
+      final sessionBox = await Hive.openBox('sessionBox');
+      await sessionBox.put('gpsMapaEnabled', gpsMapaEnabled);
+      debugPrint('[$TAG] 💾 GPSMapa guardado en sessionBox: $gpsMapaEnabled');
 
       // Comunicar cambio a la capa nativa (Kotlin)
-      _notifyNativeLayer(debugMode, debugLevel);
+      _notifyNativeLayer(debugMode, debugLevel, gpsMapaEnabled);
     } catch (e, stackTrace) {
       debugPrint('[$TAG] ❌ Error procesando cambio de config: $e');
       debugPrint('[$TAG]    - StackTrace: $stackTrace');
@@ -134,13 +155,16 @@ class DebugConfigManager {
   }
 
   /// Notifica a la capa nativa (Kotlin) sobre el cambio de configuración
-  static Future<void> _notifyNativeLayer(bool enabled, String level) async {
+  static Future<void> _notifyNativeLayer(
+      bool enabled, String level, bool gpsMapaEnabled) async {
     try {
-      debugPrint('[$TAG] 📤 Enviando a Kotlin: enabled=$enabled, level=$level');
+      debugPrint(
+          '[$TAG] 📤 Enviando a Kotlin: enabled=$enabled, level=$level, gpsMapaEnabled=$gpsMapaEnabled');
 
       final result = await _channel.invokeMethod('setDebugMode', {
         'enabled': enabled,
         'level': level,
+        'gpsMapaEnabled': gpsMapaEnabled,
       });
 
       debugPrint('[$TAG] ✅ Kotlin respondió: $result');

@@ -499,14 +499,25 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     required String lectDesc,
     BuildContext? context, // <- Opcional para mostrar mensajes
   }) async {
-    print(
-        "🟠 [_callDescargaLecturaPedidos] Iniciando para pedidoId: $pedidoId");
+    // ✅ Prevenir múltiples llamadas simultáneas
+    if (_lecturaEnCurso) {
+      print('⚠️ [LECTURA] Ya hay una lectura en curso, ignorando...');
+      return;
+    }
 
-    final String pedidoTpo =
-        pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
-    final String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
+    setState(() => _lecturaEnCurso = true);
 
     try {
+      print(
+          "🟠 [_callDescargaLecturaPedidos] Iniciando para pedidoId: $pedidoId");
+
+      final String pedidoTpo =
+          pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
+
+      // ✅ Capturar timestamp AL INICIO para evitar duplicados
+      final String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
+      print("🕒 [TIMESTAMP] Capturado timestamp único: $fechaHoraCmbEst");
+
       final box = await Hive.openBox('sessionBox');
 
       final String? deviceId = box.get('deviceId');
@@ -709,6 +720,11 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           SnackBar(content: Text('Ocurrió un error inesperado.')),
         );
       }
+    } finally {
+      // ✅ Siempre resetear flag, incluso si hay error
+      if (mounted) {
+        setState(() => _lecturaEnCurso = false);
+      }
     }
   }
 
@@ -716,12 +732,23 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     List<Map<String, dynamic>> pedidos,
     BuildContext context,
   ) async {
-    const tag = '📥[_callDescargaPedidos]';
-    print('$tag Iniciando con ${pedidos.length} pedidos');
+    // ✅ Prevenir múltiples llamadas simultáneas
+    if (_descargaEnCurso) {
+      print('⚠️ [DESCARGA] Ya hay una descarga en curso, ignorando...');
+      return;
+    }
 
-    final String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
+    setState(() => _descargaEnCurso = true);
+
+    const tag = '📥[_callDescargaPedidos]';
 
     try {
+      print('$tag Iniciando con ${pedidos.length} pedidos');
+
+      // ✅ Capturar timestamp AL INICIO para evitar duplicados
+      final String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
+      print("🕒 [TIMESTAMP] Capturado timestamp único: $fechaHoraCmbEst");
+
       final sessionBox = await Hive.openBox('sessionBox');
       final String? deviceId = sessionBox.get('deviceId');
       final String? movilid = sessionBox.get('movil');
@@ -837,6 +864,11 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error al enviar descarga de pedidos')),
         );
+      }
+    } finally {
+      // ✅ Siempre resetear flag, incluso si hay error
+      if (mounted) {
+        setState(() => _descargaEnCurso = false);
       }
     }
   }

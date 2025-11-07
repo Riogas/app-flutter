@@ -540,11 +540,30 @@ class LocationService {
         String? movil = sessionBox.get('movil');
         String? deviceId = sessionBox.get('deviceId');
 
+        // 🗺️ Verificar si GPSMapa está habilitado antes de enviar coordenadas
+        bool gpsMapaEnabled =
+            sessionBox.get('gpsMapaEnabled', defaultValue: false);
+
+        if (!gpsMapaEnabled) {
+          // print('🗺️ [GPSMapa] Envío de coordenadas deshabilitado (GPSMapa=false)');
+          return;
+        }
+
         if (movil == null || deviceId == null) {
           // print(
           //   '❌ No se pudo obtener el móvil o el DeviceId de Hive para RioGas.',
           // );
           return;
+        }
+
+        // 🔢 Convertir móvil a int, si falla usar 0
+        int movilInt = 0;
+        try {
+          movilInt = int.parse(movil);
+        } catch (e) {
+          print(
+              '⚠️ [GPS] Error parseando móvil "$movil", usando 0 por defecto: $e');
+          movilInt = 0;
         }
 
         String fechaHora = DateTime.now().toUtc().toIso8601String();
@@ -556,8 +575,10 @@ class LocationService {
         // print(
         //   '📍 Enviando coordenadas a RioGas: Lat ${position['latitude']}, Lng ${position['longitude']}',
         // );
+        print(
+            '🗺️ [GPSMapa] Enviando coordenadas (GPSMapa=true): Lat ${position['latitude']}, Lng ${position['longitude']}');
         await RioGasService.registrarCoordenadas(
-            int.parse(movil),
+            movilInt, // Usar movilInt en lugar de int.parse(movil)
             position['latitude'].toString(),
             position['longitude'].toString(),
             position['utmX'].toString(),

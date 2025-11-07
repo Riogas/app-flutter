@@ -1,0 +1,213 @@
+import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive/hive.dart';
+import 'package:flutter/services.dart';
+import 'package:latlong2/latlong.dart';
+import '../services/riogas_service.dart';
+import '../services/session_service.dart';
+import '../utils/constantes.dart'; // 🆕 Para resetear ambiente
+
+/// 🚪 LogoutService - Servicio centralizado para manejar el cierre de sesión
+///
+/// Puede ser llamado desde:
+/// - Settings page (cierre manual del usuario)
+/// - FCM remote logout (cierre remoto desde servidor)
+///
+/// Ejecuta el mismo flujo en ambos casos para mantener consistencia
+class LogoutService {
+  static const String TAG = 'LogoutService';
+
+  /// Ejecuta el flujo completo de cierre de sesión
+  ///
+  /// [isRemoteLogout]: true si viene desde FCM, false si es manual
+  /// [nombreUsuario], [idUsuario], [deviceId]: Opcionales, si no se proveen se obtienen de Hive
+  ///
+  /// IMPORTANTE: En logout remoto, NO se envían parámetros desde FCM,
+  /// todo se obtiene de Hive (igual que force_gps_execution)
+  static Future<bool> executeLogout({
+    required bool isRemoteLogout,
+    String? nombreUsuario,
+    String? idUsuario,
+    String? deviceId,
+  }) async {
+    try {
+      print('$TAG 🚪 Iniciando logout (remote: $isRemoteLogout)');
+
+      // Abrir boxes de Hive
+      var sessionBox = await Hive.openBox('sessionBox');
+      var constantBox = await Hive.openBox('constantBox');
+      var mensajesBox = await Hive.openBox('mensajesBox');
+      var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
+      // Obtener datos de sesión SIEMPRE desde Hive (source of truth)
+      final movil = sessionBox.get('movil') ?? "0";
+      final escenario = sessionBox.get('escenario') ?? "0";
+      final usuario = sessionBox.get('username') ?? "string";
+      final idTerminal = sessionBox.get('deviceId') ?? "";
+      final nombreUsu = sessionBox.get('NombreUsuario') ?? "";
+      final usuarioId = sessionBox.get('username') ?? "";
+
+      print('$TAG 📊 Datos de sesión (desde Hive):');
+      print('$TAG    - Movil: $movil');
+      print('$TAG    - Usuario: $usuario');
+      print('$TAG    - DeviceId: $idTerminal');
+      print(
+          '$TAG    - Logout type: ${isRemoteLogout ? "Remoto (FCM)" : "Manual (Settings)"}');
+
+      // Marcar bandera de logout
+      sessionBox.put('firstLoginDone', true);
+      sessionBox.put('logoutControlled', true);
+
+      // 1️⃣ Detener servicio de ubicación (solo si no es remote, porque FCM ya lo detuvo)
+      if (!isRemoteLogout) {
+        try {
+          final platform = MethodChannel("background_service");
+          await platform.invokeMethod("stopLocationService", {
+            "movil": movil,
+            "escenario": escenario,
+            "usuario": usuario,
+            "deviceId": idTerminal,
+          });
+          print("$TAG 🛑 Servicio de ubicación detenido");
+        } catch (e) {
+          print(
+              '$TAG ⚠️ Error deteniendo servicio: $e (puede que FCM ya lo detuvo)');
+        }
+      } else {
+        print(
+            '$TAG ℹ️ Servicios ya detenidos por FCM, saltando detención manual');
+      }
+
+      // 2️⃣ Llamar al servicio RegistrarCierre
+      try {
+        await RioGasService.registrarCierre(
+          int.tryParse(movil ?? '0') ?? 0,
+          idTerminal,
+          usuarioId,
+          DateTime.now().toIso8601String(),
+          isRemoteLogout ? 'Remoto' : 'Controlado',
+        );
+        print('$TAG ✅ RegistrarCierre ejecutado');
+      } catch (e) {
+        print('$TAG ❌ Error en RegistrarCierre: $e');
+      }
+
+      // 3️⃣ Manejar documentos de Firestore (sesiones)
+      try {
+        String escenarioId = sessionBox.get('escenario', defaultValue: '0');
+        String movilId = sessionBox.get('movil', defaultValue: '0');
+        String fechaActualStr = DateTime.now()
+            .toUtc()
+            .subtract(Duration(hours: 3))
+            .toIso8601String()
+            .split('T')[0]
+            .replaceAll('-', '');
+
+        DocumentReference fechaDocRef = FirebaseFirestore.instance
+            .collection('Sesiones-$escenarioId')
+            .doc(fechaActualStr);
+
+        // Manejar documento del móvil
+        DocumentReference movilActivoDocRef =
+            fechaDocRef.collection('Movil-$movilId').doc('activo');
+
+        DocumentSnapshot activeDocSnapshot = await movilActivoDocRef.get();
+        if (activeDocSnapshot.exists) {
+          var activeData = activeDocSnapshot.data() as Map<String, dynamic>;
+          activeData['logout'] = isRemoteLogout ? 'Remoto' : 'Controlado';
+
+          String horaActual =
+              DateTime.now().toIso8601String().split('T')[1].split('.')[0];
+          DocumentReference backupDocRef =
+              fechaDocRef.collection('Movil-$movilId').doc(horaActual);
+          await backupDocRef.set(activeData);
+          await movilActivoDocRef.delete();
+
+          print('$TAG ✅ Documento móvil actualizado en Firestore');
+        }
+
+        // Manejar documento del usuario
+        DocumentReference usuarioActivoDocRef =
+            fechaDocRef.collection('Usuario-$usuarioId').doc('activo');
+
+        DocumentSnapshot usuarioDocSnapshot = await usuarioActivoDocRef.get();
+        if (usuarioDocSnapshot.exists) {
+          var usuarioData = usuarioDocSnapshot.data() as Map<String, dynamic>;
+          usuarioData['logout'] = isRemoteLogout ? 'Remoto' : 'Controlado';
+
+          String horaActual =
+              DateTime.now().toIso8601String().split('T')[1].split('.')[0];
+          DocumentReference usuarioBackupDocRef =
+              fechaDocRef.collection('Usuario-$usuarioId').doc(horaActual);
+          await usuarioBackupDocRef.set(usuarioData);
+          await usuarioActivoDocRef.delete();
+
+          print('$TAG ✅ Documento usuario actualizado en Firestore');
+        }
+      } catch (e) {
+        print('$TAG ❌ Error manejando documentos Firestore: $e');
+      }
+
+      // 4️⃣ Llamar a SessionService
+      try {
+        SessionService sessionService = SessionService();
+
+        await sessionService.saveSession(
+          idUsuario: usuarioId,
+          nomUsuario: nombreUsu,
+          primeraUbicacion: LatLng(0, 0),
+          versionApp: '1.0.0',
+          tipoDeCierreDeSesion: isRemoteLogout ? 'remoteLogout' : 'logoutUser',
+        );
+
+        final cerrarSesionResult = await sessionService.cerrarSesion(
+          idUsuario: usuarioId,
+          tipoDeCierreDeSesion: isRemoteLogout ? 'remoteLogout' : 'logoutUser',
+        );
+
+        print('$TAG ✅ SessionService ejecutado: $cerrarSesionResult');
+      } catch (e) {
+        print('$TAG ❌ Error en SessionService: $e');
+      }
+
+      // 5️⃣ Limpiar todas las flags de servicios
+      try {
+        await RioGasService.clearAllServiceFlags();
+        print('$TAG 🧹 Flags de servicios limpiadas');
+      } catch (e) {
+        print('$TAG ⚠️ Error limpiando flags de servicios: $e');
+      }
+
+      // 6️⃣ Eliminar datos de Hive
+      try {
+        await sessionBox.deleteFromDisk();
+        await constantBox.deleteFromDisk();
+        await mensajesBox.deleteFromDisk();
+        await failedRequestsBox.deleteFromDisk();
+
+        print('$TAG 🧹 Datos de Hive eliminados');
+      } catch (e) {
+        print('$TAG ❌ Error eliminando datos de Hive: $e');
+      }
+
+      // 🆕 Resetear ambiente a PRODUCCIÓN (por defecto)
+      try {
+        await AppEnvironment.resetToProduction();
+        print('$TAG 🌍 Ambiente reseteado a PRODUCCIÓN');
+      } catch (e) {
+        print('$TAG ⚠️ Error reseteando ambiente: $e');
+      }
+
+      // 7️⃣ Cerrar la aplicación
+      print('$TAG 🚪 Cerrando aplicación...');
+      Future.microtask(() {
+        exit(0);
+      });
+
+      return true;
+    } catch (e) {
+      print('$TAG ❌ Error crítico en logout: $e');
+      return false;
+    }
+  }
+}
