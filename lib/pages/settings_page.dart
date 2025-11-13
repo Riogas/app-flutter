@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 import 'dart:convert';
 import '../services/native_log_sync_service.dart';
 import '../services/logout_service.dart';
+import 'package:device_info_plus/device_info_plus.dart'; // 🆕 Para obtener deviceId
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -1446,15 +1447,93 @@ class _SettingsPageState extends State<SettingsPage> {
 
                     if (confirm == true) {
                       await AppEnvironment.setEnvironment(newEnvironment);
+
+                      // 🆕 Actualizar baseUrl en SharedPreferences nativo para servicio GPS
+                      try {
+                        const platform =
+                            MethodChannel('com.riogas.appmovil/shared_prefs');
+                        const locationPlatform =
+                            MethodChannel('com.riogas.appmovil/location');
+
+                        // Obtener la URL correcta según el ambiente
+                        String newBaseUrl = value
+                            ? AppEnvironment.devUrl // Desarrollo
+                            : RioGasService.baseUrl; // Producción
+
+                        print(
+                            '🔄 [SETTINGS] Actualizando baseUrl del servicio GPS...');
+                        print(
+                            '🔄 [SETTINGS] Nuevo ambiente: ${value ? "DESARROLLO" : "PRODUCCIÓN"}');
+                        print('🔄 [SETTINGS] Nueva URL: $newBaseUrl');
+
+                        // Guardar en SharedPreferences nativo
+                        await platform.invokeMethod(
+                            'saveBaseUrl', {'baseUrl': newBaseUrl});
+
+                        // 🆕 GUARDAR FLAG DE DESARROLLO para que FCM también lo respete
+                        await platform.invokeMethod(
+                            'saveIsDevelopment', {'isDevelopment': value});
+
+                        print(
+                            '✅ [SETTINGS] BaseUrl del servicio GPS actualizada exitosamente');
+
+                        // 🔥 REINICIAR SERVICIO GPS para aplicar nueva URL
+                        print(
+                            '🔄 [SETTINGS] Reiniciando servicio GPS para aplicar cambios...');
+                        try {
+                          // Detener servicio actual
+                          await locationPlatform
+                              .invokeMethod('stopLocationService');
+                          print('🛑 [SETTINGS] Servicio GPS detenido');
+
+                          // Esperar 1 segundo
+                          await Future.delayed(Duration(seconds: 1));
+
+                          // Obtener datos de sesión para reiniciar
+                          final sessionBox = await Hive.openBox('sessionBox');
+                          final movil =
+                              sessionBox.get('movil', defaultValue: '');
+                          final escenario =
+                              sessionBox.get('escenario', defaultValue: 1000);
+                          final usuario =
+                              sessionBox.get('usuario', defaultValue: '');
+                          final deviceId = await _getDeviceId();
+
+                          if (movil.isNotEmpty) {
+                            // Reiniciar servicio con nueva URL
+                            await locationPlatform
+                                .invokeMethod('startLocationService', {
+                              'movil': movil,
+                              'escenario': escenario,
+                              'usuario': usuario,
+                              'deviceId': deviceId,
+                            });
+                            print(
+                                '🚀 [SETTINGS] Servicio GPS reiniciado con nueva URL');
+                          } else {
+                            print(
+                                '⚠️ [SETTINGS] No hay sesión activa, servicio GPS no reiniciado');
+                          }
+                        } catch (e) {
+                          print(
+                              '❌ [SETTINGS] Error reiniciando servicio GPS: $e');
+                        }
+                      } catch (e) {
+                        print(
+                            '❌ [SETTINGS] Error actualizando baseUrl del servicio GPS: $e');
+                      }
+
                       setState(() {}); // Refrescar UI
 
                       // Mostrar mensaje de éxito
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            '🌍 Ambiente cambiado a: ${AppEnvironment.environmentName}',
+                            '🌍 Ambiente cambiado a: ${AppEnvironment.environmentName}\n'
+                            'Servicio GPS actualizado',
                           ),
                           backgroundColor: value ? Colors.orange : Colors.green,
+                          duration: Duration(seconds: 3),
                         ),
                       );
                     }
@@ -1695,6 +1774,21 @@ class _SettingsPageState extends State<SettingsPage> {
       );
     } catch (e) {
       _showMessage('❌ Error obteniendo logs SQLite: $e');
+    }
+  }
+
+  // 🆕 Obtener Device ID para reiniciar servicio GPS
+  Future<String> _getDeviceId() async {
+    final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+
+    if (Platform.isAndroid) {
+      AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+      return androidInfo.id;
+    } else if (Platform.isIOS) {
+      IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+      return iosInfo.identifierForVendor ?? 'unknown_ios';
+    } else {
+      return 'unknown_device';
     }
   }
 }

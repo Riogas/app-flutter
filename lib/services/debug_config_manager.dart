@@ -105,14 +105,19 @@ class DebugConfigManager {
         return;
       }
 
-      // Leer flag debugMode (por defecto false)
+      // Leer flag debugMode (por defecto false) - controla envío de logs a n8n
       final debugModeRaw = data['debugMode'];
       final bool debugMode = debugModeRaw is bool ? debugModeRaw : false;
       final String debugLevel = data['debugLevel'] ?? 'INFO';
 
-      // 🗺️ Leer flag GPSMapa (por defecto false) - controla envío de coordenadas a n8n
-      final gpsMapaRaw = data['GPSMapa'];
-      final bool gpsMapaEnabled = gpsMapaRaw is bool ? gpsMapaRaw : false;
+      // � Leer flag gpsN8n (por defecto false) - controla envío de coordenadas GPS a n8n cada 30s
+      final gpsN8nRaw = data['gpsN8n'];
+      final bool gpsN8nEnabled = gpsN8nRaw is bool ? gpsN8nRaw : false;
+
+      // 🎥 Leer flag grabarPantalla (por defecto false) - controla grabación con LogRocket
+      final grabarPantallaRaw = data['grabarPantalla'];
+      final bool grabarPantallaEnabled =
+          grabarPantallaRaw is bool ? grabarPantallaRaw : false;
 
       debugPrint('[$TAG] 🔍 Campos detectados:');
       debugPrint(
@@ -120,8 +125,11 @@ class DebugConfigManager {
       debugPrint('[$TAG]    - debugMode (parsed): $debugMode');
       debugPrint('[$TAG]    - debugLevel: $debugLevel');
       debugPrint(
-          '[$TAG]    - GPSMapa (raw): $gpsMapaRaw (tipo: ${gpsMapaRaw.runtimeType})');
-      debugPrint('[$TAG]    - GPSMapa (parsed): $gpsMapaEnabled');
+          '[$TAG]    - gpsN8n (raw): $gpsN8nRaw (tipo: ${gpsN8nRaw.runtimeType})');
+      debugPrint('[$TAG]    - gpsN8n (parsed): $gpsN8nEnabled');
+      debugPrint(
+          '[$TAG]    - grabarPantalla (raw): $grabarPantallaRaw (tipo: ${grabarPantallaRaw.runtimeType})');
+      debugPrint('[$TAG]    - grabarPantalla (parsed): $grabarPantallaEnabled');
 
       if (debugModeRaw != null && debugModeRaw is! bool) {
         debugPrint('[$TAG] ⚠️ ADVERTENCIA: debugMode NO es boolean!');
@@ -130,24 +138,36 @@ class DebugConfigManager {
         debugPrint('[$TAG]    - Debe ser boolean true/false en Firestore');
       }
 
-      if (gpsMapaRaw != null && gpsMapaRaw is! bool) {
-        debugPrint('[$TAG] ⚠️ ADVERTENCIA: GPSMapa NO es boolean!');
-        debugPrint('[$TAG]    - Tipo actual: ${gpsMapaRaw.runtimeType}');
-        debugPrint('[$TAG]    - Valor: $gpsMapaRaw');
+      if (gpsN8nRaw != null && gpsN8nRaw is! bool) {
+        debugPrint('[$TAG] ⚠️ ADVERTENCIA: gpsN8n NO es boolean!');
+        debugPrint('[$TAG]    - Tipo actual: ${gpsN8nRaw.runtimeType}');
+        debugPrint('[$TAG]    - Valor: $gpsN8nRaw');
+        debugPrint('[$TAG]    - Debe ser boolean true/false en Firestore');
+      }
+
+      if (grabarPantallaRaw != null && grabarPantallaRaw is! bool) {
+        debugPrint('[$TAG] ⚠️ ADVERTENCIA: grabarPantalla NO es boolean!');
+        debugPrint('[$TAG]    - Tipo actual: ${grabarPantallaRaw.runtimeType}');
+        debugPrint('[$TAG]    - Valor: $grabarPantallaRaw');
         debugPrint('[$TAG]    - Debe ser boolean true/false en Firestore');
       }
 
       debugPrint('[$TAG] ✅ Configuración válida detectada');
       debugPrint(
-          '[$TAG]    - debugMode=$debugMode, level=$debugLevel, GPSMapa=$gpsMapaEnabled');
+          '[$TAG]    - debugMode=$debugMode, level=$debugLevel, gpsN8n=$gpsN8nEnabled, grabarPantalla=$grabarPantallaEnabled');
 
-      // Guardar GPSMapa en sessionBox para acceso rápido
+      // Guardar gpsN8n en sessionBox para acceso rápido
       final sessionBox = await Hive.openBox('sessionBox');
-      await sessionBox.put('gpsMapaEnabled', gpsMapaEnabled);
-      debugPrint('[$TAG] 💾 GPSMapa guardado en sessionBox: $gpsMapaEnabled');
+      await sessionBox.put('gpsN8nEnabled', gpsN8nEnabled);
+      debugPrint('[$TAG] 💾 gpsN8n guardado en sessionBox: $gpsN8nEnabled');
+
+      // 🎥 Guardar grabarPantalla en sessionBox
+      await sessionBox.put('grabarPantallaEnabled', grabarPantallaEnabled);
+      debugPrint(
+          '[$TAG] 💾 grabarPantalla guardado en sessionBox: $grabarPantallaEnabled');
 
       // Comunicar cambio a la capa nativa (Kotlin)
-      _notifyNativeLayer(debugMode, debugLevel, gpsMapaEnabled);
+      _notifyNativeLayer(debugMode, debugLevel, gpsN8nEnabled);
     } catch (e, stackTrace) {
       debugPrint('[$TAG] ❌ Error procesando cambio de config: $e');
       debugPrint('[$TAG]    - StackTrace: $stackTrace');
@@ -156,15 +176,15 @@ class DebugConfigManager {
 
   /// Notifica a la capa nativa (Kotlin) sobre el cambio de configuración
   static Future<void> _notifyNativeLayer(
-      bool enabled, String level, bool gpsMapaEnabled) async {
+      bool enabled, String level, bool gpsN8nEnabled) async {
     try {
       debugPrint(
-          '[$TAG] 📤 Enviando a Kotlin: enabled=$enabled, level=$level, gpsMapaEnabled=$gpsMapaEnabled');
+          '[$TAG] 📤 Enviando a Kotlin: enabled=$enabled, level=$level, gpsN8nEnabled=$gpsN8nEnabled');
 
       final result = await _channel.invokeMethod('setDebugMode', {
         'enabled': enabled,
         'level': level,
-        'gpsMapaEnabled': gpsMapaEnabled,
+        'gpsN8nEnabled': gpsN8nEnabled,
       });
 
       debugPrint('[$TAG] ✅ Kotlin respondió: $result');

@@ -39,6 +39,8 @@ import '../services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogS
 import 'package:screen_protector/screen_protector.dart';
 import 'services/remote_logout_listener.dart'; // 🚨 Importar listener de logout remoto
 import 'services/fcm_token_manager.dart'; // 🔑 Importar FCM Token Manager
+import 'services/screen_recording_manager.dart'; // 🎥 Sistema de grabación de pantalla
+import 'package:logrocket_flutter/logrocket_flutter.dart'; // 🎥 LogRocket SDK
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -141,103 +143,115 @@ void _listenToLocationPermission() {
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // 🎥 Inicializar LogRocket PRIMERO (wrap toda la app)
+  LogRocket.wrapAndInitialize(
+    LogRocketWrapConfiguration(),
+    LogRocketInitConfiguration(appID: 'w2ree2/delivery-ammr6'),
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform);
 
-  // 🔴 DESACTIVAR ENVÍO DE DATOS A FIREBASE
-  await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
-  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
+      // 🔴 DESACTIVAR ENVÍO DE DATOS A FIREBASE
+      await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
 
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
+      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
 
-  // 🔹 Inicializa Hive antes de cualquier acceso a Hive.openBox()
+      // 🔹 Inicializa Hive antes de cualquier acceso a Hive.openBox()
 
-  await Hive.initFlutter();
-  Hive.registerAdapter(ErrorEventAdapter());
-  await Hive.openBox('sessionBox');
-  await Hive.openBox<ErrorEvent>('errorBox');
+      await Hive.initFlutter();
+      Hive.registerAdapter(ErrorEventAdapter());
+      await Hive.openBox('sessionBox');
+      await Hive.openBox<ErrorEvent>('errorBox');
 
-  // 🌍 Inicializar ambiente de aplicación (Dev/Prod)
-  await AppEnvironment.initialize();
+      // 🌍 Inicializar ambiente de aplicación (Dev/Prod)
+      await AppEnvironment.initialize();
 
-  await NotificationsService.initialize();
-  await RioGasService.initializeService(); // 👈 imprescindible
+      await NotificationsService.initialize();
+      await RioGasService.initializeService(); // 👈 imprescindible
 
-  // 🔹 Inicializar servicio de sincronización de logs nativos
-  await NativeLogSyncService.initialize();
+      // 🔹 Inicializar servicio de sincronización de logs nativos
+      await NativeLogSyncService.initialize();
 
-  // 🔍 Mostrar logs sincronizados para debugging (temporal)
-  await NativeLogSyncService.displaySyncedLogs();
+      // 🔍 Mostrar logs sincronizados para debugging (temporal)
+      await NativeLogSyncService.displaySyncedLogs();
 
-  // 🚨 Inicializar listener de logout remoto via FCM
-  await RemoteLogoutListener.initialize();
+      // 🚨 Inicializar listener de logout remoto via FCM
+      await RemoteLogoutListener.initialize();
 
-  bool isLoggedIn = await AuthService.checkIsLoggedIn();
+      // 🎥 LogRocket se inicializa automáticamente desde AndroidManifest.xml
+      // App ID: w2ree2/delivery-ammr6
+      print('🎥 LogRocket configurado con App ID desde AndroidManifest');
 
-  // 🔹 Inicializar sincronización centralizada de Hive (mensajes y pedidos)
-  PersistentStreamManager().initializeHiveSync();
+      bool isLoggedIn = await AuthService.checkIsLoggedIn();
 
-  // Control de captura de pantalla según stream de móviles
-  await _setupScreenProtectorByMovilStream();
+      // 🔹 Inicializar sincronización centralizada de Hive (mensajes y pedidos)
+      PersistentStreamManager().initializeHiveSync();
 
-  if (isLoggedIn) {
-    // 🔹 Verificar y escuchar permisos de GPS
-    //await _checkAndListenGpsPermissions();
-  }
+      // Control de captura de pantalla según stream de móviles
+      await _setupScreenProtectorByMovilStream();
 
-  // 🔹 Verificar conectividad a Internet
-  await _checkInternetConnectivity();
+      if (isLoggedIn) {
+        // 🔹 Verificar y escuchar permisos de GPS
+        //await _checkAndListenGpsPermissions();
+      }
 
-  // 🔹 Validar la versión de la aplicación
-  /*if (!isLoggedIn) {
+      // 🔹 Verificar conectividad a Internet
+      await _checkInternetConnectivity();
+
+      // 🔹 Validar la versión de la aplicación
+      /*if (!isLoggedIn) {
     
   }*/
-  await _validateAppVersion();
+      await _validateAppVersion();
 
-  // 🔹 Inicializar Firebase Messaging
-  await _initializeFirebaseMessaging();
+      // 🔹 Inicializar Firebase Messaging
+      await _initializeFirebaseMessaging();
 
-  // � Inicializar FCM Token Manager (auto-renovación de tokens)
-  await _initializeFCMTokenManager();
+      // � Inicializar FCM Token Manager (auto-renovación de tokens)
+      await _initializeFCMTokenManager();
 
-  // �🔹 Verificar configuraciones de batería y actividad en segundo plano
-  //await _checkBatteryAndBackgroundSettings();
+      // �🔹 Verificar configuraciones de batería y actividad en segundo plano
+      //await _checkBatteryAndBackgroundSettings();
 
-  // 🔹 Verificar sesión activa
-  bool hasActiveSession = await _checkActiveSession(
-    {}, // Replace with actual response data if available
-    null, // Replace with actual selectedMovil if available
-  );
+      // 🔹 Verificar sesión activa
+      bool hasActiveSession = await _checkActiveSession(
+        {}, // Replace with actual response data if available
+        null, // Replace with actual selectedMovil if available
+      );
 
-  if (!hasActiveSession) {
-    isLoggedIn = false; // Redirect to login if no active session
-  }
+      if (!hasActiveSession) {
+        isLoggedIn = false; // Redirect to login if no active session
+      }
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    // Podés registrar esto en logs o mostrar una pantalla de error
-    // print("Error crítico atrapado: \\${details.exceptionAsString()}");
-    FlutterError.presentError(details); // Muestra el error en consola
-  };
+      FlutterError.onError = (FlutterErrorDetails details) {
+        // Podés registrar esto en logs o mostrar una pantalla de error
+        // print("Error crítico atrapado: \\${details.exceptionAsString()}");
+        FlutterError.presentError(details); // Muestra el error en consola
+      };
 
-  final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-  final androidInfo = await deviceInfo.androidInfo;
-  final version = androidInfo.version.sdkInt;
+      final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      final version = androidInfo.version.sdkInt;
 
-  if (Platform.isAndroid && version < 26) {
-    runApp(
-      MaterialApp(
-        home: Scaffold(body: Center(child: Text('Lite Fallback App'))),
-      ),
-    ); // algo más liviano, sin animaciones
-  } else {
-    runApp(MyApp(isLoggedIn: isLoggedIn));
-  }
+      if (Platform.isAndroid && version < 26) {
+        runApp(
+          MaterialApp(
+            home: Scaffold(body: Center(child: Text('Lite Fallback App'))),
+          ),
+        ); // algo más liviano, sin animaciones
+      } else {
+        runApp(MyApp(isLoggedIn: isLoggedIn));
+      }
 
-  //WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
+      //WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
 
-  // 🔹 Start listening to location permissions
-  _listenToLocationPermission();
+      // 🔹 Start listening to location permissions
+      _listenToLocationPermission();
+    }, // 🎥 Cierre de la función lambda de LogRocket.wrapAndInitialize
+  ); // 🎥 Cierre de LogRocket.wrapAndInitialize
 }
 
 Future<void> _initializeFirebaseMessaging() async {
@@ -286,6 +300,20 @@ Future<void> _initializeFirebaseMessaging() async {
     print('📩 [FCM FG] Mensaje recibido en foreground');
     print('📩 [FCM FG] Message ID: ${message.messageId}');
     print('📩 [FCM FG] Data: ${message.data}');
+
+    // 🎥 Manejar comando de grabación de pantalla
+    final action = message.data['action'];
+    if (action == 'toggle_screen_recording') {
+      final enable = message.data['enable'] == 'true';
+      try {
+        await ScreenRecordingManager.toggleRecording(enable);
+        print(
+            '📹 [FCM] Grabación ${enable ? "activada" : "desactivada"} remotamente');
+      } catch (e) {
+        print('❌ [FCM] Error toggle grabación: $e');
+      }
+      return; // No mostrar notificación para comandos de sistema
+    }
 
     RemoteNotification? notification = message.notification;
     AndroidNotification? android = message.notification?.android;
@@ -1089,45 +1117,47 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'MoveIT',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      navigatorKey: navigatorKey,
-      // 🌍 Banner visual si está en modo desarrollo
-      builder: (context, child) {
-        if (AppEnvironment.isDevelopment) {
-          return Banner(
-            message: 'DESARROLLO 🧪',
-            location: BannerLocation.topEnd,
-            color: Colors.orange,
-            textStyle: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
-            child: child!,
-          );
-        }
-        return child!;
-      },
-      home: widget.isLoggedIn ? HomePage() : LoginPage(),
-      onGenerateRoute: (RouteSettings settings) {
-        if (settings.name == '/login') {
-          final args = settings.arguments as Map<String, dynamic>?;
+    return LogRocketWidget(
+      child: MaterialApp(
+        title: 'MoveIT',
+        theme: ThemeData(primarySwatch: Colors.blue),
+        navigatorKey: navigatorKey,
+        // 🌍 Banner visual si está en modo desarrollo
+        builder: (context, child) {
+          if (AppEnvironment.isDevelopment) {
+            return Banner(
+              message: 'DESARROLLO 🧪',
+              location: BannerLocation.topEnd,
+              color: Colors.orange,
+              textStyle: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+              child: child!,
+            );
+          }
+          return child!;
+        },
+        home: widget.isLoggedIn ? HomePage() : LoginPage(),
+        onGenerateRoute: (RouteSettings settings) {
+          if (settings.name == '/login') {
+            final args = settings.arguments as Map<String, dynamic>?;
 
-          return MaterialPageRoute(
-            builder: (context) => LoginPage(
-              forcedLogout: args?['forcedLogout'] ?? false,
-              forcedLogoutMessage: args?['mensaje'] ?? '',
-            ),
-          );
-        }
+            return MaterialPageRoute(
+              builder: (context) => LoginPage(
+                forcedLogout: args?['forcedLogout'] ?? false,
+                forcedLogoutMessage: args?['mensaje'] ?? '',
+              ),
+            );
+          }
 
-        if (settings.name == '/home') {
-          return MaterialPageRoute(builder: (context) => HomePage());
-        }
+          if (settings.name == '/home') {
+            return MaterialPageRoute(builder: (context) => HomePage());
+          }
 
-        return null;
-      },
+          return null;
+        },
+      ),
     );
   }
 }

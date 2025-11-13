@@ -2,12 +2,15 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart'; // Para MethodChannel
 import 'package:hive/hive.dart';
 import 'dart:convert'; // Para calcular el tamaño de los datos
 import 'dart:async'; // Para Timer
 import '../utils/error_event.dart';
 import '../utils/config.dart'; // Importa el archivo de configuración
 import '../utils/constantes.dart'; // Importa la función getConstantValue
+import 'riogas_service.dart'; // Para registrarCierre
+import 'persistent_stream_manager.dart'; // Para cancelar streams
 
 // Función utilitaria para abrir cajas Hive de forma segura
 dynamic openBoxSafe(String boxName) async {
@@ -468,6 +471,22 @@ class FirebaseService {
       print('$kFirebaseSesionesTag No se pudo abrir sessionBox');
       return;
     }
+
+    // 🌅 VERIFICAR CAMBIO DE DÍA - Auto-logout si es necesario
+    String? loginDate = box.get('loginDate');
+    String currentDate = DateTime.now().toIso8601String().split('T')[0];
+
+    if (loginDate != null && loginDate != currentDate) {
+      print('$kFirebaseSesionesTag 🌅 CAMBIO DE DÍA DETECTADO');
+      print('$kFirebaseSesionesTag    Login: $loginDate');
+      print('$kFirebaseSesionesTag    Hoy: $currentDate');
+      print('$kFirebaseSesionesTag 🛑 Iniciando auto-logout...');
+
+      await _performAutoLogout(box);
+      yield null; // Terminar stream
+      return; // Salir del método
+    }
+
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String movil = box.get('movil', defaultValue: '0');
     String collectionName = 'sessions-$escenarioId';
@@ -965,6 +984,73 @@ class FirebaseService {
   }
 
   // Agrega más métodos para otras consultas según sea necesario
+
+  /// 🌅 Auto-logout al cambio de día
+  Future<void> _performAutoLogout(Box sessionBox) async {
+    try {
+      final movil = sessionBox.get('movil', defaultValue: 0);
+      final deviceId = sessionBox.get('deviceId', defaultValue: '');
+      final usuario = sessionBox.get('username', defaultValue: '');
+      final escenario = sessionBox.get('escenario', defaultValue: '0');
+
+      print('$kFirebaseSesionesTag 🛑 AUTO-LOGOUT por cambio de día');
+      print('$kFirebaseSesionesTag    Movil: $movil, Usuario: $usuario');
+
+      // 1️⃣ Detener GPS service
+      try {
+        final platform = MethodChannel("background_service");
+        await platform.invokeMethod("stopLocationService", {
+          "movil": movil.toString(),
+          "escenario": escenario,
+          "usuario": usuario,
+          "deviceId": deviceId,
+        });
+        print('$kFirebaseSesionesTag ✅ GPS service detenido');
+      } catch (e) {
+        print('$kFirebaseSesionesTag ❌ Error deteniendo GPS service: $e');
+      }
+
+      // 2️⃣ Registrar cierre en backend
+      try {
+        await RioGasService.registrarCierre(
+          movil,
+          deviceId,
+          usuario,
+          DateTime.now().toIso8601String(),
+          'AutoLogoutCambioDia',
+        );
+        print('$kFirebaseSesionesTag ✅ Cierre registrado en backend');
+      } catch (e) {
+        print('$kFirebaseSesionesTag ❌ Error registrando cierre: $e');
+      }
+
+      // 3️⃣ Cancelar todos los streams
+      try {
+        PersistentStreamManager().dispose();
+        print('$kFirebaseSesionesTag ✅ Streams cancelados');
+      } catch (e) {
+        print('$kFirebaseSesionesTag ❌ Error cancelando streams: $e');
+      }
+
+      // 4️⃣ Limpiar Hive
+      try {
+        await sessionBox.clear();
+        if (Hive.isBoxOpen('mensajesBox')) {
+          await Hive.box('mensajesBox').clear();
+        }
+        if (Hive.isBoxOpen('pedidosBox')) {
+          await Hive.box('pedidosBox').clear();
+        }
+        print('$kFirebaseSesionesTag ✅ Hive limpiado');
+      } catch (e) {
+        print('$kFirebaseSesionesTag ❌ Error limpiando Hive: $e');
+      }
+
+      print('$kFirebaseSesionesTag ✅ AUTO-LOGOUT COMPLETADO');
+    } catch (e) {
+      print('$kFirebaseSesionesTag ❌ Error en auto-logout: $e');
+    }
+  }
 
   static Future<void> _logError(
     String type,

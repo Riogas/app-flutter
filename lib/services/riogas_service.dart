@@ -77,11 +77,11 @@ class RioGasService {
 
   // 🌍 Getter dinámico que devuelve la URL según el ambiente
   static String get baseUrl {
-    // Si está en desarrollo, usar URLs de desarrollo
+    // Si está en desarrollo, usar URL de constante 611
     if (AppEnvironment.isDevelopment) {
-      return '${AppEnvironment.devBaseRoot}${AppEnvironment.devServicesPath}';
+      return AppEnvironment.devUrl;
     }
-    // Si está en producción, usar la URL configurada desde constantes
+    // Si está en producción, usar la URL configurada desde constantes 600+601
     return _baseUrlProduction;
   }
 
@@ -187,9 +187,8 @@ class RioGasService {
     print('🔧 [INIT] Base root normalizado: "$baseRoot"');
     print('🔧 [INIT] Services path normalizado: "$servicesPath"');
     print('🔧 [INIT] ===== URL FINAL CONFIGURADA =====');
-    print('🔧 [INIT] baseUrl PRODUCCIÓN = "$_baseUrlProduction"');
-    print(
-        '🔧 [INIT] baseUrl DESARROLLO = "${AppEnvironment.devBaseRoot}${AppEnvironment.devServicesPath}"');
+    print('🔧 [INIT] baseUrl PRODUCCIÓN (600+601) = "$_baseUrlProduction"');
+    print('🔧 [INIT] baseUrl DESARROLLO (611) = "${AppEnvironment.devUrl}"');
     print('🌍 [INIT] Ambiente actual: ${AppEnvironment.environmentName}');
     print('🔧 [INIT] =====================================');
 

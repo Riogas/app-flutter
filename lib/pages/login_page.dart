@@ -4,6 +4,7 @@ import '../services/riogas_service.dart';
 import '../services/firebase_constants_service.dart';
 import '../services/session_service.dart';
 import '../services/debug_config_manager.dart'; // 🆕 Sistema de logging remoto
+import '../services/screen_recording_manager.dart'; // 🎥 Sistema de grabación de pantalla
 import 'home_page.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hive/hive.dart';
@@ -29,6 +30,9 @@ import '../utils/stream_manager.dart';
 import '../services/persistent_stream_manager.dart';
 import 'package:http/http.dart' as http; // 🆕 Para verificar URLs remotas
 import '../services/fcm_token_manager.dart'; // 🔑 Para gestión automática de tokens FCM
+import 'package:audioplayers/audioplayers.dart'; // 🎵 Para reproducir audio
+import 'package:shared_preferences/shared_preferences.dart'; // 💾 Para guardar preferencias
+import 'package:cached_network_image/cached_network_image.dart'; // 🖼️ Para caché de imágenes
 
 const String kLoginFlowTag = "[LOGIN_FLOW]";
 
@@ -271,17 +275,31 @@ class _LoginBackgroundState extends State<LoginBackground> {
       case 'image':
       case 'gif':
         if (_imageUrl != null) {
-          return Image.network(
-            _imageUrl!,
+          // 🚀 Usar CachedNetworkImage para caché automático con verificación de actualizaciones
+          return CachedNetworkImage(
+            imageUrl: _imageUrl!,
             fit: BoxFit.cover,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return Container(color: Colors.black);
-            },
-            errorBuilder: (context, error, stackTrace) {
+            // 📦 Placeholder mientras carga (primera vez o si no hay caché)
+            placeholder: (context, url) => Container(
+              color: Colors.black,
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white.withOpacity(0.5),
+                ),
+              ),
+            ),
+            // ❌ Widget de error si falla la carga
+            errorWidget: (context, url, error) {
               print('❌ [LOGIN_BG] Error cargando imagen: $error');
               return Container(color: Colors.black);
             },
+            // 🔄 Configuración de caché
+            cacheKey: _imageUrl, // Usa la URL como clave de caché
+            maxHeightDiskCache: 1920, // Máximo height para caché (optimización)
+            maxWidthDiskCache: 1080, // Máximo width para caché (optimización)
+            // ⏱️ Duración del caché: 7 días (pero verificará cambios en cada inicio)
+            fadeInDuration: Duration(milliseconds: 300),
+            fadeOutDuration: Duration(milliseconds: 100),
           );
         }
         return Container(color: Colors.black);
@@ -436,11 +454,16 @@ class _LoginPageState extends State<LoginPage> {
       TextEditingController(); // New controller for license plate
   bool _isLoginButtonLoading = false; // Add this line
 
+  // 🎵 Variables para el reproductor de audio
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isAudioEnabled = false; // Estado del audio (habilitado/deshabilitado)
+
   @override
   void initState() {
     super.initState();
     _loadLastUsername(); // Load the last username from Hive
     _initialize();
+    _loadAudioPreference(); // 🎵 Cargar preferencia de audio
 
     if (widget.forcedLogout) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -467,10 +490,79 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _initialize() async {
     _deviceId = await AuthService.getDeviceId();
     print("Device ID iniciado: $_deviceId");
+
+    // 💾 Guardar deviceId en SharedPreferences para que Kotlin pueda leerlo
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('deviceId', _deviceId);
+      await prefs.setString('flutter.deviceId', _deviceId);
+      print("✅ DeviceId guardado en SharedPreferences: $_deviceId");
+    } catch (e) {
+      print("❌ Error guardando deviceId en SharedPreferences: $e");
+    }
+
     _appVersion = await AuthService.getAppVersion();
     _appNroVersion = await AuthService.getAppVersionNro();
     _isDeviceRegistered = await AuthService.validateDevice(_deviceId);
     setState(() => _isLoading = false);
+  }
+
+  // 🎵 Métodos para el manejo del audio
+  Future<void> _loadAudioPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final audioEnabled = prefs.getBool('login_audio_enabled') ?? false;
+
+    setState(() {
+      _isAudioEnabled = audioEnabled;
+    });
+
+    if (_isAudioEnabled) {
+      await _playAudio();
+    }
+  }
+
+  Future<void> _toggleAudio() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      _isAudioEnabled = !_isAudioEnabled;
+    });
+
+    await prefs.setBool('login_audio_enabled', _isAudioEnabled);
+
+    if (_isAudioEnabled) {
+      await _playAudio();
+    } else {
+      await _stopAudio();
+    }
+  }
+
+  Future<void> _playAudio() async {
+    try {
+      await _audioPlayer.setReleaseMode(ReleaseMode.loop); // Loop infinito
+      await _audioPlayer.play(AssetSource('audio/cadamanana.mp3'));
+      print('🎵 Audio iniciado en loop');
+    } catch (e) {
+      print('❌ Error al reproducir audio: $e');
+    }
+  }
+
+  Future<void> _stopAudio() async {
+    try {
+      await _audioPlayer.stop();
+      print('🛑 Audio detenido');
+    } catch (e) {
+      print('❌ Error al detener audio: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose(); // 🎵 Liberar recursos del audio
+    _usernameController.dispose();
+    _passwordController.dispose();
+    licensePlateController.dispose();
+    super.dispose();
   }
 
   Future<void> _handleForcedLogoutAndShowDialog() async {
@@ -925,7 +1017,8 @@ class _LoginPageState extends State<LoginPage> {
                   ? Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('Ingrese el código OTP enviado a su teléfono'),
+                        Text('Esperando código de verificación automático...'),
+                        SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
@@ -1495,12 +1588,22 @@ class _LoginPageState extends State<LoginPage> {
                             servicesPath = servicesPath.substring(1);
                           if (!servicesPath.endsWith('/')) servicesPath += '/';
 
-                          String fullBaseUrl = '$baseRoot$servicesPath';
+                          // 🆕 RESPETAR AMBIENTE: Usar devUrl si isDevelopment=true
+                          String fullBaseUrl = AppEnvironment.isDevelopment
+                              ? AppEnvironment.devUrl // Desarrollo
+                              : '$baseRoot$servicesPath'; // Producción (600+601)
 
                           await platform.invokeMethod(
                               'saveBaseUrl', {'baseUrl': fullBaseUrl});
+
+                          // 🆕 GUARDAR FLAG DE DESARROLLO para que FCM también lo respete
+                          await platform.invokeMethod('saveIsDevelopment',
+                              {'isDevelopment': AppEnvironment.isDevelopment});
+
                           print(
                               '✅ BaseUrl guardada en SharedPreferences nativo: $fullBaseUrl');
+                          print(
+                              '🔧 [LOGIN] Ambiente: ${AppEnvironment.isDevelopment ? "DESARROLLO" : "PRODUCCIÓN"}');
                         } catch (e) {
                           print(
                               '⚠️ Error guardando baseUrl en SharedPreferences nativo: $e');
@@ -1613,6 +1716,11 @@ class _LoginPageState extends State<LoginPage> {
 
     // 🔹 Guardar que es un login manual para evitar el logout forzado inmediato
     await box.put('firstLoginDone', true);
+
+    // 🌅 Guardar fecha de login para auto-logout al cambio de día
+    await box.put('loginDate', DateTime.now().toIso8601String().split('T')[0]);
+    print(
+        "[32m$kLoginFlowTag 📅 Fecha de login guardada: ${box.get('loginDate')}[0m");
 
     var pedidosBox = await Hive.openBox('pedidosBox');
 
@@ -2248,6 +2356,9 @@ class _LoginPageState extends State<LoginPage> {
 
   /// Ejecuta la carga de constantes, inicialización de servicios y navegación tras login exitoso
   Future<void> _onSuccessfulLoginFlow(BuildContext context) async {
+    // 🎵 Detener audio antes de salir del login
+    await _stopAudio();
+
     // 🔹 Cargar y guardar constantes desde Firebase
     print("Cargando y guardando constantes desde Firebase...");
     await ConstantsService.loadAndSaveConstants();
@@ -2278,6 +2389,24 @@ class _LoginPageState extends State<LoginPage> {
     });
     print(
         "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
+
+    // 🎥 Iniciar grabación de pantalla si está habilitada
+    print(
+        '🎥 [LOGIN] >>> ANTES de llamar ScreenRecordingManager.startRecording()');
+    print(
+        '🎥 [LOGIN] >>> movil=$movil, usuario=$usuario, deviceId=${idTerminal ?? ""}');
+    try {
+      print('🎥 [LOGIN] >>> DENTRO del try, llamando startRecording...');
+      await ScreenRecordingManager.startRecording(
+        movil: movil,
+        usuario: usuario,
+        deviceId: idTerminal ?? '',
+      );
+      print('🎥 [LOGIN] >>> DESPUÉS de startRecording (sin error)');
+    } catch (e, stackTrace) {
+      print('❌ [LOGIN] Error iniciando grabación de pantalla: $e');
+      print('❌ [LOGIN] StackTrace: $stackTrace');
+    }
 
     // 🔹 Cerrar el diálogo de carga y navegar a HomePage
     if (mounted) {
@@ -2398,24 +2527,43 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: SafeArea(
-                      child: Stack(
-                        children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'ID: $_deviceId',
-                              textAlign: TextAlign.center,
-                              style:
-                                  TextStyle(fontSize: 14, color: Colors.grey),
+                  // 🎵 Solo mostrar el footer cuando el teclado NO está visible
+                  if (MediaQuery.of(context).viewInsets.bottom == 0)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: SafeArea(
+                        child: Stack(
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'ID: $_deviceId',
+                                textAlign: TextAlign.center,
+                                style:
+                                    TextStyle(fontSize: 14, color: Colors.grey),
+                              ),
                             ),
-                          ),
-                        ],
+                            // 🎵 Botón de audio en la esquina inferior derecha
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: IconButton(
+                                icon: Icon(
+                                  _isAudioEnabled
+                                      ? Icons.volume_up
+                                      : Icons.volume_off,
+                                  color: Colors.grey,
+                                  size: 28,
+                                ),
+                                onPressed: _toggleAudio,
+                                tooltip: _isAudioEnabled
+                                    ? 'Desactivar audio'
+                                    : 'Activar audio',
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

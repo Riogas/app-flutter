@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/riogas_service.dart';
 import '../services/session_service.dart';
+import '../services/screen_recording_manager.dart'; // 🎥 Sistema de grabación
 import '../utils/constantes.dart'; // 🆕 Para resetear ambiente
 
 /// 🚪 LogoutService - Servicio centralizado para manejar el cierre de sesión
@@ -57,6 +58,14 @@ class LogoutService {
       // Marcar bandera de logout
       sessionBox.put('firstLoginDone', true);
       sessionBox.put('logoutControlled', true);
+
+      // 🎥 Detener grabación de pantalla si está activa
+      try {
+        await ScreenRecordingManager.stopRecording();
+        print("$TAG 🛑 Grabación de pantalla detenida");
+      } catch (e) {
+        print('$TAG ⚠️ Error deteniendo grabación: $e');
+      }
 
       // 1️⃣ Detener servicio de ubicación (solo si no es remote, porque FCM ya lo detuvo)
       if (!isRemoteLogout) {

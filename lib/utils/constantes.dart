@@ -9,11 +9,17 @@ class AppEnvironment {
   static const String _keyEnvironment = 'app_environment';
   static Environment _currentEnvironment = Environment.production;
 
-  // URLs de desarrollo (usando constante 611 para ambiente dev)
-  static const String devBaseRoot = 'https://riogas.desa.uy/ica_geos_/';
-  static const String devServicesPath = 'appservices/';
+  // 🔧 URL de desarrollo cargada desde constante 611
+  static String? _devUrlFromConstant;
 
-  // Inicializar desde SharedPreferences
+  // URLs de desarrollo por defecto (fallback si no existe constante 611)
+  static const String _devUrlFallback =
+      'http://190.64.89.170:8888/ICA_Geos_/appservices/';
+
+  // Getter para URL de desarrollo (usa constante 611 o fallback)
+  static String get devUrl => _devUrlFromConstant ?? _devUrlFallback;
+
+  // Inicializar desde SharedPreferences y cargar constante 611
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     final envString = prefs.getString(_keyEnvironment);
@@ -24,6 +30,32 @@ class AppEnvironment {
     } else {
       _currentEnvironment = Environment.production;
       print('🌍 [AMBIENTE] Aplicación iniciada en modo PRODUCCIÓN');
+    }
+
+    // 🔧 Cargar constante 611 para URL de desarrollo
+    await _loadDevUrlFromConstant();
+  }
+
+  // 🔧 Cargar la constante 611 desde Hive
+  static Future<void> _loadDevUrlFromConstant() async {
+    try {
+      final constantBox = await Hive.openBox('constantBox');
+      final data = constantBox.get('611');
+
+      if (data != null && data['Estado'] == 'A') {
+        final url = data['Valor']?.toString().trim();
+        if (url != null && url.isNotEmpty) {
+          _devUrlFromConstant = url;
+          print(
+              '🔧 [CONSTANTE 611] URL Desarrollo cargada: "$_devUrlFromConstant"');
+        } else {
+          print('⚠️ [CONSTANTE 611] Valor vacío, usando fallback');
+        }
+      } else {
+        print('⚠️ [CONSTANTE 611] No existe o Estado != A, usando fallback');
+      }
+    } catch (e) {
+      print('❌ [CONSTANTE 611] Error cargando: $e, usando fallback');
     }
   }
 

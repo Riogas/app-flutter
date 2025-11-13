@@ -1129,6 +1129,53 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
 
       if (response != null) {
+        // ✅ VALIDAR RESPUESTA DEL SERVICIO (OK: 99 = sesión inactiva)
+        int? okCode;
+        String? message;
+
+        if (response is Map<String, dynamic>) {
+          okCode = response['OK'] as int?;
+          message = response['message'] as String?;
+        }
+
+        print("🔍 [RESPONSE] OK: $okCode | Message: $message");
+
+        // Verificar si la sesión está inactiva (OK: 99)
+        if (okCode == 99) {
+          print("❌ [SESSION] Sesión inactiva detectada (OK: 99)");
+
+          // Cerrar el loading dialog
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+
+          // Mostrar mensaje de error
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'No se pudo validar la sesión. La aplicación se cerrará.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ),
+          );
+
+          // Limpiar sesión y volver al login
+          await Future.delayed(Duration(seconds: 2));
+
+          try {
+            var sessionBox = await Hive.openBox('sessionBox');
+            await sessionBox.clear();
+            print("🧹 [SESSION] Sesión limpiada por sesión inactiva");
+          } catch (e) {
+            print("⚠️ [SESSION] Error limpiando sesión: $e");
+          }
+
+          // Navegar al login (reemplazar toda la pila de navegación)
+          Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+          return;
+        }
+
+        // Si OK != 99, continuar con flujo normal
         print("✅ [SERVICIO] Finalización exitosa para pedidoId $pedidoId");
         if (pedidosBox.containsKey(pedidoId)) {
           await pedidosBox.put(pedidoId, 'Procesando');
