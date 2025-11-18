@@ -252,20 +252,54 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _initializeHomePage() async {
+    print('🏠 [HomePage] _initializeHomePage() iniciando...');
+    
+    // 🚨 PASO 1: VERIFICACIÓN TEMPRANA DE SESIÓN (antes de cargar datos)
+    print('🔐 [HomePage] Verificando validez de sesión ANTES de inicializar streams...');
+    bool sesionValida = await _firebaseService.verificarSesionValida();
+    
+    if (!sesionValida) {
+      print('🚫 [HomePage] Sesión INVÁLIDA detectada - Redirigiendo a login SIN mostrar UI');
+      
+      // Obtener info del usuario que tiene la sesión actual (si es posible)
+      final usuarioActual = await obtenerUsuarioLogueadoActual();
+      
+      Future.microtask(() {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/login', arguments: {
+            'forcedLogout': true,
+            'mensaje': usuarioActual['nomUsuario'] != 'Desconocido'
+                ? 'Se ha conectado el usuario ${usuarioActual['nomUsuario']} con el móvil ${usuarioActual['movil']} en otro dispositivo.'
+                : 'Su sesión ha expirado o está siendo usada en otro dispositivo.',
+          });
+        }
+      });
+      return; // ⛔ NO continuar con la inicialización
+    }
+
+    print('✅ [HomePage] Sesión VÁLIDA - Continuando con inicialización normal');
+
+    // PASO 2: Cargar datos de sesión e inicializar servicios
     await _loadSessionData();
     await RioGasService.initializeService();
+    
     var box = await openBoxSafe('sessionBox');
     if (box == null) return;
+    
     bool firstLoginDone = box.get('firstLoginDone', defaultValue: false);
     setState(() {
       _isFirstLoad = !firstLoginDone;
     });
+    
     _listenToMessages();
     _listenToPendingOrders();
     _printConstantDocumentNames();
+    
     setState(() {
       _isFirstLoad = false;
     });
+    
+    print('✅ [HomePage] _initializeHomePage() completado exitosamente');
   }
 
   Future<void> _initializeLocationService() async {
@@ -1011,11 +1045,23 @@ class _HomePageState extends State<HomePage>
                         _streamManager.lastInitializationTime ?? DateTime(2000))
                     .inSeconds;
 
+                // 🚨 PROTECCIÓN: Mostrar loader si sesión aún no está validada
                 if (data == null && tiempoDesdeInit < 3) {
                   print(
-                      '[HOME_SESSION] ⚠️ Ignorando null reciente tras inicialización');
-                  return _widgetOptions
-                      .elementAt(_selectedIndex); // no hace logout
+                      '[HOME_SESSION] ⏳ Esperando validación inicial de sesión...');
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 20),
+                        Text(
+                          'Verificando sesión...',
+                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  );
                 } else if (data == null) {
                   print(
                       '[HOME_SESSION] ❌ Documento eliminado o null desde sesionesNotifier');

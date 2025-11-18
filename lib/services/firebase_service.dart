@@ -464,6 +464,78 @@ class FirebaseService {
 
   static const String kFirebaseSesionesTag = '[FIREBASE_SESIONES]';
 
+  /// 🚨 Verifica SINCRÓNICAMENTE si el documento de sesión existe y es válido
+  /// Retorna: true si sesión válida, false si debe desloguearse
+  /// 
+  /// Este método se ejecuta ANTES de inicializar streams para evitar
+  /// mostrar datos de pedidos cuando la sesión ya no es válida
+  Future<bool> verificarSesionValida() async {
+    print('$kFirebaseSesionesTag 🔍 INICIO verificación síncrona de sesión');
+    
+    var box = await openBoxSafe('sessionBox');
+    if (box == null) {
+      print('$kFirebaseSesionesTag ❌ No se pudo abrir sessionBox');
+      return false;
+    }
+
+    // Verificar cambio de día primero
+    String? loginDate = box.get('loginDate');
+    String currentDate = DateTime.now().toIso8601String().split('T')[0];
+
+    if (loginDate != null && loginDate != currentDate) {
+      print('$kFirebaseSesionesTag 🌅 Cambio de día detectado - Sesión inválida');
+      print('$kFirebaseSesionesTag    Login: $loginDate → Hoy: $currentDate');
+      return false;
+    }
+
+    String escenarioId = box.get('escenario', defaultValue: '0').toString();
+    String usuarioDocName = 'Usuario-${box.get('username', defaultValue: '0')}';
+    String fechaActual = DateTime.now().toIso8601String().split('T')[0].replaceAll('-', '');
+    String deviceId = box.get('deviceId', defaultValue: '');
+    String collectionName = 'sessions-$escenarioId';
+
+    print('$kFirebaseSesionesTag 📍 Verificando doc: $collectionName/$fechaActual/activeSessions/$usuarioDocName');
+    print('$kFirebaseSesionesTag 📱 deviceId local: $deviceId');
+
+    try {
+      DocumentSnapshot snapshot = await FirebaseFirestore.instance
+          .collection(collectionName)
+          .doc(fechaActual)
+          .collection('activeSessions')
+          .doc(usuarioDocName)
+          .get(const GetOptions(source: Source.server)) // Forzar lectura del servidor
+          .timeout(
+            Duration(seconds: 5),
+            onTimeout: () => throw TimeoutException('Timeout verificando sesión'),
+          );
+
+      if (!snapshot.exists) {
+        print('$kFirebaseSesionesTag ⚠️ Documento NO existe - Sesión inválida');
+        return false;
+      }
+
+      var data = snapshot.data() as Map<String, dynamic>;
+      String firestoreDeviceId = data['idTerminal'] ?? '';
+
+      print('$kFirebaseSesionesTag 📱 deviceId en Firestore: $firestoreDeviceId');
+
+      if (firestoreDeviceId != deviceId) {
+        print('$kFirebaseSesionesTag ⚠️ idTerminal NO coincide - Sesión usurpada por otro dispositivo');
+        print('$kFirebaseSesionesTag    Local: $deviceId ≠ Firestore: $firestoreDeviceId');
+        return false;
+      }
+
+      print('$kFirebaseSesionesTag ✅ Sesión VÁLIDA - deviceId coincide');
+      return true;
+
+    } catch (e) {
+      print('$kFirebaseSesionesTag ❌ Error verificando sesión: $e');
+      // En caso de error de red, ser conservador y permitir continuar
+      // (el stream de sesiones lo validará de forma reactiva después)
+      return true;
+    }
+  }
+
   Stream<Map<String, dynamic>?> getSesionesStream() async* {
     print('$kFirebaseSesionesTag INICIO getSesionesStream');
     var box = await openBoxSafe('sessionBox');
