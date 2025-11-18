@@ -968,13 +968,15 @@ class _LoginPageState extends State<LoginPage> {
             response['OK'] > 0 &&
             response['OK'] != 9) {
           String errorMessage = response['message'] ?? 'Error desconocido';
+          String fullMessage = '$errorMessage\n\nID Dispositivo: $_deviceId';
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+            SnackBar(content: Text(fullMessage), backgroundColor: Colors.red),
           );
         } else if (response != null && response.containsKey('error')) {
+          String fullMessage =
+              '${response['error']}\n\nID Dispositivo: $_deviceId';
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text(response['error']), backgroundColor: Colors.red),
+            SnackBar(content: Text(fullMessage), backgroundColor: Colors.red),
           );
         }
       }
@@ -1538,7 +1540,7 @@ class _LoginPageState extends State<LoginPage> {
                             await platform
                                 .invokeMethod('criticalLogFromFlutter', {
                               'type': 'SharedPreferencesError',
-                              'movil': selectedMovil ?? 'unknown',
+                              'movil': selectedMovil ?? 0,
                               'error': e.toString(),
                               'context':
                                   'Error guardando móvil en SharedPreferences desde Flutter (login_page)',
@@ -1737,9 +1739,74 @@ class _LoginPageState extends State<LoginPage> {
     await box.put('firstLoginDone', true);
 
     // 🌅 Guardar fecha de login para auto-logout al cambio de día
-    await box.put('loginDate', DateTime.now().toIso8601String().split('T')[0]);
-    print(
-        "[32m$kLoginFlowTag 📅 Fecha de login guardada: ${box.get('loginDate')}[0m");
+    String loginDate =
+        DateTime.now().toIso8601String().split('T')[0]; // Formato: YYYY-MM-DD
+    await box.put('loginDate', loginDate);
+
+    // 🆕 TAMBIÉN guardar en SharedPreferences NATIVO usando MethodChannel
+    // (para que el servicio Android pueda leerlo sin el prefijo de flutter plugin)
+    try {
+      const platform = MethodChannel('com.riogas.appmovil/shared_prefs');
+      await platform.invokeMethod('saveLoginDate', {'loginDate': loginDate});
+      print("[32m$kLoginFlowTag 📅 Fecha de login guardada: $loginDate[0m");
+      print("[32m$kLoginFlowTag    ✅ Hive: sessionBox['loginDate'][0m");
+      print(
+          "[32m$kLoginFlowTag    ✅ SharedPreferences NATIVO: flutter.loginDate[0m");
+    } catch (e) {
+      print(
+          "[31m$kLoginFlowTag ❌ Error guardando loginDate en SharedPreferences nativo: $e[0m");
+    }
+
+    // 🆕 Guardar username en SharedPreferences NATIVO para watchdog/force_gps
+    try {
+      const platform = MethodChannel('com.riogas.appmovil/shared_prefs');
+      await platform
+          .invokeMethod('saveUsername', {'username': _usernameController.text});
+      print(
+          "[32m$kLoginFlowTag 👤 Username guardado: ${_usernameController.text}[0m");
+      print("[32m$kLoginFlowTag    ✅ Hive: sessionBox['username'][0m");
+      print(
+          "[32m$kLoginFlowTag    ✅ SharedPreferences NATIVO: flutter.username[0m");
+    } catch (e) {
+      print(
+          "[31m$kLoginFlowTag ❌ Error guardando username en SharedPreferences nativo: $e[0m");
+    }
+
+    // 🆕 Guardar appVersion en SharedPreferences NATIVO para RegistrarCierre
+    try {
+      const platform = MethodChannel('com.riogas.appmovil/shared_prefs');
+      await platform
+          .invokeMethod('saveAppVersion', {'appVersion': _appVersion});
+      print("[32m$kLoginFlowTag 📦 AppVersion guardado: $_appVersion[0m");
+      print(
+          "[32m$kLoginFlowTag    ✅ Hive: sessionBox (no guardado en Hive)[0m");
+      print(
+          "[32m$kLoginFlowTag    ✅ SharedPreferences NATIVO: flutter.appVersion[0m");
+    } catch (e) {
+      print(
+          "[31m$kLoginFlowTag ❌ Error guardando appVersion en SharedPreferences nativo: $e[0m");
+    }
+
+    // 🆕 Guardar NombreUsuario en SharedPreferences NATIVO para RegistrarCierre
+    try {
+      const platform = MethodChannel('com.riogas.appmovil/shared_prefs');
+      String? nombreUsuario = response['NombreUsuario']?.toString().trim();
+      if (nombreUsuario != null && nombreUsuario.isNotEmpty) {
+        await platform.invokeMethod(
+            'saveNombreUsuario', {'nombreUsuario': nombreUsuario});
+        print(
+            "[32m$kLoginFlowTag 👤 NombreUsuario guardado: $nombreUsuario[0m");
+        print("[32m$kLoginFlowTag    ✅ Hive: sessionBox['NombreUsuario'][0m");
+        print(
+            "[32m$kLoginFlowTag    ✅ SharedPreferences NATIVO: flutter.NombreUsuario[0m");
+      } else {
+        print(
+            "[31m$kLoginFlowTag ⚠️ NombreUsuario está vacío, no se guardó en SharedPreferences nativo[0m");
+      }
+    } catch (e) {
+      print(
+          "[31m$kLoginFlowTag ❌ Error guardando NombreUsuario en SharedPreferences nativo: $e[0m");
+    }
 
     var pedidosBox = await Hive.openBox('pedidosBox');
 

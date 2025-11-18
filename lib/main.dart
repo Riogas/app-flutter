@@ -238,12 +238,14 @@ void _listenToLocationPermission() {
 void main() async {
   // 🛡️ PROTECCIÓN GLOBAL: Captura TODOS los errores no manejados
   runZonedGuarded(() async {
-    // 🎥 Inicializar LogRocket PRIMERO (wrap toda la app)
-    LogRocket.wrapAndInitialize(
-      LogRocketWrapConfiguration(),
-      LogRocketInitConfiguration(appID: 'w2ree2/delivery-ammr6'),
-      () async {
-        WidgetsFlutterBinding.ensureInitialized();
+    // ❌ 🎥 LogRocket DESACTIVADO para evitar consumo innecesario de recursos
+    // Solo se activará mediante FCM cuando grabarPantalla = true en Firestore
+    // LogRocket.wrapAndInitialize(
+    //   LogRocketWrapConfiguration(),
+    //   LogRocketInitConfiguration(appID: 'w2ree2/delivery-ammr6'),
+    //   () async {
+    
+    WidgetsFlutterBinding.ensureInitialized();
 
         // 🛡️ Captura errores de Flutter Framework
         FlutterError.onError = (FlutterErrorDetails details) {
@@ -475,8 +477,8 @@ void main() async {
         } catch (e) {
           print('⚠️ Error iniciando listener de permisos: $e');
         }
-      }, // 🎥 Cierre de la función lambda de LogRocket.wrapAndInitialize
-    ); // 🎥 Cierre de LogRocket.wrapAndInitialize
+      // }, // 🎥 Cierre de la función lambda de LogRocket.wrapAndInitialize (COMENTADO)
+    // ); // 🎥 Cierre de LogRocket.wrapAndInitialize (COMENTADO)
   }, (error, stack) {
     // 🛡️ MANEJADOR DE ERRORES GLOBAL: Captura errores asincrónicos no manejados
     print('🔴 [GLOBAL ERROR] Error no manejado capturado: $error');

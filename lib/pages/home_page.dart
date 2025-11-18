@@ -283,7 +283,8 @@ class _HomePageState extends State<HomePage>
       return; // ⛔ NO continuar con la inicialización
     }
 
-    print('✅ [HOME_PAGE] Sesión VÁLIDA - Continuando con inicialización normal');
+    print(
+        '✅ [HOME_PAGE] Sesión VÁLIDA - Continuando con inicialización normal');
 
     // 🔓 Desbloquear UI ahora que la sesión está verificada
     print('🔓 [HOME_PAGE] Desbloqueando UI (_isVerifyingSession = false)');
