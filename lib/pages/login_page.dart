@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import '../services/riogas_service.dart';
 import '../services/firebase_constants_service.dart';
 import '../services/session_service.dart';
+import '../services/session_sync_service.dart'; // 🔄 Sincronización de sesión
 import '../services/debug_config_manager.dart'; // 🆕 Sistema de logging remoto
 import '../services/screen_recording_manager.dart'; // 🎥 Sistema de grabación de pantalla
 import 'home_page.dart';
@@ -1510,6 +1511,15 @@ class _LoginPageState extends State<LoginPage> {
                         await box.put('movil', selectedMovil);
                         await userbox.put('movil', selectedMovil);
 
+                        // 🔄 Sincronizar datos de sesión a SharedPreferences
+                        try {
+                          await SessionSyncService.syncToSharedPrefs();
+                          print(
+                              '✅ Datos de sesión sincronizados (movil guardado)');
+                        } catch (e) {
+                          print('⚠️ Error sincronizando datos de sesión: $e');
+                        }
+
                         // 🆕 Guardar móvil en SharedPreferences nativo (Android) para CriticalLogger
                         try {
                           const platform =
@@ -1714,7 +1724,16 @@ class _LoginPageState extends State<LoginPage> {
     await box.put('NombreUsuario', response['NombreUsuario'].trim());
     await box.put('deviceId', _deviceId);
 
-    // 🔹 Guardar que es un login manual para evitar el logout forzado inmediato
+    // � Sincronizar datos de sesión a SharedPreferences
+    try {
+      await SessionSyncService.syncToSharedPrefs();
+      print(
+          '$kLoginFlowTag ✅ Datos de sesión sincronizados (username, deviceId, escenario)');
+    } catch (e) {
+      print('$kLoginFlowTag ⚠️ Error sincronizando datos de sesión: $e');
+    }
+
+    // �🔹 Guardar que es un login manual para evitar el logout forzado inmediato
     await box.put('firstLoginDone', true);
 
     // 🌅 Guardar fecha de login para auto-logout al cambio de día
@@ -2434,10 +2453,48 @@ class _LoginPageState extends State<LoginPage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Image.network(
-                              'https://www.riogas.uy/ica_geos_/static/Resources/RGDelivery.png',
+                            // 🚀 Logo con caché automático (igual que el background)
+                            CachedNetworkImage(
+                              imageUrl:
+                                  'https://www.riogas.uy/ica_geos_/static/Resources/RGDelivery.png',
                               width: 250,
                               height: 250,
+                              // 📦 Placeholder mientras carga (primera vez o si no hay caché)
+                              placeholder: (context, url) => Container(
+                                width: 250,
+                                height: 250,
+                                color: Colors.transparent,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white.withOpacity(0.5),
+                                  ),
+                                ),
+                              ),
+                              // ❌ Widget de error si falla la carga
+                              errorWidget: (context, url, error) {
+                                print(
+                                    '❌ [LOGIN_LOGO] Error cargando logo: $error');
+                                // Fallback: mostrar un icono o texto
+                                return Container(
+                                  width: 250,
+                                  height: 250,
+                                  color: Colors.transparent,
+                                  child: Icon(
+                                    Icons.image_not_supported,
+                                    size: 100,
+                                    color: Colors.white.withOpacity(0.3),
+                                  ),
+                                );
+                              },
+                              // 🔄 Configuración de caché
+                              cacheKey:
+                                  'https://www.riogas.uy/ica_geos_/static/Resources/RGDelivery.png',
+                              maxHeightDiskCache:
+                                  500, // Optimización para logo más pequeño
+                              maxWidthDiskCache: 500,
+                              // ⏱️ Duración del caché: 7 días (pero verificará cambios en cada inicio)
+                              fadeInDuration: Duration(milliseconds: 300),
+                              fadeOutDuration: Duration(milliseconds: 100),
                             ),
                             SizedBox(height: 1),
                             TextField(

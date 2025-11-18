@@ -187,17 +187,116 @@ class LogoutService {
         print('$TAG ⚠️ Error limpiando flags de servicios: $e');
       }
 
-      // 6️⃣ Eliminar datos de Hive
+      // 6️⃣ Limpieza COMPLETA y DEFENSIVA de Hive boxes, SharedPreferences y logs
+      print('$TAG 🧹 Iniciando limpieza completa de datos...');
+
+      // 🔹 PRESERVAR datos importantes para próximo login
+      String? lastUsername;
+      bool? huellaEnabled;
+      try {
+        if (Hive.isBoxOpen('usuarioBox')) {
+          final usuarioBox = Hive.box('usuarioBox');
+          lastUsername = usuarioBox.get('lastUsername');
+          huellaEnabled = usuarioBox.get('huella');
+          print('$TAG 💾 Datos preservados para próximo login:');
+          print('$TAG    - lastUsername: $lastUsername');
+          print('$TAG    - huella: $huellaEnabled');
+        }
+      } catch (e) {
+        print('$TAG ⚠️ Error preservando datos de usuario: $e');
+      }
+
+      // 🔹 Eliminar Hive boxes de sesión (ya abiertos)
       try {
         await sessionBox.deleteFromDisk();
         await constantBox.deleteFromDisk();
         await mensajesBox.deleteFromDisk();
         await failedRequestsBox.deleteFromDisk();
-
-        print('$TAG 🧹 Datos de Hive eliminados');
+        print(
+            '$TAG ✅ Boxes principales eliminados (sessionBox, constantBox, mensajesBox, failedRequestsBox)');
       } catch (e) {
-        print('$TAG ❌ Error eliminando datos de Hive: $e');
+        print('$TAG ❌ Error eliminando boxes principales: $e');
       }
+
+      // 🔹 Eliminar otros Hive boxes que puedan estar abiertos
+      final boxesToDelete = [
+        'pedidosBox',
+        'conexionBox',
+        'errorBox',
+        'descargaLecturaPedidosBox',
+        'OTPBOX',
+        'authBox',
+        'nativeLogsBox',
+      ];
+
+      for (final boxName in boxesToDelete) {
+        try {
+          if (Hive.isBoxOpen(boxName)) {
+            final box = Hive.box(boxName);
+            await box.deleteFromDisk();
+            print('$TAG ✅ Box eliminado: $boxName');
+          } else {
+            // Intentar eliminar aunque no esté abierto
+            await Hive.deleteBoxFromDisk(boxName);
+            print('$TAG ✅ Box eliminado (no abierto): $boxName');
+          }
+        } catch (e) {
+          print('$TAG ⚠️ No se pudo eliminar $boxName: $e (puede no existir)');
+        }
+      }
+
+      // 🔹 RESTAURAR datos importantes en usuarioBox
+      try {
+        final usuarioBox = await Hive.openBox('usuarioBox');
+        if (lastUsername != null) {
+          await usuarioBox.put('lastUsername', lastUsername);
+          print('$TAG 💾 lastUsername restaurado: $lastUsername');
+        }
+        if (huellaEnabled != null) {
+          await usuarioBox.put('huella', huellaEnabled);
+          print('$TAG 💾 huella restaurado: $huellaEnabled');
+        }
+      } catch (e) {
+        print('$TAG ⚠️ Error restaurando datos de usuario: $e');
+      }
+
+      // 🔹 Limpiar SharedPreferences nativos (Android)
+      try {
+        final platform = MethodChannel('com.riogas.appmovil/shared_prefs');
+
+        // Lista de SharedPreferences a limpiar
+        final prefsToClean = [
+          'config', // Contiene last_movil, last_escenario, service_disabled, etc.
+          'daily_tracking', // Distancias GPS acumuladas
+          'coords', // Última ubicación guardada
+          'location_errors', // Errores de ubicación acumulados
+          'gps_execution', // Contador de ejecuciones GPS
+          'FlutterSharedPreferences', // Preferencias de Flutter (baseUrl, etc.)
+        ];
+
+        for (final prefsName in prefsToClean) {
+          try {
+            await platform.invokeMethod(
+                'clearSharedPreferences', {'prefsName': prefsName});
+            print('$TAG ✅ SharedPreferences limpiado: $prefsName');
+          } catch (e) {
+            print('$TAG ⚠️ No se pudo limpiar $prefsName: $e');
+          }
+        }
+      } catch (e) {
+        print('$TAG ⚠️ Error limpiando SharedPreferences: $e');
+      }
+
+      // 🔹 Limpiar archivos de logs nativos
+      try {
+        final platform = MethodChannel('com.riogas.appmovil/native_logs');
+        await platform.invokeMethod('clearAllLogs');
+        print('$TAG ✅ Logs nativos limpiados');
+      } catch (e) {
+        print('$TAG ⚠️ Error limpiando logs nativos: $e');
+      }
+
+      print('$TAG 🧹 Limpieza completa finalizada');
 
       // 🆕 Resetear ambiente a PRODUCCIÓN (por defecto)
       try {

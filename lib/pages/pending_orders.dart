@@ -440,37 +440,64 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
         if (estadoActual == 'DESCARGA') {
           print('$tag 📖 Enviando LECTURA para $pedidoId (BG)...');
-          await _callDescargaLecturaPedidos(
+          final success = await _callDescargaLecturaPedidos(
             pedido,
             pedidoId,
             lectDesc: 'LECTURA',
             context: context,
           );
+
+          // ✅ Marcar como LECTURA en Hive SIEMPRE, independientemente del resultado HTTP
           await box.put(pedidoId, 'LECTURA');
-          // await box.flush();
-          print('$tag ✅ LECTURA registrada para $pedidoId');
+
+          if (success) {
+            print('$tag ✅ LECTURA enviada y registrada para $pedidoId');
+          } else {
+            print(
+                '$tag ⚠️ LECTURA registrada localmente pero no se envió al servidor (constante 400 deshabilitada o error)');
+          }
         } else if (estadoActual == null) {
           // Robustez: si no hubo DESCARGA previa, la hacemos rápido en BG y luego LECTURA
           print(
               '$tag ℹ️ Sin DESCARGA previa. Ejecutando DESCARGA+LECTURA para $pedidoId (BG)...');
 
-          await _callDescargaLecturaPedidos(
+          // ✅ Intentar enviar DESCARGA (puede fallar si constante 402='N')
+          final descargaSuccess = await _callDescargaLecturaPedidos(
             pedido,
             pedidoId,
             lectDesc: 'DESCARGA',
             context: context,
           );
+
+          // ✅ Marcar como DESCARGA en Hive SIEMPRE, independientemente del resultado HTTP
           await box.put(pedidoId, 'DESCARGA');
 
-          await _callDescargaLecturaPedidos(
+          if (descargaSuccess) {
+            print('$tag ✅ DESCARGA enviada al servidor');
+          } else {
+            print(
+                '$tag ℹ️ DESCARGA registrada localmente pero no se envió al servidor (constante 402 deshabilitada o error)');
+          }
+
+          // ✅ Intentar enviar LECTURA (puede fallar si constante 400='N')
+          final lecturaSuccess = await _callDescargaLecturaPedidos(
             pedido,
             pedidoId,
             lectDesc: 'LECTURA',
             context: context,
           );
+
+          // ✅ Marcar como LECTURA en Hive SIEMPRE, independientemente del resultado HTTP
           await box.put(pedidoId, 'LECTURA');
 
-          print('$tag ✅ DESCARGA+LECTURA registradas para $pedidoId');
+          if (lecturaSuccess) {
+            print('$tag ✅ LECTURA enviada al servidor');
+          } else {
+            print(
+                '$tag ℹ️ LECTURA registrada localmente pero no se envió al servidor (constante 400 deshabilitada o error)');
+          }
+
+          print('$tag ✅ DESCARGA+LECTURA registradas en Hive para $pedidoId');
         } else {
           print(
               '$tag ⏭️ Pedido $pedidoId ya estaba en LECTURA. No se vuelve a llamar.');
@@ -493,19 +520,16 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     print('$tag 🚀 Tarea de lectura lanzada en segundo plano para $pedidoId');
   }
 
-  Future<void> _callDescargaLecturaPedidos(
+  Future<bool> _callDescargaLecturaPedidos(
     Map<String, dynamic> pedido,
     int pedidoId, {
     required String lectDesc,
     BuildContext? context, // <- Opcional para mostrar mensajes
   }) async {
-    // ✅ Prevenir múltiples llamadas simultáneas
-    if (_lecturaEnCurso) {
-      print('⚠️ [LECTURA] Ya hay una lectura en curso, ignorando...');
-      return;
-    }
+    // ✅ REMOVED: La validación de _lecturaEnCurso ya se hace en marcarLecturaSiCorresponde()
+    // No necesitamos validar nuevamente aquí porque bloquea las llamadas correctas
 
-    setState(() => _lecturaEnCurso = true);
+    // setState(() => _lecturaEnCurso = true); ← REMOVED: ya se maneja en el caller
 
     try {
       print(
@@ -534,7 +558,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                 content: Text('Error de sesión: faltan datos del usuario.')),
           );
         }
-        return;
+        return false; // ❌ Falló
       }
 
       String inAux1 = movilid!;
@@ -646,15 +670,22 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
 
       print("📤 Enviando datos a RioGasService...");
 
-      var data = constantBox.get('400');
+      // 🆕 Control separado por tipo de operación:
+      // - Constante 400: Controla LECTURAS (cuando usuario aprieta pedido)
+      // - Constante 402: Controla DESCARGAS individuales (cuando se registra descarga)
+      final constantId = lectDesc == 'LECTURA' ? '400' : '402';
+      final constantName = lectDesc == 'LECTURA' ? 'LECTURA' : 'DESCARGA';
+
+      var data = constantBox.get(constantId);
       String llamarws = 'N';
-      print("🔍 Leyendo constante con ID 400 para días de cache: $data");
+      print(
+          "🔍 Leyendo constante con ID $constantId para control de $constantName: $data");
       if (data != null && data['Estado'] == 'A') {
-        print("✅ Estado es 'A' para ID 400");
+        print("✅ Estado es 'A' para ID $constantId");
         llamarws = data['Valor'] ??
             'N'; // Usar el valor de la constante o 'N' por defecto
       } else {
-        print("❌ Estado no es 'A' para ID 400 o data es null");
+        print("❌ Estado no es 'A' para ID $constantId o data es null");
         llamarws = 'N';
       }
 
@@ -688,6 +719,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           ).timeout(const Duration(seconds: 8));
 
           print("✅ Petición completada con éxito para pedido $pedidoId");
+          return true; // ✅ Éxito
         } on TimeoutException {
           print("⏰ Timeout esperando respuesta de RioGasService");
           if (context != null) {
@@ -696,6 +728,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                   content: Text('La conexión con el servidor ha expirado.')),
             );
           }
+          return false; // ❌ Timeout
         } catch (e) {
           print("❌ Error inesperado al llamar a RioGasService: $e");
           if (context != null) {
@@ -703,6 +736,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
               SnackBar(content: Text('Error al enviar datos al servidor.')),
             );
           }
+          return false; // ❌ Error
         }
       else {
         print("ℹ️ No se llamará a RioGasService, 'llamarws' es 'N'");
@@ -711,6 +745,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           //SnackBar(content: Text('No se requiere llamada al servidor.')),
           //);
         }
+        return false; // ❌ No se llamó
       }
     } catch (e, st) {
       print("❌ Excepción general: $e");
@@ -720,12 +755,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
           SnackBar(content: Text('Ocurrió un error inesperado.')),
         );
       }
-    } finally {
-      // ✅ Siempre resetear flag, incluso si hay error
-      if (mounted) {
-        setState(() => _lecturaEnCurso = false);
-      }
+      return false; // ❌ Error general
     }
+    // ✅ REMOVED finally block: _lecturaEnCurso ya se maneja en marcarLecturaSiCorresponde()
   }
 
   Future<void> _callDescargaPedidos(
