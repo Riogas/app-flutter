@@ -86,6 +86,9 @@ class _HomePageState extends State<HomePage>
   // 🔹 FIX: Create stable stream for session management to prevent child widget rebuilds
   late Stream<Map<String, dynamic>?> _sesionesStream;
 
+  // 🚨 Flag para bloquear UI mientras se verifica sesión
+  bool _isVerifyingSession = true;
+
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(), // Back to normal page for testing
     /*CompletedOrdersPage(),*/
@@ -252,18 +255,21 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _initializeHomePage() async {
-    print('🏠 [HomePage] _initializeHomePage() iniciando...');
-    
+    print('🏠 [HOME_PAGE] _initializeHomePage() iniciando...');
+    print('🏠 [HOME_PAGE] _isVerifyingSession = $_isVerifyingSession');
+
     // 🚨 PASO 1: VERIFICACIÓN TEMPRANA DE SESIÓN (antes de cargar datos)
-    print('🔐 [HomePage] Verificando validez de sesión ANTES de inicializar streams...');
+    print(
+        '🔐 [HOME_PAGE] Verificando validez de sesión ANTES de inicializar streams...');
     bool sesionValida = await _firebaseService.verificarSesionValida();
-    
+
     if (!sesionValida) {
-      print('🚫 [HomePage] Sesión INVÁLIDA detectada - Redirigiendo a login SIN mostrar UI');
-      
+      print(
+          '🚫 [HOME_PAGE] Sesión INVÁLIDA detectada - Redirigiendo a login SIN mostrar UI');
+
       // Obtener info del usuario que tiene la sesión actual (si es posible)
       final usuarioActual = await obtenerUsuarioLogueadoActual();
-      
+
       Future.microtask(() {
         if (mounted) {
           Navigator.of(context).pushReplacementNamed('/login', arguments: {
@@ -277,28 +283,34 @@ class _HomePageState extends State<HomePage>
       return; // ⛔ NO continuar con la inicialización
     }
 
-    print('✅ [HomePage] Sesión VÁLIDA - Continuando con inicialización normal');
+    print('✅ [HOME_PAGE] Sesión VÁLIDA - Continuando con inicialización normal');
+
+    // 🔓 Desbloquear UI ahora que la sesión está verificada
+    print('🔓 [HOME_PAGE] Desbloqueando UI (_isVerifyingSession = false)');
+    setState(() {
+      _isVerifyingSession = false;
+    });
 
     // PASO 2: Cargar datos de sesión e inicializar servicios
     await _loadSessionData();
     await RioGasService.initializeService();
-    
+
     var box = await openBoxSafe('sessionBox');
     if (box == null) return;
-    
+
     bool firstLoginDone = box.get('firstLoginDone', defaultValue: false);
     setState(() {
       _isFirstLoad = !firstLoginDone;
     });
-    
+
     _listenToMessages();
     _listenToPendingOrders();
     _printConstantDocumentNames();
-    
+
     setState(() {
       _isFirstLoad = false;
     });
-    
+
     print('✅ [HomePage] _initializeHomePage() completado exitosamente');
   }
 
@@ -906,7 +918,35 @@ class _HomePageState extends State<HomePage>
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
+    // 🚨 BLOQUEO TOTAL: Si estamos verificando sesión, mostrar solo loader
+    if (_isVerifyingSession) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Verificando sesión...',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ✅ Sesión verificada - Mostrar UI normal
     return Scaffold(
       appBar: AppBar(
         title: Text(
