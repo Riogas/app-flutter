@@ -89,6 +89,12 @@ class _HomePageState extends State<HomePage>
   // 🚨 Flag para bloquear UI mientras se verifica sesión
   bool _isVerifyingSession = true;
 
+  // 🆕 Variables para cooldown de cambio de estado
+  DateTime? _lastEstadoChangeAttempt;
+  bool _isEstadoChanging = false;
+  int _estadoCooldownSeconds = 90;
+  Timer? _estadoCooldownTimer; // Timer para actualizar countdown visual
+
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(), // Back to normal page for testing
     /*CompletedOrdersPage(),*/
@@ -179,6 +185,55 @@ class _HomePageState extends State<HomePage>
     //_initializeRetryInterval();
 
     _initGpsListener();
+
+    // 🆕 Listener para resetear cooldown cuando cambia el estado desde Firestore
+    _streamManager.movilNotifier.addListener(_onMovilStateChanged);
+  }
+
+  /// 🆕 Resetea el cooldown cuando el estado del móvil cambia desde Firestore
+  void _onMovilStateChanged() {
+    if (_lastEstadoChangeAttempt != null) {
+      // Si hay un cooldown activo, resetearlo porque el estado cambió
+      _stopEstadoCooldownTimer();
+      setState(() {
+        _lastEstadoChangeAttempt = null;
+      });
+      print(
+          '✅ [ESTADO_COOLDOWN] Cooldown reseteado por cambio de estado desde Firestore');
+    }
+  }
+
+  /// 🆕 Inicia el timer de cooldown que actualiza la UI cada segundo
+  void _startEstadoCooldownTimer() {
+    _estadoCooldownTimer?.cancel(); // Cancelar timer previo si existe
+
+    _estadoCooldownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (_lastEstadoChangeAttempt == null) {
+        // Ya no hay cooldown, detener timer
+        timer.cancel();
+        return;
+      }
+
+      final elapsed = DateTime.now().difference(_lastEstadoChangeAttempt!);
+
+      if (elapsed.inSeconds >= _estadoCooldownSeconds) {
+        // Cooldown expiró, resetear
+        _stopEstadoCooldownTimer();
+        setState(() {
+          _lastEstadoChangeAttempt = null;
+        });
+        print('✅ [ESTADO_COOLDOWN] Cooldown expirado automáticamente');
+      } else {
+        // Actualizar UI para mostrar countdown actualizado
+        setState(() {});
+      }
+    });
+  }
+
+  /// 🆕 Detiene el timer de cooldown
+  void _stopEstadoCooldownTimer() {
+    _estadoCooldownTimer?.cancel();
+    _estadoCooldownTimer = null;
   }
 
   /// 🆕 Inicializa el listener de debug config desde Firestore
@@ -251,6 +306,11 @@ class _HomePageState extends State<HomePage>
     _connectionStatusNotifier.dispose(); // Dispose the notifier
     _gpsSubscription?.cancel();
     _gpsStreamController.close();
+
+    // 🆕 Detener timer de cooldown y remover listener del estado del móvil
+    _stopEstadoCooldownTimer();
+    _streamManager.movilNotifier.removeListener(_onMovilStateChanged);
+
     super.dispose();
   }
 
@@ -954,7 +1014,8 @@ class _HomePageState extends State<HomePage>
           '',
           style: TextStyle(fontSize: 14.0), // Reduced font size
         ),
-        toolbarHeight: 40.0,
+        toolbarHeight:
+            64.0, // 🆕 Aumentado de 40 a 64 para mejor visualización del chip
         backgroundColor: Colors.lightBlueAccent,
         actions: [
           Padding(
@@ -1029,30 +1090,96 @@ class _HomePageState extends State<HomePage>
                               .join()
                           : '000000';
                       Color estadoColor = Color(int.parse('0xff$hexColor'));
+
+                      // 🔒 Verificar si está en cooldown
+                      bool isInCooldown = _lastEstadoChangeAttempt != null;
+                      int cooldownRemaining = 0;
+
+                      if (isInCooldown) {
+                        final elapsed = DateTime.now()
+                            .difference(_lastEstadoChangeAttempt!);
+                        cooldownRemaining =
+                            _estadoCooldownSeconds - elapsed.inSeconds;
+                        if (cooldownRemaining < 0) cooldownRemaining = 0;
+                      }
+
                       return GestureDetector(
-                        onTap: () {
-                          _handleEstadoClick(
-                            context,
-                            _movil,
-                            movilData,
-                            subEstados,
-                          );
-                        },
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: estadoColor,
-                                borderRadius: BorderRadius.circular(12),
+                        onTap: isInCooldown
+                            ? () {
+                                // 🚫 Mostrar warning cuando está en cooldown
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      '⏱️ Debe esperar $cooldownRemaining segundos para cambiar el estado nuevamente',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    backgroundColor: Colors.orange,
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            : () {
+                                _handleEstadoClick(
+                                  context,
+                                  _movil,
+                                  movilData,
+                                  subEstados,
+                                );
+                              },
+                        child: Opacity(
+                          opacity: isInCooldown ? 0.5 : 1.0,
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6), // 🆕 Aumentado padding
+                                decoration: BoxDecoration(
+                                  color:
+                                      isInCooldown ? Colors.grey : estadoColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: isInCooldown
+                                      ? Border.all(color: Colors.red, width: 2)
+                                      : null,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Movil:$_movil - ${isInCooldown ? "🔒" : estadoText}',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        decoration: isInCooldown
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                      ),
+                                    ),
+                                    if (isInCooldown) ...[
+                                      SizedBox(width: 6),
+                                      Container(
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '${cooldownRemaining}s',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
-                              child: Text(
-                                'Movil:$_movil - $estadoText',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -1448,96 +1575,180 @@ class _HomePageState extends State<HomePage>
                   child: Text('Cancelar'),
                 ),
                 TextButton(
-                  onPressed: () async {
-                    if (selectedEstadoDesc != null) {
-                      if (permiteObservacion && observacion.trim().length < 5) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'La observación debe tener al menos 5 caracteres.',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        );
-                        return;
-                      }
+                  onPressed: _isEstadoChanging
+                      ? null
+                      : () async {
+                          if (selectedEstadoDesc != null) {
+                            // 1️⃣ VERIFICAR COOLDOWN
+                            if (_lastEstadoChangeAttempt != null) {
+                              final elapsed = DateTime.now()
+                                  .difference(_lastEstadoChangeAttempt!);
+                              if (elapsed.inSeconds < _estadoCooldownSeconds) {
+                                final remaining =
+                                    _estadoCooldownSeconds - elapsed.inSeconds;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      '⏱️ Debe esperar $remaining segundos para reintentar cambiar el estado',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    backgroundColor: Colors.orange,
+                                    duration: Duration(seconds: 3),
+                                  ),
+                                );
+                                return;
+                              }
+                            }
 
-                      // Mostrar loading
-                      showDialog(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (context) => AlertDialog(
-                          content: Row(
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(width: 16),
-                              Text('Activando'),
-                            ],
-                          ),
-                        ),
-                      );
+                            // 2️⃣ VALIDAR OBSERVACIÓN
+                            if (permiteObservacion &&
+                                observacion.trim().length < 5) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'La observación debe tener al menos 5 caracteres.',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
 
-                      final selectedSubEstado = subEstados.firstWhere(
-                        (s) => s['SubEstadoDesc'] == selectedEstadoDesc,
-                        orElse: () => {'SubEstadoCod': currentEstado},
-                      );
+                            // 3️⃣ CALCULAR NUEVO ESTADO
+                            final selectedSubEstado = subEstados.firstWhere(
+                              (s) => s['SubEstadoDesc'] == selectedEstadoDesc,
+                              orElse: () => {'SubEstadoCod': currentEstado},
+                            );
+                            final newEstadoNro = int.tryParse(
+                                    selectedSubEstado['SubEstadoCod']
+                                        .toString()) ??
+                                currentEstado;
 
-                      final newEstadoNro = int.tryParse(
-                            selectedSubEstado['SubEstadoCod'].toString(),
-                          ) ??
-                          currentEstado;
+                            // 4️⃣ MOSTRAR LOADING
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (context) => AlertDialog(
+                                content: Row(
+                                  children: [
+                                    CircularProgressIndicator(),
+                                    SizedBox(width: 16),
+                                    Text('Cambiando estado...'),
+                                  ],
+                                ),
+                              ),
+                            );
 
-                      await _firebaseService.updateMovilEstado(newEstadoNro);
+                            setState(() => _isEstadoChanging = true);
 
-                      var locationBox = await openBoxSafe('locationBox');
-                      if (locationBox == null) return;
+                            // 5️⃣ OBTENER DATOS DE UBICACIÓN
+                            var locationBox = await openBoxSafe('locationBox');
+                            if (locationBox == null) {
+                              Navigator.of(context, rootNavigator: true).pop();
+                              setState(() => _isEstadoChanging = false);
+                              return;
+                            }
 
-                      double velocidad = double.parse(locationBox
-                          .get('lastSpeed', defaultValue: 0.0)
-                          .toStringAsFixed(2));
-                      double distanciaRecorrida =
-                          locationBox.get('totalDistance', defaultValue: 0.0);
+                            double velocidad = double.parse(locationBox
+                                .get('lastSpeed', defaultValue: 0.0)
+                                .toStringAsFixed(2));
+                            double distanciaRecorrida = locationBox
+                                .get('totalDistance', defaultValue: 0.0);
 
-                      String latitude = '0.0';
-                      String longitude = '0.0';
-                      String utmX = '0.0';
-                      String utmY = '0.0';
+                            String latitude = '0.0';
+                            String longitude = '0.0';
+                            String utmX = '0.0';
+                            String utmY = '0.0';
 
-                      final locationData =
-                          await _locationService.getCurrentLocation();
+                            final locationData =
+                                await _locationService.getCurrentLocation();
 
-                      if (locationData != null) {
-                        latitude = locationData['latitude'].toString();
-                        longitude = locationData['longitude'].toString();
-                        utmX = locationData['utmX'].toString();
-                        utmY = locationData['utmY'].toString();
-                      }
+                            if (locationData != null) {
+                              latitude = locationData['latitude'].toString();
+                              longitude = locationData['longitude'].toString();
+                              utmX = locationData['utmX'].toString();
+                              utmY = locationData['utmY'].toString();
+                            }
 
-                      final result = await RioGasService.actualizarMoviles(
-                        int.parse(await Hive.box('sessionBox')
-                            .get('escenario', defaultValue: '0')),
-                        int.parse(movilId),
-                        await Hive.box('sessionBox')
-                            .get('username', defaultValue: ''),
-                        '',
-                        await Hive.box('sessionBox')
-                            .get('deviceId', defaultValue: ''),
-                        newEstadoNro.toString(),
-                        latitude,
-                        longitude,
-                        utmX,
-                        utmY,
-                        DateTime.now().toUtc().toIso8601String(),
-                        '', // inAux1
-                        observacion, // ✅ Se pasa aquí la observación
-                        velocidad,
-                        distanciaRecorrida,
-                      );
+                            // 6️⃣ LLAMAR A RIOGAS PRIMERO ✅
+                            final result =
+                                await RioGasService.actualizarMoviles(
+                              int.parse(await Hive.box('sessionBox')
+                                  .get('escenario', defaultValue: '0')),
+                              int.parse(movilId),
+                              await Hive.box('sessionBox')
+                                  .get('username', defaultValue: ''),
+                              '',
+                              await Hive.box('sessionBox')
+                                  .get('deviceId', defaultValue: ''),
+                              newEstadoNro.toString(),
+                              latitude,
+                              longitude,
+                              utmX,
+                              utmY,
+                              DateTime.now().toUtc().toIso8601String(),
+                              '', // inAux1
+                              observacion, // ✅ Se pasa aquí la observación
+                              velocidad,
+                              distanciaRecorrida,
+                            );
 
-                      Navigator.of(context, rootNavigator: true).pop();
-                      Navigator.of(context).pop();
-                    }
-                  },
+                            // 7️⃣ VALIDAR RESULTADO Y ACTUALIZAR FIRESTORE CONDICIONALMENTE
+                            if (result != null && result['error'] == null) {
+                              // ✅ ÉXITO: Actualizar Firestore
+                              await _firebaseService
+                                  .updateMovilEstado(newEstadoNro);
+
+                              setState(() {
+                                _isEstadoChanging = false;
+                                _lastEstadoChangeAttempt =
+                                    null; // Reset cooldown
+                              });
+
+                              Navigator.of(context, rootNavigator: true).pop();
+                              Navigator.of(context).pop();
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '✅ Estado actualizado correctamente',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                  backgroundColor: Colors.green,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            } else {
+                              // ❌ ERROR: NO actualizar Firestore, iniciar cooldown
+                              setState(() {
+                                _isEstadoChanging = false;
+                                _lastEstadoChangeAttempt = DateTime.now();
+                              });
+
+                              // 🆕 Iniciar timer de cooldown para actualizar UI cada segundo
+                              _startEstadoCooldownTimer();
+
+                              // ❌ Cerrar TODOS los diálogos (loading + selección de estado)
+                              Navigator.of(context, rootNavigator: true)
+                                  .pop(); // Cierra loading
+                              Navigator.of(context)
+                                  .pop(); // Cierra diálogo de selección
+
+                              final errorMsg = result?['error']?.toString() ??
+                                  'Error desconocido';
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '❌ Error al actualizar estado: $errorMsg\n⏱️ El botón de estado estará deshabilitado por $_estadoCooldownSeconds segundos',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                  backgroundColor: Colors.red,
+                                  duration: Duration(seconds: 5),
+                                ),
+                              );
+                            }
+                          }
+                        },
                   child: Text('Confirmar'),
                 ),
               ],

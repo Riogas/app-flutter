@@ -244,240 +244,236 @@ void main() async {
     //   LogRocketWrapConfiguration(),
     //   LogRocketInitConfiguration(appID: 'w2ree2/delivery-ammr6'),
     //   () async {
-    
+
     WidgetsFlutterBinding.ensureInitialized();
 
-        // 🛡️ Captura errores de Flutter Framework
-        FlutterError.onError = (FlutterErrorDetails details) {
-          FlutterError.presentError(details);
-          print('🔴 [FLUTTER ERROR] ${details.exceptionAsString()}');
-          print('📚 StackTrace: ${details.stack}');
+    // 🛡️ Captura errores de Flutter Framework
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      print('🔴 [FLUTTER ERROR] ${details.exceptionAsString()}');
+      print('📚 StackTrace: ${details.stack}');
 
-          // 🆕 Loguear error con MainLogger (defensivo)
-          try {
-            MainLogger.logError('Error de Flutter Framework',
-                error: details.exception,
-                stackTrace: details.stack,
-                context: 'FLUTTER_ERROR');
-          } catch (e) {
-            // Nunca crashear por logging
-            print('⚠️ MainLogger no disponible: $e');
-          }
+      // 🆕 Loguear error con MainLogger (defensivo)
+      try {
+        MainLogger.logError('Error de Flutter Framework',
+            error: details.exception,
+            stackTrace: details.stack,
+            context: 'FLUTTER_ERROR');
+      } catch (e) {
+        // Nunca crashear por logging
+        print('⚠️ MainLogger no disponible: $e');
+      }
 
-          // No crashear, solo loguear
-          try {
-            FirebaseCrashlytics.instance.recordFlutterError(details);
-          } catch (e) {
-            print('⚠️ No se pudo reportar a Crashlytics: $e');
-          }
-        };
+      // No crashear, solo loguear
+      try {
+        FirebaseCrashlytics.instance.recordFlutterError(details);
+      } catch (e) {
+        print('⚠️ No se pudo reportar a Crashlytics: $e');
+      }
+    };
 
-        // 🛡️ Firebase con try-catch
-        try {
-          await Firebase.initializeApp(
-              options: DefaultFirebaseOptions.currentPlatform);
-          print('✅ Firebase inicializado correctamente');
-        } catch (e, stackTrace) {
-          print('⚠️ Error inicializando Firebase: $e');
-          print('📚 StackTrace: $stackTrace');
-          // Continuar sin Firebase si falla
-        }
+    // 🛡️ Firebase con try-catch
+    try {
+      await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform);
+      print('✅ Firebase inicializado correctamente');
+    } catch (e, stackTrace) {
+      print('⚠️ Error inicializando Firebase: $e');
+      print('📚 StackTrace: $stackTrace');
+      // Continuar sin Firebase si falla
+    }
 
-        // 🔴 DESACTIVAR ENVÍO DE DATOS A FIREBASE
-        try {
-          await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
-          await FirebaseCrashlytics.instance
-              .setCrashlyticsCollectionEnabled(false);
-        } catch (e) {
-          print('⚠️ Error configurando Firebase Analytics/Crashlytics: $e');
-        }
+    // 🔴 DESACTIVAR ENVÍO DE DATOS A FIREBASE
+    try {
+      await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
+    } catch (e) {
+      print('⚠️ Error configurando Firebase Analytics/Crashlytics: $e');
+    }
 
-        // 🔹 Inicializa Hive antes de cualquier acceso a Hive.openBox()
-        try {
-          await Hive.initFlutter();
-          Hive.registerAdapter(ErrorEventAdapter());
-          await Hive.openBox('sessionBox');
-          await Hive.openBox<ErrorEvent>('errorBox');
-          print('✅ Hive inicializado correctamente');
-        } catch (e, stackTrace) {
-          print('⚠️ Error inicializando Hive: $e');
-          print('📚 StackTrace: $stackTrace');
-          // Si Hive falla, intentar recuperación
-          try {
-            await Hive.deleteBoxFromDisk('sessionBox');
-            await Hive.deleteBoxFromDisk('errorBox');
-            await Hive.initFlutter();
-            Hive.registerAdapter(ErrorEventAdapter());
-            await Hive.openBox('sessionBox');
-            await Hive.openBox<ErrorEvent>('errorBox');
-            print('✅ Hive recuperado exitosamente');
-          } catch (e2) {
-            print('❌ No se pudo recuperar Hive: $e2');
-          }
-        }
+    // 🔹 Inicializa Hive antes de cualquier acceso a Hive.openBox()
+    try {
+      await Hive.initFlutter();
+      Hive.registerAdapter(ErrorEventAdapter());
+      await Hive.openBox('sessionBox');
+      await Hive.openBox<ErrorEvent>('errorBox');
+      print('✅ Hive inicializado correctamente');
+    } catch (e, stackTrace) {
+      print('⚠️ Error inicializando Hive: $e');
+      print('📚 StackTrace: $stackTrace');
+      // Si Hive falla, intentar recuperación
+      try {
+        await Hive.deleteBoxFromDisk('sessionBox');
+        await Hive.deleteBoxFromDisk('errorBox');
+        await Hive.initFlutter();
+        Hive.registerAdapter(ErrorEventAdapter());
+        await Hive.openBox('sessionBox');
+        await Hive.openBox<ErrorEvent>('errorBox');
+        print('✅ Hive recuperado exitosamente');
+      } catch (e2) {
+        print('❌ No se pudo recuperar Hive: $e2');
+      }
+    }
 
-        // 🌍 Inicializar ambiente de aplicación (Dev/Prod)
-        try {
-          await AppEnvironment.initialize();
-        } catch (e) {
-          print('⚠️ Error inicializando AppEnvironment: $e');
-        }
+    // 🌍 Inicializar ambiente de aplicación (Dev/Prod)
+    try {
+      await AppEnvironment.initialize();
+    } catch (e) {
+      print('⚠️ Error inicializando AppEnvironment: $e');
+    }
 
-        // 🛡️ Inicializar servicios con protección
-        try {
-          await NotificationsService.initialize();
-          MainLogger.log('✅ NotificationsService inicializado',
-              context: 'INIT');
-        } catch (e) {
-          print('⚠️ Error inicializando NotificationsService: $e');
-          MainLogger.logError('NotificationsService falló',
-              error: e, context: 'INIT');
-        }
+    // 🛡️ Inicializar servicios con protección
+    try {
+      await NotificationsService.initialize();
+      MainLogger.log('✅ NotificationsService inicializado', context: 'INIT');
+    } catch (e) {
+      print('⚠️ Error inicializando NotificationsService: $e');
+      MainLogger.logError('NotificationsService falló',
+          error: e, context: 'INIT');
+    }
 
-        try {
-          await RioGasService.initializeService(); // 👈 imprescindible
-          MainLogger.log('✅ RioGasService inicializado', context: 'INIT');
-        } catch (e) {
-          print('⚠️ Error inicializando RioGasService: $e');
-          MainLogger.logError('RioGasService falló', error: e, context: 'INIT');
-        }
+    try {
+      await RioGasService.initializeService(); // 👈 imprescindible
+      MainLogger.log('✅ RioGasService inicializado', context: 'INIT');
+    } catch (e) {
+      print('⚠️ Error inicializando RioGasService: $e');
+      MainLogger.logError('RioGasService falló', error: e, context: 'INIT');
+    }
 
-        // 🔹 Inicializar servicio de sincronización de logs nativos
-        try {
-          await NativeLogSyncService.initialize();
-          MainLogger.log('✅ NativeLogSyncService inicializado',
-              context: 'INIT');
-        } catch (e) {
-          print('⚠️ Error inicializando NativeLogSyncService: $e');
-          MainLogger.logError('NativeLogSyncService falló',
-              error: e, context: 'INIT');
-        }
+    // 🔹 Inicializar servicio de sincronización de logs nativos
+    try {
+      await NativeLogSyncService.initialize();
+      MainLogger.log('✅ NativeLogSyncService inicializado', context: 'INIT');
+    } catch (e) {
+      print('⚠️ Error inicializando NativeLogSyncService: $e');
+      MainLogger.logError('NativeLogSyncService falló',
+          error: e, context: 'INIT');
+    }
 
-        // 🔍 Mostrar logs sincronizados para debugging (temporal)
-        // await NativeLogSyncService.displaySyncedLogs(); // ❌ COMENTADO: Ralentiza el inicio de la app
+    // 🔍 Mostrar logs sincronizados para debugging (temporal)
+    // await NativeLogSyncService.displaySyncedLogs(); // ❌ COMENTADO: Ralentiza el inicio de la app
 
-        // 🚨 Inicializar listener de logout remoto via FCM
-        try {
-          await RemoteLogoutListener.initialize();
-          MainLogger.log('✅ RemoteLogoutListener inicializado',
-              context: 'INIT');
-        } catch (e) {
-          print('⚠️ Error inicializando RemoteLogoutListener: $e');
-          MainLogger.logError('RemoteLogoutListener falló',
-              error: e, context: 'INIT');
-        }
+    // 🚨 Inicializar listener de logout remoto via FCM
+    try {
+      await RemoteLogoutListener.initialize();
+      MainLogger.log('✅ RemoteLogoutListener inicializado', context: 'INIT');
+    } catch (e) {
+      print('⚠️ Error inicializando RemoteLogoutListener: $e');
+      MainLogger.logError('RemoteLogoutListener falló',
+          error: e, context: 'INIT');
+    }
 
-        // 🎥 LogRocket se inicializa automáticamente desde AndroidManifest.xml
-        // App ID: w2ree2/delivery-ammr6
-        print('🎥 LogRocket configurado con App ID desde AndroidManifest');
+    // 🎥 LogRocket se inicializa automáticamente desde AndroidManifest.xml
+    // App ID: w2ree2/delivery-ammr6
+    print('🎥 LogRocket configurado con App ID desde AndroidManifest');
 
-        bool isLoggedIn = false;
-        try {
-          isLoggedIn = await AuthService.checkIsLoggedIn();
-        } catch (e) {
-          print('⚠️ Error verificando login: $e - Redirigiendo a login');
-          isLoggedIn = false;
-        }
+    bool isLoggedIn = false;
+    try {
+      isLoggedIn = await AuthService.checkIsLoggedIn();
+    } catch (e) {
+      print('⚠️ Error verificando login: $e - Redirigiendo a login');
+      isLoggedIn = false;
+    }
 
-        // 🔹 Inicializar sincronización centralizada de Hive (mensajes y pedidos)
-        try {
-          PersistentStreamManager().initializeHiveSync();
-        } catch (e) {
-          print('⚠️ Error inicializando PersistentStreamManager: $e');
-        }
+    // 🔹 Inicializar sincronización centralizada de Hive (mensajes y pedidos)
+    try {
+      PersistentStreamManager().initializeHiveSync();
+    } catch (e) {
+      print('⚠️ Error inicializando PersistentStreamManager: $e');
+    }
 
-        // Control de captura de pantalla según stream de móviles
-        try {
-          await _setupScreenProtectorByMovilStream();
-        } catch (e) {
-          print('⚠️ Error configurando ScreenProtector: $e');
-        }
+    // Control de captura de pantalla según stream de móviles
+    try {
+      await _setupScreenProtectorByMovilStream();
+    } catch (e) {
+      print('⚠️ Error configurando ScreenProtector: $e');
+    }
 
-        if (isLoggedIn) {
-          // 🔹 Verificar y escuchar permisos de GPS
-          //await _checkAndListenGpsPermissions();
-        }
+    if (isLoggedIn) {
+      // 🔹 Verificar y escuchar permisos de GPS
+      //await _checkAndListenGpsPermissions();
+    }
 
-        // 🔹 Verificar conectividad a Internet
-        try {
-          await _checkInternetConnectivity();
-        } catch (e) {
-          print('⚠️ Error verificando conectividad: $e');
-        }
+    // 🔹 Verificar conectividad a Internet
+    try {
+      await _checkInternetConnectivity();
+    } catch (e) {
+      print('⚠️ Error verificando conectividad: $e');
+    }
 
-        // 🔹 Validar la versión de la aplicación
-        /*if (!isLoggedIn) {
+    // 🔹 Validar la versión de la aplicación
+    /*if (!isLoggedIn) {
     
   }*/
-        try {
-          await _validateAppVersion();
-        } catch (e) {
-          print('⚠️ Error validando versión: $e');
-        }
+    try {
+      await _validateAppVersion();
+    } catch (e) {
+      print('⚠️ Error validando versión: $e');
+    }
 
-        // 🔹 Inicializar Firebase Messaging
-        try {
-          await _initializeFirebaseMessaging();
-        } catch (e) {
-          print('⚠️ Error inicializando Firebase Messaging: $e');
-        }
+    // 🔹 Inicializar Firebase Messaging
+    try {
+      await _initializeFirebaseMessaging();
+    } catch (e) {
+      print('⚠️ Error inicializando Firebase Messaging: $e');
+    }
 
-        // 🔑 Inicializar FCM Token Manager (auto-renovación de tokens)
-        try {
-          await _initializeFCMTokenManager();
-        } catch (e) {
-          print('⚠️ Error inicializando FCM Token Manager: $e');
-        }
+    // 🔑 Inicializar FCM Token Manager (auto-renovación de tokens)
+    try {
+      await _initializeFCMTokenManager();
+    } catch (e) {
+      print('⚠️ Error inicializando FCM Token Manager: $e');
+    }
 
-        // 🔹 Verificar configuraciones de batería y actividad en segundo plano
-        //await _checkBatteryAndBackgroundSettings();
+    // 🔹 Verificar configuraciones de batería y actividad en segundo plano
+    //await _checkBatteryAndBackgroundSettings();
 
-        // 🔹 Verificar sesión activa
-        bool hasActiveSession = false;
-        try {
-          hasActiveSession = await _checkActiveSession(
-            {}, // Replace with actual response data if available
-            null, // Replace with actual selectedMovil if available
-          );
-        } catch (e) {
-          print('⚠️ Error verificando sesión activa: $e');
-          hasActiveSession = false;
-        }
+    // 🔹 Verificar sesión activa
+    bool hasActiveSession = false;
+    try {
+      hasActiveSession = await _checkActiveSession(
+        {}, // Replace with actual response data if available
+        null, // Replace with actual selectedMovil if available
+      );
+    } catch (e) {
+      print('⚠️ Error verificando sesión activa: $e');
+      hasActiveSession = false;
+    }
 
-        if (!hasActiveSession) {
-          isLoggedIn = false; // Redirect to login if no active session
-        }
+    if (!hasActiveSession) {
+      isLoggedIn = false; // Redirect to login if no active session
+    }
 
-        // 🛡️ Obtener info del dispositivo con protección
-        int sdkVersion = 26; // Default seguro
-        try {
-          final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-          final androidInfo = await deviceInfo.androidInfo;
-          sdkVersion = androidInfo.version.sdkInt;
-        } catch (e) {
-          print('⚠️ Error obteniendo info del dispositivo: $e');
-        }
+    // 🛡️ Obtener info del dispositivo con protección
+    int sdkVersion = 26; // Default seguro
+    try {
+      final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      sdkVersion = androidInfo.version.sdkInt;
+    } catch (e) {
+      print('⚠️ Error obteniendo info del dispositivo: $e');
+    }
 
-        // 🚀 Lanzar app con protección
-        if (Platform.isAndroid && sdkVersion < 26) {
-          runApp(
-            MaterialApp(
-              home: Scaffold(body: Center(child: Text('Lite Fallback App'))),
-            ),
-          ); // algo más liviano, sin animaciones
-        } else {
-          runApp(MyApp(isLoggedIn: isLoggedIn));
-        }
+    // 🚀 Lanzar app con protección
+    if (Platform.isAndroid && sdkVersion < 26) {
+      runApp(
+        MaterialApp(
+          home: Scaffold(body: Center(child: Text('Lite Fallback App'))),
+        ),
+      ); // algo más liviano, sin animaciones
+    } else {
+      runApp(MyApp(isLoggedIn: isLoggedIn));
+    }
 
-        //WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
+    //WidgetsFlutterBinding.ensureInitialized(); // Asegura la inicialización
 
-        // 🔹 Start listening to location permissions
-        try {
-          _listenToLocationPermission();
-        } catch (e) {
-          print('⚠️ Error iniciando listener de permisos: $e');
-        }
-      // }, // 🎥 Cierre de la función lambda de LogRocket.wrapAndInitialize (COMENTADO)
+    // 🔹 Start listening to location permissions
+    try {
+      _listenToLocationPermission();
+    } catch (e) {
+      print('⚠️ Error iniciando listener de permisos: $e');
+    }
+    // }, // 🎥 Cierre de la función lambda de LogRocket.wrapAndInitialize (COMENTADO)
     // ); // 🎥 Cierre de LogRocket.wrapAndInitialize (COMENTADO)
   }, (error, stack) {
     // 🛡️ MANEJADOR DE ERRORES GLOBAL: Captura errores asincrónicos no manejados
