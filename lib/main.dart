@@ -144,9 +144,9 @@ Future<void> _setupScreenProtectorByMovilStream() async {
   if (!Platform.isAndroid) return;
 
   final manager = PersistentStreamManager();
-  try {
-    await manager.initialize(); // Asegura que los streams estén activos
-  } catch (_) {}
+
+  // ⚠️ NO inicializar manager aquí - solo escuchar cambios
+  // La inicialización ocurre después del login en startSesionesListenerAfterLogin()
 
   Future<void> apply(DocumentSnapshot? doc) async {
     try {
@@ -173,7 +173,7 @@ Future<void> _setupScreenProtectorByMovilStream() async {
     } catch (_) {}
   }
 
-  await apply(manager.movilNotifier.value);
+  // Solo escuchar cambios, NO forzar valor inicial (puede ser null antes del login)
   manager.movilNotifier.addListener(() {
     // Ignorar el futuro; no bloquear
     apply(manager.movilNotifier.value);
@@ -1172,6 +1172,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _checkBatteryOptimization();
     });
 
+    // 📍 Verificación inicial de permisos GPS "Permitir Siempre" (SOLO 1 VEZ)
+    Future.delayed(Duration(seconds: 3), () {
+      _checkLocationPermissions();
+    });
+
     // Verificación periódica cada 5 segundos (SOLO NOTIFICACIONES)
     // ⚠️ NO se verifica batería periódicamente para evitar spam
     _notificationCheckTimer = Timer.periodic(Duration(seconds: 5), (timer) {
@@ -1264,6 +1269,82 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  // 📍 FIX: Verificar permisos GPS "Permitir Siempre" después del login
+  Future<void> _checkLocationPermissions() async {
+    if (!Platform.isAndroid) return;
+
+    try {
+      // Verificar el estado actual del permiso de ubicación
+      LocationPermission permission = await Geolocator.checkPermission();
+
+      print('📍 Location permission status: $permission');
+
+      // ✅ Si ya tiene "Permitir Siempre", no hacer nada
+      if (permission == LocationPermission.always) {
+        print('✅ GPS configurado correctamente (Permitir Siempre)');
+        return;
+      }
+
+      // 🔴 Si está "denied", primero solicitar permiso básico
+      if (permission == LocationPermission.denied) {
+        print('⚠️ Permiso de ubicación negado, solicitando permiso básico...');
+
+        // Solicitar permiso (esto mostrará el diálogo nativo de Android)
+        LocationPermission newPermission = await Geolocator.requestPermission();
+
+        print('📍 Nuevo permiso después de solicitud: $newPermission');
+
+        // Si el usuario lo denegó permanentemente, mostrar diálogo para ir a settings
+        if (newPermission == LocationPermission.deniedForever) {
+          if (!_dialogShown && navigatorKey.currentContext != null) {
+            _dialogShown = true;
+            await _showLocationPermissionDialog();
+          }
+          return;
+        }
+
+        // Si ahora tiene "whileInUse", continuar para pedir "always"
+        permission = newPermission;
+      }
+
+      // ⚠️ Si tiene "Mientras se usa", solicitar "Permitir Siempre"
+      if (permission == LocationPermission.whileInUse) {
+        // Esperar 1 segundo para que el diálogo de batería se cierre completamente
+        await Future.delayed(Duration(seconds: 1));
+
+        // Resetear la flag para poder mostrar este diálogo
+        _dialogShown = false;
+
+        // Si el diálogo fue cerrado hace menos de 3 segundos, esperar
+        if (_lastDialogDismissed != null) {
+          final timeSinceDismissed =
+              DateTime.now().difference(_lastDialogDismissed!);
+          if (timeSinceDismissed.inSeconds < 3) {
+            await Future.delayed(Duration(seconds: 3));
+          }
+        }
+
+        // Mostrar diálogo solo si no está ya visible
+        if (!_dialogShown && navigatorKey.currentContext != null) {
+          _dialogShown = true;
+          print(
+              '📍 Mostrando diálogo para cambiar a "Permitir todo el tiempo"');
+          await _showLocationPermissionDialog();
+        }
+      }
+
+      // 🔴 Si está "deniedForever", mostrar diálogo para ir a settings
+      if (permission == LocationPermission.deniedForever) {
+        if (!_dialogShown && navigatorKey.currentContext != null) {
+          _dialogShown = true;
+          await _showLocationPermissionDialog();
+        }
+      }
+    } catch (e) {
+      print('❌ Error verificando permisos de ubicación: $e');
+    }
+  }
+
   Future<void> _showNotificationPermissionDialog() async {
     if (navigatorKey.currentContext == null) {
       _dialogShown = false;
@@ -1343,6 +1424,146 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
                   // Abrir configuración de la app
                   await permission_handler.openAppSettings();
+
+                  // Esperar 3 segundos antes de volver a verificar
+                  await Future.delayed(Duration(seconds: 3));
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    ).then((_) {
+      _dialogShown = false;
+      _lastDialogDismissed = DateTime.now();
+    });
+  }
+
+  // 📍 FIX: Diálogo para solicitar permiso GPS "Permitir Siempre"
+  Future<void> _showLocationPermissionDialog() async {
+    if (navigatorKey.currentContext == null) {
+      _dialogShown = false;
+      return;
+    }
+
+    return showDialog<void>(
+      context: navigatorKey.currentContext!,
+      barrierDismissible: false, // No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async {
+            // No permitir cerrar con botón de atrás
+            _lastDialogDismissed = DateTime.now();
+            _dialogShown = false;
+            return true;
+          },
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.location_off, color: Colors.red, size: 30),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '📍 Permiso de Ubicación Requerido',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    text: 'La app ',
+                    style: TextStyle(fontSize: 16),
+                    children: <TextSpan>[
+                      TextSpan(
+                        text: 'REQUIERE',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text:
+                            ' que se habilite el permiso de acceso a la ubicación ',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text: 'TODO EL TIEMPO',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' para poder funcionar correctamente.',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  '🚫 Sin este permiso, la aplicación no podrá rastrear tu ubicación en segundo plano.',
+                  style: TextStyle(fontSize: 14, color: Colors.red),
+                ),
+                SizedBox(height: 15),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue, width: 2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '📋 Pasos para habilitar:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 5),
+                      Text(
+                        '1. Tap en "Abrir Configuración"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '2. Ve a "Permisos" → "Ubicación"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '3. Selecciona "Permitir todo el tiempo"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.settings, color: Colors.white),
+                label: Text('Abrir Configuración',
+                    style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () async {
+                  _lastDialogDismissed = DateTime.now();
+                  _dialogShown = false;
+                  Navigator.of(context).pop();
+
+                  // Abrir configuración de la app para permisos
+                  await Geolocator.openAppSettings();
 
                   // Esperar 3 segundos antes de volver a verificar
                   await Future.delayed(Duration(seconds: 3));

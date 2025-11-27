@@ -568,61 +568,90 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handleForcedLogoutAndShowDialog() async {
     try {
-      //final movil = int.tryParse(widget.movil ?? '0') ?? 0;
+      print(
+          '🚨 [FORCED_LOGOUT] Sesión inválida detectada - Ejecutando limpieza LOCAL');
 
-      Box? box;
-      if (Hive.isBoxOpen('sessionBox')) {
-        box = Hive.box('sessionBox');
-      } else {
-        box = await Hive.openBox('sessionBox');
-      }
-      final deviceId = box.get('deviceId');
-      final idUsuario = box.get('username');
-      final escenario = box.get('escenario') ?? "0";
-      final usuario = box.get('username') ?? "string";
-      final idTerminal = box.get('deviceId');
-      final movil = box.get('movil') ?? 0;
+      // ⚠️ IMPORTANTE: NO ejecutar LogoutService.executeLogout() completo porque:
+      // 1. La sesión YA FUE CERRADA por el otro dispositivo que se logueó
+      // 2. registrarCierre YA FUE LLAMADO por el otro dispositivo
+      // 3. Firestore YA FUE ACTUALIZADO por el otro dispositivo
+      //
+      // ✅ Solo necesitamos hacer LIMPIEZA LOCAL:
+      // - Detener servicios GPS/background (si quedaron activos)
+      // - Cancelar streams locales
+      // - Limpiar datos de Hive local
+      // - Limpiar SharedPreferences
 
-      final platform = MethodChannel("background_service");
-      await platform.invokeMethod("stopLocationService", {
-        "movil": movil.toString(),
-        "escenario": escenario,
-        "usuario": usuario,
-        "deviceId": idTerminal.toString(),
-      });
+      print(
+          '🧹 [FORCED_LOGOUT] Iniciando limpieza local (sin llamar a registrarCierre)');
 
-      print("🛑 Servicio de ubicación detenido y notificación eliminada.");
-
-      await RioGasService.registrarCierre(
-        movil,
-        deviceId ?? '',
-        idUsuario ?? '',
-        DateTime.now().toIso8601String(),
-        'DeslogueoForzado',
-      );
-
-      // Limpiar cajas abiertas de forma segura
-      if (box.isOpen) await box.clear();
-
-      if (Hive.isBoxOpen('mensajesBox')) {
-        await Hive.box('mensajesBox').clear();
-      } else {
-        await Hive.openBox('mensajesBox').then((b) => b.clear());
-      }
-
+      // 1️⃣ Cancelar streams locales
       await _cancelStreams();
 
-      // Eliminar disco solo si sigue abierto
-      if (box.isOpen) await box.deleteFromDisk();
+      // 2️⃣ Detener servicio GPS/background si quedó activo
+      try {
+        var sessionBox = await Hive.openBox('sessionBox');
+        final movil = sessionBox.get('movil') ?? "0";
+        final escenario = sessionBox.get('escenario') ?? "0";
+        final usuario = sessionBox.get('username') ?? "string";
+        final idTerminal = sessionBox.get('deviceId') ?? "";
 
+        final platform = MethodChannel("background_service");
+        await platform.invokeMethod("stopLocationService", {
+          "movil": movil,
+          "escenario": escenario,
+          "usuario": usuario,
+          "deviceId": idTerminal,
+        });
+        print("🛑 [FORCED_LOGOUT] Servicio GPS detenido localmente");
+      } catch (e) {
+        print(
+            '⚠️ [FORCED_LOGOUT] Error deteniendo GPS (puede que ya esté detenido): $e');
+      }
+
+      // 3️⃣ Limpiar datos locales de Hive (NO afecta backend ni Firestore)
+      try {
+        var sessionBox = await Hive.openBox('sessionBox');
+        var constantBox = await Hive.openBox('constantBox');
+        var mensajesBox = await Hive.openBox('mensajesBox');
+        var failedRequestsBox = await Hive.openBox('failedRequestsBox');
+
+        await sessionBox.clear();
+        await constantBox.clear();
+        await mensajesBox.clear();
+        await failedRequestsBox.clear();
+
+        // Marcar flags de logout controlado
+        sessionBox.put('firstLoginDone', true);
+        sessionBox.put('logoutControlled', true);
+
+        print('🧹 [FORCED_LOGOUT] Hive boxes limpiados localmente');
+      } catch (e) {
+        print('❌ [FORCED_LOGOUT] Error limpiando Hive: $e');
+      }
+
+      // 4️⃣ Limpiar SharedPreferences (sessionActive flag)
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('sessionActive', false);
+        print(
+            "🧹 [FORCED_LOGOUT] SharedPreferences limpiado (sessionActive=false)");
+      } catch (e) {
+        print('❌ [FORCED_LOGOUT] Error limpiando SharedPreferences: $e');
+      }
+
+      // 5️⃣ Mostrar diálogo informativo al usuario
       if (mounted) {
         _showForcedLogoutDialog(
           mensaje: widget.forcedLogoutMessage ??
               'Su sesión ha sido cerrada. Por favor, inicie sesión nuevamente.',
         );
       }
+
+      print(
+          '✅ [FORCED_LOGOUT] Limpieza local completada (SIN llamar a registrarCierre)');
     } catch (e) {
-      print('❌ Error durante limpieza por deslogueo forzado: $e');
+      print('❌ Error en limpieza local de sesión inválida: $e');
     }
   }
 
@@ -654,6 +683,419 @@ class _LoginPageState extends State<LoginPage> {
     await cancelAllStreams(); // Esto cancela los streams externos que ya tenías
     PersistentStreamManager().dispose(); // 🔥 Cancela los persistentes
     print('🔴 Todos los streams cancelados.');
+  }
+
+  /// 🔐 VALIDAR PERMISOS ANTES DE LOGIN
+  /// Esta función valida que el usuario tenga todos los permisos necesarios
+  /// ANTES de permitir el login. Si falta algún permiso, lo solicita y
+  /// retorna false para bloquear el login.
+  Future<bool> _validatePermissionsBeforeLogin() async {
+    if (!Platform.isAndroid)
+      return true; // En iOS no aplicar estas validaciones
+
+    print('🔐 [PERMISOS] Validando permisos antes de login...');
+
+    // 1️⃣ VALIDAR PERMISO DE BATERÍA
+    try {
+      final platform = MethodChannel('background_service');
+      final bool isIgnoringBattery =
+          await platform.invokeMethod('checkBatteryOptimization');
+
+      if (!isIgnoringBattery) {
+        print('❌ [PERMISOS] Batería: Optimización NO deshabilitada');
+
+        // Mostrar diálogo idéntico al de main.dart
+        await _showBatteryOptimizationDialog();
+
+        return false; // ❌ Bloquear login
+      }
+
+      print('✅ [PERMISOS] Batería: Configurado correctamente');
+    } catch (e) {
+      print('❌ [PERMISOS] Error verificando batería: $e');
+      return false;
+    }
+
+    // 2️⃣ VALIDAR PERMISO DE UBICACIÓN "PERMITIR SIEMPRE"
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      print('📍 [PERMISOS] Estado GPS: $permission');
+
+      // Si está negado, primero solicitar permiso básico
+      if (permission == LocationPermission.denied) {
+        print('⚠️ [PERMISOS] GPS negado, solicitando permiso básico...');
+
+        // Solicitar permiso (mostrará diálogo nativo)
+        LocationPermission newPermission = await Geolocator.requestPermission();
+
+        if (newPermission == LocationPermission.deniedForever) {
+          print('❌ [PERMISOS] GPS denegado permanentemente');
+          await _showLocationPermissionDialog();
+          return false; // ❌ Bloquear login
+        }
+
+        permission = newPermission;
+      }
+
+      // Si tiene "Mientras se usa", solicitar "Permitir Siempre"
+      if (permission == LocationPermission.whileInUse) {
+        print(
+            '⚠️ [PERMISOS] GPS en "Mientras se usa", necesita "Permitir Siempre"');
+        await _showLocationPermissionDialog();
+        return false; // ❌ Bloquear login
+      }
+
+      // Si está denegado permanentemente
+      if (permission == LocationPermission.deniedForever) {
+        print('❌ [PERMISOS] GPS denegado permanentemente');
+        await _showLocationPermissionDialog();
+        return false; // ❌ Bloquear login
+      }
+
+      // Solo permitir login si tiene "always"
+      if (permission != LocationPermission.always) {
+        print('❌ [PERMISOS] GPS no tiene "Permitir Siempre": $permission');
+        await _showLocationPermissionDialog();
+        return false; // ❌ Bloquear login
+      }
+
+      print('✅ [PERMISOS] GPS: Configurado correctamente (Permitir Siempre)');
+    } catch (e) {
+      print('❌ [PERMISOS] Error verificando GPS: $e');
+      return false;
+    }
+
+    // ✅ Todos los permisos están OK
+    print('✅ [PERMISOS] Todos los permisos validados correctamente');
+    return true;
+  }
+
+  /// Obtener nombre legible del permiso de ubicación
+  String _getPermissionName(LocationPermission permission) {
+    switch (permission) {
+      case LocationPermission.denied:
+        return 'Denegado';
+      case LocationPermission.deniedForever:
+        return 'Denegado permanentemente';
+      case LocationPermission.whileInUse:
+        return 'Mientras se usa la app';
+      case LocationPermission.always:
+        return 'Permitir siempre';
+      default:
+        return 'Desconocido';
+    }
+  }
+
+  /// 🔋 DIÁLOGO DE OPTIMIZACIÓN DE BATERÍA (mismo que main.dart)
+  Future<void> _showBatteryOptimizationDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false, // No permitir cerrar con botón de atrás
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.battery_alert, color: Colors.orange, size: 30),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '🔋 Optimización de Batería',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Para que el servicio de ubicación funcione correctamente, necesitas desactivar la optimización de batería.',
+                  style: TextStyle(fontSize: 16),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  'Esto evita que Android detenga el GPS cuando la app está en segundo plano.',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                ),
+                SizedBox(height: 15),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange, width: 2),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info, color: Colors.orange, size: 24),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Sin este permiso, no podrás iniciar sesión.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.settings, color: Colors.white),
+                label: Text('Configurar',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () async {
+                  Navigator.of(context).pop();
+
+                  try {
+                    // Llamar al método nativo para abrir configuración de batería
+                    final platform = MethodChannel('background_service');
+                    await platform
+                        .invokeMethod('requestBatteryOptimizationExemption');
+                  } catch (e) {
+                    print('❌ Error abriendo configuración de batería: $e');
+                  }
+
+                  // Esperar 1 segundo para que el usuario pueda configurar
+                  await Future.delayed(Duration(seconds: 1));
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 📍 DIÁLOGO DE PERMISO GPS (mismo que main.dart)
+  Future<void> _showLocationPermissionDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false, // No permitir cerrar con botón de atrás
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.location_off, color: Colors.red, size: 30),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '📍 Permiso de Ubicación Requerido',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    text: 'La app ',
+                    style: TextStyle(fontSize: 16),
+                    children: <TextSpan>[
+                      TextSpan(
+                        text: 'REQUIERE',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text:
+                            ' que se habilite el permiso de acceso a la ubicación ',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text: 'TODO EL TIEMPO',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' para poder funcionar correctamente.',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  '🚫 Sin este permiso, la aplicación no podrá rastrear tu ubicación en segundo plano.',
+                  style: TextStyle(fontSize: 14, color: Colors.red),
+                ),
+                SizedBox(height: 15),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue, width: 2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '📋 Pasos para habilitar:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 5),
+                      Text(
+                        '1. Tap en "Abrir Configuración"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '2. Ve a "Permisos" → "Ubicación"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '3. Selecciona "Permitir todo el tiempo"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.settings, color: Colors.white),
+                label: Text('Abrir Configuración',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () async {
+                  Navigator.of(context).pop();
+
+                  // Abrir configuración de la app para permisos
+                  await Geolocator.openAppSettings();
+
+                  // Esperar 1 segundo para que el usuario pueda configurar
+                  await Future.delayed(Duration(seconds: 1));
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 🚀 INICIAR SESIÓN CON VALIDACIÓN DE PERMISOS
+  /// Esta función se llama cuando el usuario presiona el botón "Iniciar sesión"
+  /// Primero valida TODOS los permisos necesarios, y solo si pasan, ejecuta el login
+  Future<void> _handleLoginButtonPress() async {
+    // 🎯 PASO 1: Verificar si es usuario especial (49618553 u otros)
+    final username = _usernameController.text.trim();
+    final List<String> specialUsers = [
+      '49618553'
+    ]; // Agregar más usuarios si es necesario
+
+    if (specialUsers.contains(username)) {
+      print('🔧 [LOGIN] Usuario especial detectado: $username');
+
+      // Mostrar diálogo para elegir ambiente
+      bool? shouldContinue = await _showEnvironmentSelectionDialog();
+
+      if (shouldContinue != true) {
+        print('⚠️ [LOGIN] Usuario canceló selección de ambiente');
+        return; // Usuario canceló
+      }
+    }
+
+    // 🎯 PASO 2: Validar permisos ANTES de hacer login
+    bool permissionsGranted = await _validatePermissionsBeforeLogin();
+
+    if (!permissionsGranted) {
+      print('⚠️ [LOGIN] Login bloqueado - Permisos incompletos');
+      return; // ❌ NO CONTINUAR con el login
+    }
+
+    // ✅ Todos los permisos están OK, proceder con login normal
+    print('✅ [LOGIN] Permisos validados - Procediendo con login');
+    await _login();
+  }
+
+  /// 🎯 Mostrar diálogo de selección de ambiente (Desarrollo/Producción)
+  Future<bool?> _showEnvironmentSelectionDialog() async {
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false, // No permitir cerrar tocando afuera
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('🔧 Seleccionar Ambiente'),
+          content: Text(
+            'Selecciona el ambiente al que deseas conectarte:',
+            style: TextStyle(fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                print('🌐 [AMBIENTE] Usuario seleccionó: PRODUCCIÓN');
+                await AppEnvironment.setEnvironment(Environment.production);
+                Navigator.of(context).pop(true); // Continuar con login
+              },
+              child: Text(
+                '🏭 PRODUCCIÓN',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                print('🔧 [AMBIENTE] Usuario seleccionó: DESARROLLO');
+                await AppEnvironment.setEnvironment(Environment.development);
+                Navigator.of(context).pop(true); // Continuar con login
+              },
+              child: Text(
+                '🔧 DESARROLLO',
+                style: TextStyle(
+                  color: Colors.orange,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                print('❌ [AMBIENTE] Usuario canceló');
+                Navigator.of(context).pop(false); // Cancelar login
+              },
+              child: Text(
+                'Cancelar',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _login() async {
@@ -1810,22 +2252,8 @@ class _LoginPageState extends State<LoginPage> {
 
     var pedidosBox = await Hive.openBox('pedidosBox');
 
-    // Call registrarUltLog after confirming the mobile selection
-    var sessionBox = await Hive.openBox('sessionBox');
-    String? username = sessionBox.get('username');
-    String? deviceId = sessionBox.get('deviceId');
-
-    if (username != null && deviceId != null) {
-      await RioGasService.registrarUltLog(
-          int.parse(selectedMovil!), _deviceId, username);
-      print(
-          "[32m$kLoginFlowTag ✅ Servicio registrarUltLog llamado exitosamente.[0m");
-    } else {
-      print(
-          "[31m$kLoginFlowTag ⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.[0m");
-      print(
-          "[31m$kLoginFlowTag username: $username, deviceId: $_deviceId, selectedMovil: $selectedMovil[0m");
-    }
+    //  registrarUltLog movido después de la confirmación del usuario (ver línea ~2218)
+    // No llamar aquí para evitar inconsistencias si el usuario cancela el diálogo de conflicto
 
     // 🔹 Limpiar pedidosBox de claves cuyo valor sea 'Procesando'
     final keysToDelete = <dynamic>[];
@@ -1877,6 +2305,28 @@ class _LoginPageState extends State<LoginPage> {
           "[32m$kLoginFlowTag Guardando sesión en Firestore: $sessionResult[0m");
 
       if (sessionResult != null && sessionResult['success']) {
+        // ✅ Sesión guardada exitosamente - Login normal sin conflicto
+        print("[32m$kLoginFlowTag ✅ Sesión guardada sin conflicto[0m");
+
+        // ✅ Llamar registrarUltLog DESPUÉS de que la sesión se guardó exitosamente
+        var sessionBox = await Hive.openBox('sessionBox');
+        String? usernameForLog = sessionBox.get('username');
+        String? deviceIdForLog = sessionBox.get('deviceId');
+
+        if (usernameForLog != null &&
+            deviceIdForLog != null &&
+            selectedMovil != null) {
+          await RioGasService.registrarUltLog(
+              int.parse(selectedMovil), _deviceId, usernameForLog);
+          print(
+              "\x1b[32m$kLoginFlowTag ✅ registrarUltLog ejecutado tras login exitoso sin conflicto.\x1b[0m");
+        } else {
+          print(
+              "\x1b[31m$kLoginFlowTag ⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.\x1b[0m");
+          print(
+              "\x1b[31m$kLoginFlowTag usernameForLog: $usernameForLog, deviceIdForLog: $deviceIdForLog, selectedMovil: $selectedMovil\x1b[0m");
+        }
+
         await _onSuccessfulLoginFlow(context);
       } else {
         print(
@@ -1912,6 +2362,27 @@ class _LoginPageState extends State<LoginPage> {
             if (result != null && result['success'] == true) {
               print(
                   "\u001b[32m$kLoginFlowTag ✅ Activo movido al histórico correctamente.\u001b[0m");
+
+              // ✅ Llamar registrarUltLog SOLO después de que el usuario confirme
+              // Esto evita inconsistencias si el usuario cancela el diálogo de conflicto
+              var sessionBox = await Hive.openBox('sessionBox');
+              String? usernameForLog = sessionBox.get('username');
+              String? deviceIdForLog = sessionBox.get('deviceId');
+
+              if (usernameForLog != null &&
+                  deviceIdForLog != null &&
+                  selectedMovil != null) {
+                await RioGasService.registrarUltLog(
+                    int.parse(selectedMovil), _deviceId, usernameForLog);
+                print(
+                    "\x1b[32m$kLoginFlowTag ✅ registrarUltLog ejecutado tras confirmación del usuario en conflicto.\x1b[0m");
+              } else {
+                print(
+                    "\x1b[31m$kLoginFlowTag ⚠️ No se pudo llamar a registrarUltLog: username o deviceId es null.\x1b[0m");
+                print(
+                    "\x1b[31m$kLoginFlowTag usernameForLog: $usernameForLog, deviceIdForLog: $deviceIdForLog, selectedMovil: $selectedMovil\x1b[0m");
+              }
+
               await _onSuccessfulLoginFlow(context);
               return;
             } else {
@@ -2402,6 +2873,9 @@ class _LoginPageState extends State<LoginPage> {
       PersistentStreamManager().reset(); // Reinicia todo el estado
       await PersistentStreamManager().initialize(); // Relanza listeners
 
+      // 🔐 Iniciar listener de sesiones DESPUÉS del login exitoso
+      await PersistentStreamManager().startSesionesListenerAfterLogin();
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => HomePage()),
@@ -2454,6 +2928,11 @@ class _LoginPageState extends State<LoginPage> {
     final escenario = sessionBox.get('escenario') ?? "0";
     final usuario = sessionBox.get('username') ?? "string";
     String? idTerminal = sessionBox.get('deviceId');
+
+    // 🔐 Setear flag sessionActive = true (para validación de sesión en Kotlin)
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('sessionActive', true);
+    print("✅ [SESSION] Flag sessionActive seteado a true");
 
     final platform = MethodChannel("background_service");
     await platform.invokeMethod("startLocationService", {
@@ -2618,8 +3097,9 @@ class _LoginPageState extends State<LoginPage> {
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
-                                onPressed:
-                                    _isLoginButtonLoading ? null : _login,
+                                onPressed: _isLoginButtonLoading
+                                    ? null
+                                    : _handleLoginButtonPress, // 🔐 Validar permisos antes de login
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blueAccent,
                                   foregroundColor: Colors.white,

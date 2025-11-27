@@ -177,6 +177,34 @@ class PersistentStreamManager {
 
     print('🔄 [PersistentStreamManager] Initializing persistent listeners...');
 
+    // 🔒 VALIDAR SESIÓN ANTES DE INICIAR CUALQUIER LISTENER
+    final sessionBox = await Hive.openBox('sessionBox');
+    final movil = sessionBox.get('movil');
+    final username = sessionBox.get('username');
+    final escenario = sessionBox.get('escenario');
+
+    // Si NO hay sesión válida, NO iniciar ningún listener de Firestore
+    if (movil == null ||
+        username == null ||
+        escenario == null ||
+        movil.toString() == '0' ||
+        username.toString() == '0' ||
+        escenario.toString() == '0') {
+      print(
+          '⏸️ [PersistentStreamManager] ⚠️ NO hay sesión activa, listeners de Firestore NO iniciados');
+      print('   - Movil: $movil');
+      print('   - Username: $username');
+      print('   - Escenario: $escenario');
+      _initialized = true; // Marcar como inicializado para evitar reintentos
+      return; // 🛑 SALIR SIN INICIAR LISTENERS
+    }
+
+    print(
+        '✅ [PersistentStreamManager] Sesión válida detectada, iniciando listeners...');
+    print('   - Movil: $movil');
+    print('   - Username: $username');
+    print('   - Escenario: $escenario');
+
     // Start all persistent listeners
     await _initializePedidosListener();
     await _initializeMensajesListener();
@@ -189,6 +217,21 @@ class PersistentStreamManager {
 
     _initialized = true;
     print('✅ [PersistentStreamManager] All persistent listeners initialized');
+  }
+
+  /// 🆕 Iniciar TODOS los listeners después del login exitoso
+  Future<void> startSesionesListenerAfterLogin() async {
+    print(
+        '🔐 [PersistentStreamManager] Iniciando TODOS los listeners post-login...');
+
+    // Reiniciar la bandera de inicialización para forzar recreación
+    _initialized = false;
+
+    // Llamar a initialize() que ahora validará la sesión y arrancará todos los listeners
+    await initialize();
+
+    print(
+        '✅ [PersistentStreamManager] Todos los listeners iniciados después del login');
   }
 
   /// Initialize persistent Pedidos listener
@@ -316,6 +359,21 @@ class PersistentStreamManager {
 
   Future<void> _initializeSesionesListener() async {
     try {
+      // 🔒 No inicializar si no hay usuario/escenario (pre-login)
+      final sessionBox = Hive.box('sessionBox');
+      final usuario = sessionBox.get('username');
+      final escenario = sessionBox.get('escenario');
+
+      print(
+          '🔍 [PersistentStreamManager] _initializeSesionesListener: usuario=$usuario, escenario=$escenario');
+
+      if (usuario == null || escenario == null) {
+        print(
+            '⏸️ [PersistentStreamManager] Sesiones listener NO iniciado (sin sesión activa)');
+        return;
+      }
+
+      print('🚀 [PersistentStreamManager] Iniciando getSesionesStream()...');
       _sesionesSubscription = _firebaseService.getSesionesStream().listen(
         (Map<String, dynamic>? sesiones) {
           _sesionesReads++;

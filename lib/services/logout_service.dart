@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/riogas_service.dart';
 import '../services/session_service.dart';
 import '../services/screen_recording_manager.dart'; // 🎥 Sistema de grabación
@@ -55,9 +56,21 @@ class LogoutService {
       print(
           '$TAG    - Logout type: ${isRemoteLogout ? "Remoto (FCM)" : "Manual (Settings)"}');
 
-      // Marcar bandera de logout
-      sessionBox.put('firstLoginDone', true);
+      // ✅ Resetear flag firstLoginDone para próximo login
+      // Este flag debe estar en TRUE cuando NO hay sesión activa
+      // Cuando se hace login, se setea a true y después de 10s se pone a false
+      // Al hacer logout (forzado o manual), debe volver a TRUE para el próximo login
+      await sessionBox.put('firstLoginDone', true);
+      print(
+          '$TAG ✅ firstLoginDone reseteado a TRUE (listo para próximo login)');
+
+      // Marcar bandera de logout controlado (para evitar loops de logout forzado)
       sessionBox.put('logoutControlled', true);
+
+      // 🔐 Limpiar flag sessionActive (para validación de sesión en Kotlin)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('sessionActive', false);
+      print("$TAG ✅ Flag sessionActive seteado a false");
 
       // 🎥 Detener grabación de pantalla si está activa
       try {

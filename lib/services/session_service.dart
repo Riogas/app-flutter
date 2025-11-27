@@ -3,6 +3,7 @@ import 'package:hive/hive.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
+import 'dart:async'; // Para TimeoutException
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:geolocator/geolocator.dart';
@@ -128,12 +129,81 @@ class SessionService {
       }
       // 3. Crear la sesión si no hay conflictos
       print("$kSessionTag saveSession: Creando sesión en Firestore");
+      print(
+          "$kSessionTag 📝 [T0] Timestamp: ${DateTime.now().millisecondsSinceEpoch}");
+      print("$kSessionTag 🔍 Datos que se enviarán a Firestore:");
+      print("$kSessionTag 📦 sessionData completo: $sessionData");
+      print(
+          "$kSessionTag 🔎 tipoDeCierreDeSesion en sessionData: ${sessionData.containsKey('tipoDeCierreDeSesion') ? sessionData['tipoDeCierreDeSesion'] : 'NO EXISTE'}");
+      print(
+          "$kSessionTag 🔎 fchHoraCierre en sessionData: ${sessionData.containsKey('fchHoraCierre') ? sessionData['fchHoraCierre'] : 'NO EXISTE'}");
+
+      print(
+          "$kSessionTag ✍️✍️✍️ CREANDO/ACTUALIZANDO DOCUMENTO EN activeSessions ✍️✍️✍️");
+      print("$kSessionTag 🔑 Path del documento:");
+      print("$kSessionTag    Collection: sessions-$escenarioId");
+      print("$kSessionTag    Doc (fecha): $fechaActual");
+      print("$kSessionTag    SubCollection: activeSessions");
+      print("$kSessionTag    Doc ID: Usuario-$idUsuario");
+      print("$kSessionTag 📝 Datos a guardar:");
+      print("$kSessionTag    idSesion: ${sessionData['idSesion']}");
+      print("$kSessionTag    idUsuario: ${sessionData['idUsuario']}");
+      print("$kSessionTag    movil: ${sessionData['movil']}");
+      print("$kSessionTag    idTerminal: ${sessionData['idTerminal']}");
+      print(
+          "$kSessionTag ⏰ Timestamp PRE-escritura: ${DateTime.now().millisecondsSinceEpoch}");
+      print("$kSessionTag 🔥 EJECUTANDO .set() EN FIRESTORE...");
+
       await _firestore
           .collection('sessions-$escenarioId')
           .doc(fechaActual)
           .collection('activeSessions')
           .doc('Usuario-$idUsuario')
           .set(sessionData);
+
+      print("$kSessionTag ✅ .set() completado (escrito en caché local)");
+      print(
+          "$kSessionTag ⏰ Timestamp POST-escritura: ${DateTime.now().millisecondsSinceEpoch}");
+      print(
+          "$kSessionTag saveSession: Escritura enviada a Firestore (caché local)");
+
+      // ✅ SOLUCIÓN 1: Esperar confirmación del servidor
+      print("$kSessionTag saveSession: Esperando confirmación del servidor...");
+      try {
+        final confirmation = await _firestore
+            .collection('sessions-$escenarioId')
+            .doc(fechaActual)
+            .collection('activeSessions')
+            .doc('Usuario-$idUsuario')
+            .get(const GetOptions(source: Source.server))
+            .timeout(
+          Duration(seconds: 5),
+          onTimeout: () {
+            print(
+                "$kSessionTag saveSession: ⚠️ Timeout esperando confirmación");
+            throw TimeoutException('Timeout confirmando sesión en servidor');
+          },
+        );
+
+        if (!confirmation.exists) {
+          print(
+              "$kSessionTag saveSession: ❌ ERROR - Sesión no confirmada en servidor");
+          return {
+            'success': false,
+            'message': 'Error: La sesión no se pudo confirmar en el servidor',
+          };
+        }
+
+        print("$kSessionTag saveSession: ✅ Sesión confirmada en servidor");
+        print(
+            "$kSessionTag 📝 [T1] Timestamp: ${DateTime.now().millisecondsSinceEpoch}");
+      } catch (confirmError) {
+        print(
+            "$kSessionTag saveSession: ❌ Error confirmando sesión: $confirmError");
+        // Continuar de todas formas, ya que la escritura se hizo
+        // El stream reactivo eventualmente detectará el documento
+      }
+
       print("$kSessionTag saveSession: Sesión guardada exitosamente");
       return {
         'success': true,
@@ -214,6 +284,21 @@ class SessionService {
     required String tipoDeCierreDeSesion,
     required DateTime fchHoraCierre,
   }) async {
+    print("$kSessionTag ═══════════════════════════════════════════════");
+    print("$kSessionTag 🔥🔥🔥 setHistory() INICIADO 🔥🔥🔥");
+    print("$kSessionTag ═══════════════════════════════════════════════");
+    print("$kSessionTag ⚠️ STACK TRACE DE LLAMADA A setHistory():");
+    print(StackTrace.current);
+    print("$kSessionTag 📋 Parámetros recibidos:");
+    print("$kSessionTag    idUsuario: $idUsuario");
+    print("$kSessionTag    nomUsuario: $nomUsuario");
+    print("$kSessionTag    tipoDeCierreDeSesion: $tipoDeCierreDeSesion");
+    print("$kSessionTag    fchHoraCierre: $fchHoraCierre");
+    print(
+        "$kSessionTag ⏰ Timestamp llamada: ${DateTime.now().millisecondsSinceEpoch}");
+    print(
+        "$kSessionTag 💡 Este método MOVERÁ la sesión de activeSessions → history");
+    print("$kSessionTag ═══════════════════════════════════════════════");
     print("$kSessionTag 📥 setHistory: INICIO");
 
     try {
@@ -288,12 +373,26 @@ class SessionService {
             "$kSessionTag 🔄 Sesión activa encontrada, moviendo a history...");
         final data = doc.data()!;
 
+        print("$kSessionTag 📋 Datos de sesión actual a cerrar:");
+        print("$kSessionTag    idSesion: ${data['idSesion']}");
+        print("$kSessionTag    idUsuario: ${data['idUsuario']}");
+        print("$kSessionTag    movil: ${data['movil']}");
+        print("$kSessionTag    infoDispositivo: ${data['infoDispositivo']}");
+
         // 🔹 Agregar campos faltantes antes de guardar en "history"
         data['tipoDeCierreDeSesion'] = tipoDeCierreDeSesion;
         data['fchHoraCierre'] = fchHoraCierre.toIso8601String();
         data['estado'] = 'Inactiva';
 
+        print("$kSessionTag 🏷️ Campos de cierre agregados:");
+        print("$kSessionTag    tipoDeCierreDeSesion: $tipoDeCierreDeSesion");
+        print(
+            "$kSessionTag    fchHoraCierre: ${fchHoraCierre.toIso8601String()}");
+        print("$kSessionTag    estado: Inactiva");
+
         final historyId = '${horaActual.replaceAll(':', '')}-$idUsuario';
+
+        print("$kSessionTag 💾 Guardando en history con ID: $historyId");
 
         await _firestore
             .collection('sessions-$escenarioId')
@@ -301,6 +400,21 @@ class SessionService {
             .collection('history')
             .doc(historyId)
             .set(data);
+
+        print("$kSessionTag ✅ Documento guardado en history exitosamente");
+
+        print(
+            "$kSessionTag 🗑️🗑️🗑️ ELIMINANDO DOCUMENTO DE activeSessions 🗑️🗑️🗑️");
+        print("$kSessionTag ⚠️ STACK TRACE DE ELIMINACIÓN:");
+        print(StackTrace.current);
+        print("$kSessionTag 🔑 Documento a eliminar:");
+        print(
+            "$kSessionTag    Path: sessions-$escenarioId/$fechaActual/activeSessions/Usuario-$idUsuario");
+        print("$kSessionTag    idUsuario: $idUsuario");
+        print("$kSessionTag    idSesion siendo cerrado: ${data['idSesion']}");
+        print(
+            "$kSessionTag    Timestamp eliminación: ${DateTime.now().millisecondsSinceEpoch}");
+        print("$kSessionTag 🔥 EJECUTANDO .delete() EN FIRESTORE...");
 
         await _firestore
             .collection('sessions-$escenarioId')
@@ -310,14 +424,33 @@ class SessionService {
             .delete();
 
         print(
-            "$kSessionTag ✅ Sesión movida a history. Creando nueva sesión...");
+            "$kSessionTag ✅ Documento eliminado de activeSessions exitosamente");
+        print(
+            "$kSessionTag 📍 Path eliminado: sessions-$escenarioId/$fechaActual/activeSessions/Usuario-$idUsuario");
+        print(
+            "$kSessionTag ⏰ Timestamp post-eliminación: ${DateTime.now().millisecondsSinceEpoch}");
+
+        // ⏱️ ESPERAR 5 SEGUNDOS antes de crear la nueva sesión
+        print(
+            "$kSessionTag ⏱️ Esperando 5 segundos antes de crear nueva sesión...");
+        print(
+            "$kSessionTag    Razón: Permitir que el listener de Firestore procese el cierre");
+        print(
+            "$kSessionTag    Inicio espera: ${DateTime.now().toIso8601String()}");
+
+        await Future.delayed(Duration(seconds: 5));
+
+        print(
+            "$kSessionTag ⏱️ Fin de espera: ${DateTime.now().toIso8601String()}");
+        print("$kSessionTag 🆕 Procediendo a crear nueva sesión...");
+
         final saveResult = await saveSession(
           idUsuario: idUsuario,
           nomUsuario: nomUsuario,
           primeraUbicacion: primeraUbicacion,
           versionApp: versionApp,
-          tipoDeCierreDeSesion: tipoDeCierreDeSesion,
-          fchHoraCierre: fchHoraCierre,
+          tipoDeCierreDeSesion:
+              '', // 🔹 NO pasar tipoDeCierreDeSesion al crear sesión NUEVA
         );
         print("$kSessionTag 📌 Resultado saveSession: $saveResult");
         return saveResult;
@@ -360,7 +493,8 @@ class SessionService {
           nomUsuario: nomUsuario,
           primeraUbicacion: primeraUbicacion,
           versionApp: versionApp,
-          tipoDeCierreDeSesion: tipoDeCierreDeSesion,
+          tipoDeCierreDeSesion:
+              '', // 🔹 NO pasar tipoDeCierreDeSesion al crear sesión NUEVA
         );
         print("$kSessionTag 📌 Resultado saveSession: $saveResult");
         return saveResult;

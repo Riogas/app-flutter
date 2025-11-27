@@ -4,18 +4,50 @@ import 'dart:io'; // Import for SocketException
 import 'package:hive/hive.dart';
 import '../utils/error_event.dart';
 import 'package:geolocator/geolocator.dart';
-import '../services/location_service.dart'; // Add this line to import LocationService
+import '../services/location_service.dart';
 import 'dart:async'; // Import for Timer
 import '../utils/constantes.dart';
-import 'package:url_launcher/url_launcher.dart'; // Add this import for opening URLs
-import 'package:path_provider/path_provider.dart'; // Add this import for file handling
-import 'package:open_file/open_file.dart'; // Ensure this import is present
+import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
 import '../services/auth_service.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // Import FirebaseMessaging
-import '../services/debug_config_manager.dart'; // Import para enviar logs remotamente
-import 'package:flutter/services.dart'; // Import para MethodChannel
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../services/debug_config_manager.dart';
+import 'package:flutter/services.dart';
 
 class RioGasService {
+  // 🔓 HTTP Client que ignora certificados SSL
+  static http.Client? _httpClient;
+
+  // ⏱️ Control de throttling para connectivity check
+  static DateTime? _lastConnectivityCheck;
+  static bool? _lastConnectivityResult;
+  static const Duration _connectivityCheckInterval = Duration(seconds: 5);
+
+  // � Lock para evitar ejecuciones concurrentes de processPendingRequests
+  static bool _isProcessingPendingRequests = false;
+
+  // �🔄 Método para resetear el cliente HTTP (útil al cambiar de ambiente)
+  static void resetHttpClient() {
+    if (_httpClient != null) {
+      _httpClient!.close();
+      _httpClient = null;
+      print('🔄 [HTTP_CLIENT] Cliente HTTP reseteado');
+    }
+  }
+
+  static http.Client get _client {
+    if (_httpClient == null) {
+      print('🔍 [HTTP_CLIENT] Creando nuevo cliente HTTP');
+
+      // ✅ SIEMPRE validar SSL (tanto desarrollo como producción)
+      _httpClient = http.Client();
+      print(
+          '✅ [HTTP_CLIENT] Cliente HTTP creado con validación SSL habilitada');
+    }
+    return _httpClient!;
+  }
+
   /// Llama al servicio DescargaPedidosV2 con el body especificado.
   /// [sdtPedidos] debe ser una lista de mapas con la clave 'PedidoId'.
   static Future<Map<String, dynamic>?> descargaPedidos(
@@ -123,7 +155,7 @@ class RioGasService {
 
       _retryTimer = Timer.periodic(Duration(seconds: retryIntervalSeconds),
           (timer) async {
-        print('🔄 Timer ejecutándose. Procesando requests pendientes...');
+        // print('🔄 Timer ejecutándose. Procesando requests pendientes...');
         try {
           await processPendingRequests();
 
@@ -133,9 +165,10 @@ class RioGasService {
             print('✅ Todos los pendientes procesados. Deteniendo timer.');
             timer.cancel();
             _retryTimer = null;
-          } else {
-            print('📦 Aún quedan ${updatedBox.length} requests pendientes.');
           }
+          // else {
+          //   print('📦 Aún quedan ${updatedBox.length} requests pendientes.');
+          // }
         } catch (e) {
           print('❌ Error en el callback del retry timer: $e');
         }
@@ -267,7 +300,7 @@ class RioGasService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(n8nPayload),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         print('✅ [N8N_ERROR] Error enviado exitosamente a n8n');
@@ -476,31 +509,45 @@ class RioGasService {
   // Método para verificar conectividad RioGas en tiempo real
   static Future<bool> _checkRioGasConnectivity() async {
     try {
-      print('🔍 [RioGasService] Chequeando conectividad RioGas...');
+      // ⏱️ Throttling: Si ya se verificó hace menos de 5 segundos, retornar resultado cacheado
+      if (_lastConnectivityCheck != null) {
+        final timeSinceLastCheck =
+            DateTime.now().difference(_lastConnectivityCheck!);
+        if (timeSinceLastCheck < _connectivityCheckInterval) {
+          // print('⏱️ [RioGasService] Usando resultado cacheado (último check hace ${timeSinceLastCheck.inSeconds}s)');
+          return _lastConnectivityResult ?? false;
+        }
+      }
+
+      // print('🔍 [RioGasService] Chequeando conectividad RioGas...');
       var sessionBox = await Hive.openBox('sessionBox');
       var deviceId = sessionBox.get('deviceId');
 
       if (deviceId == null || (deviceId is String && deviceId.isEmpty)) {
         print(
             '❌ [RioGasService] No deviceId found for RioGas connectivity check');
+        _lastConnectivityCheck = DateTime.now();
+        _lastConnectivityResult = false;
         return false;
       }
 
-      print('📱 [RioGasService] Usando deviceId: $deviceId');
+      // print('📱 [RioGasService] Usando deviceId: $deviceId');
 
       // Crear el body que se va a enviar
-      Map<String, dynamic> requestBody = {'DeviceId': deviceId, 'token': token};
-      print(
-          '📤 [RioGasService] Body completo a enviar: ${jsonEncode(requestBody)}');
-      print('🌐 [RioGasService] URL completa: ${baseUrl}ValidarDispositivo');
+      // Map<String, dynamic> requestBody = {'DeviceId': deviceId, 'token': token};
+      // print(
+      //     '📤 [RioGasService] Body completo a enviar: ${jsonEncode(requestBody)}');
+      // print('🌐 [RioGasService] URL completa: ${baseUrl}ValidarDispositivo');
 
       var response = await validarDispositivo(deviceId);
 
-      print(
-          '📥 [RioGasService] Respuesta COMPLETA del servicio: ${response != null ? jsonEncode(response) : 'NULL'}');
+      // print(
+      //     '📥 [RioGasService] Respuesta COMPLETA del servicio: ${response != null ? jsonEncode(response) : 'NULL'}');
 
       if (response == null) {
         print('❌ [RioGasService] RioGas response is null');
+        _lastConnectivityCheck = DateTime.now();
+        _lastConnectivityResult = false;
         return false;
       }
 
@@ -518,10 +565,20 @@ class RioGasService {
 
       print(
           '🌐 [RioGasService] RioGas connectivity result: ${isConnected ? "✅ Connected" : "❌ Disconnected"}');
+
+      // 💾 Guardar resultado y timestamp
+      _lastConnectivityCheck = DateTime.now();
+      _lastConnectivityResult = isConnected;
+
       return isConnected;
     } catch (e) {
       print('❌ [RioGasService] RioGas connectivity error: $e');
       await _logError('RioGasService Connectivity Error', e.toString());
+
+      // 💾 Guardar resultado de error
+      _lastConnectivityCheck = DateTime.now();
+      _lastConnectivityResult = false;
+
       return false;
     }
   }
@@ -529,153 +586,156 @@ class RioGasService {
   static Future<void> processPendingRequests() async {
     const tag = '📦[FAILED_SYNC]';
 
-    print('$tag ▶️ Iniciando procesamiento de requests pendientes...');
+    // 🔒 Lock: Si ya está procesando, salir inmediatamente
+    if (_isProcessingPendingRequests) {
+      // print('$tag ⏭️ Ya hay un procesamiento en curso. Saliendo...');
+      return;
+    }
 
-    final failedRequestsBox = await Hive.openBox('failedRequestsBox');
-    final conexionBox = await Hive.openBox('conexionBox');
+    // 🔒 Marcar como procesando
+    _isProcessingPendingRequests = true;
 
-    // Verificar conectividad REAL antes de procesar
-    print('$tag 🔍 Verificando conectividad RioGas en tiempo real...');
-    bool isConnected = await _checkRioGasConnectivity();
+    try {
+      // print('$tag ▶️ Iniciando procesamiento de requests pendientes...');
 
-    if (isConnected) {
-      print(
-          '$tag ✅ RioGas conectado. Marcando en conexionBox y continuando...');
+      final failedRequestsBox = await Hive.openBox('failedRequestsBox');
+      final conexionBox = await Hive.openBox('conexionBox');
+
+      // ✅ SIEMPRE asumir que RioGas está conectado
+      // No hacer verificación de conectividad aquí - esto se maneja en otro lado
       await conexionBox.put('conexionRioGas', true);
       await conexionBox.put(
           'conexionRioGasTimestamp', DateTime.now().toIso8601String());
-    } else {
+
+      print('$tag 🔍 Recuperando requests pendientes...');
+      final rawMap = failedRequestsBox.toMap();
+      List<MapEntry<dynamic, Map<String, dynamic>>> pendingRequests =
+          rawMap.entries
+              .map((entry) {
+                try {
+                  final map = Map<String, dynamic>.from(entry.value as Map);
+                  return MapEntry(entry.key, map);
+                } catch (error) {
+                  print(
+                      '$tag ❌ Error parseando request con key ${entry.key}: $error');
+                  return null;
+                }
+              })
+              .whereType<MapEntry<dynamic, Map<String, dynamic>>>()
+              .toList();
+
       print(
-          '$tag ❌ RioGas desconectado. Marcando en conexionBox y abortando...');
-      await conexionBox.put('conexionRioGas', false);
-      print(
-          '$tag ℹ️ El ConnectionCheck se encargará de reestablecer la conexión.');
-      return;
-    }
+          '$tag 📋 Se encontraron ${pendingRequests.length} requests pendientes.');
 
-    print('$tag 🔍 Recuperando requests pendientes...');
-    final rawMap = failedRequestsBox.toMap();
-    List<MapEntry<dynamic, Map<String, dynamic>>> pendingRequests =
-        rawMap.entries
-            .map((entry) {
-              try {
-                final map = Map<String, dynamic>.from(entry.value as Map);
-                return MapEntry(entry.key, map);
-              } catch (error) {
-                print(
-                    '$tag ❌ Error parseando request con key ${entry.key}: $error');
-                return null;
-              }
-            })
-            .whereType<MapEntry<dynamic, Map<String, dynamic>>>()
-            .toList();
+      if (pendingRequests.isEmpty) {
+        print('$tag ✅ No hay requests pendientes para procesar.');
+        return;
+      }
 
-    print(
-        '$tag 📋 Se encontraron ${pendingRequests.length} requests pendientes.');
+      for (var entry in pendingRequests) {
+        // delay defensivo para no saturar el backend
+        await Future.delayed(const Duration(seconds: 1));
 
-    if (pendingRequests.isEmpty) {
-      print('$tag ✅ No hay requests pendientes para procesar.');
-      return;
-    }
+        final key = entry.key;
+        final request = entry.value;
 
-    for (var entry in pendingRequests) {
-      // delay defensivo para no saturar el backend
-      await Future.delayed(const Duration(seconds: 1));
+        try {
+          final endpoint = request['endpoint'] ?? 'UNKNOWN';
+          final payload = Map<String, dynamic>.from(request['payload'] ?? {});
+          final timestamp = request['timestamp'];
 
-      final key = entry.key;
-      final request = entry.value;
+          if (request['processed'] == true) {
+            print(
+                '$tag ⏩ Request con key $key ya estaba marcada como procesada. Se omite.');
+            continue;
+          }
 
-      try {
-        final endpoint = request['endpoint'] ?? 'UNKNOWN';
-        final payload = Map<String, dynamic>.from(request['payload'] ?? {});
-        final timestamp = request['timestamp'];
+          // Endpoints que no reintentamos desde failedRequestsBox
+          if (endpoint == 'RegistrarErrores' ||
+              endpoint == 'RegistrarCoordenadas' ||
+              endpoint == 'ValidarDispositivo') {
+            print('$tag ⛔ Endpoint $endpoint ignorado. No se reintenta.');
+            continue;
+          }
 
-        if (request['processed'] == true) {
           print(
-              '$tag ⏩ Request con key $key ya estaba marcada como procesada. Se omite.');
-          continue;
-        }
+              '$tag 🌐 Enviando [$endpoint] con payload: ${jsonEncode(payload)}');
+          if (timestamp != null) {
+            print('$tag 🕒 Timestamp original: $timestamp');
+          }
 
-        // Endpoints que no reintentamos desde failedRequestsBox
-        if (endpoint == 'RegistrarErrores' ||
-            endpoint == 'RegistrarCoordenadas') {
-          print('$tag ⛔ Endpoint $endpoint ignorado. No se reintenta.');
-          continue;
-        }
+          final response = await _post(endpoint, payload);
 
-        print(
-            '$tag 🌐 Enviando [$endpoint] con payload: ${jsonEncode(payload)}');
-        if (timestamp != null) {
-          print('$tag 🕒 Timestamp original: $timestamp');
-        }
+          if (response != null) {
+            print('$tag ✅ [$endpoint] procesado correctamente.');
+            await failedRequestsBox.delete(key);
+            print('$tag 🗑️ Eliminado request con key $key');
 
-        final response = await _post(endpoint, payload);
+            // 🔁 CHANGE: actualizar estado en Hive cuando FinalizarPedidoV2 (o FinalizarPedido) fue OK
+            if ((endpoint == 'FinalizarPedidoV2' ||
+                    endpoint == 'FinalizarPedido') &&
+                payload.containsKey('PedidoId')) {
+              final pedidosBox = await Hive.openBox('pedidosBox');
+              final pedidoId = payload['PedidoId'];
+              if (pedidosBox.containsKey(pedidoId)) {
+                await pedidosBox.put(pedidoId, 'Procesando');
+                print("📥 [HIVE] Pedido $pedidoId marcado como 'Procesando'");
+              } else {
+                print(
+                    "ℹ️ [HIVE] pedidosBox no contiene la clave $pedidoId (no se actualiza).");
+              }
+            }
+          } else {
+            print(
+                '$tag ⚠️ Error al procesar [$endpoint] con key $key. Se mantiene en box.');
+            print('$tag 📦 Payload: ${jsonEncode(payload)}');
 
-        if (response != null) {
-          print('$tag ✅ [$endpoint] procesado correctamente.');
-          await failedRequestsBox.delete(key);
-          print('$tag 🗑️ Eliminado request con key $key');
+            // Si falla, marcar conexión como perdida para que ConnectionCheck tome control
+            await conexionBox.put('conexionRioGas', false);
+            print(
+                '$tag ❌ Marcando conexionRioGas=false debido a fallo en request.');
+            break; // Salir del bucle para que ConnectionCheck maneje la reconexión
+          }
+        } catch (e, st) {
+          print('$tag ❌ Error al procesar request con key $key: $e');
+          print(st);
 
-          // 🔁 CHANGE: actualizar estado en Hive cuando FinalizarPedidoV2 (o FinalizarPedido) fue OK
-          if ((endpoint == 'FinalizarPedidoV2' ||
-                  endpoint == 'FinalizarPedido') &&
-              payload.containsKey('PedidoId')) {
+          // Marcar conexión como perdida en caso de excepción
+          await conexionBox.put('conexionRioGas', false);
+          print('$tag ❌ Marcando conexionRioGas=false debido a excepción.');
+
+          // (Opcional) Mantener rollback de estado si falla FinalizarPedido/FinalizarPedidoV2
+          if ((request['endpoint'] == 'FinalizarPedidoV2' ||
+                  request['endpoint'] == 'FinalizarPedido') &&
+              request['payload'] is Map &&
+              request['payload'].containsKey('PedidoId')) {
+            final pedidoId = request['payload']['PedidoId'];
             final pedidosBox = await Hive.openBox('pedidosBox');
-            final pedidoId = payload['PedidoId'];
             if (pedidosBox.containsKey(pedidoId)) {
-              await pedidosBox.put(pedidoId, 'Procesando');
-              print("📥 [HIVE] Pedido $pedidoId marcado como 'Procesando'");
-            } else {
+              await pedidosBox.put(pedidoId, 'Enviando');
               print(
-                  "ℹ️ [HIVE] pedidosBox no contiene la clave $pedidoId (no se actualiza).");
+                  '$tag ↩️ Pedido $pedidoId marcado como "Enviando" por error');
             }
           }
-        } else {
-          print(
-              '$tag ⚠️ Error al procesar [$endpoint] con key $key. Se mantiene en box.');
-          print('$tag 📦 Payload: ${jsonEncode(payload)}');
-
-          // Si falla, marcar conexión como perdida para que ConnectionCheck tome control
-          await conexionBox.put('conexionRioGas', false);
-          print(
-              '$tag ❌ Marcando conexionRioGas=false debido a fallo en request.');
-          break; // Salir del bucle para que ConnectionCheck maneje la reconexión
+          break; // Salir del bucle
         }
-      } catch (e, st) {
-        print('$tag ❌ Error al procesar request con key $key: $e');
-        print(st);
-
-        // Marcar conexión como perdida en caso de excepción
-        await conexionBox.put('conexionRioGas', false);
-        print('$tag ❌ Marcando conexionRioGas=false debido a excepción.');
-
-        // (Opcional) Mantener rollback de estado si falla FinalizarPedido/FinalizarPedidoV2
-        if ((request['endpoint'] == 'FinalizarPedidoV2' ||
-                request['endpoint'] == 'FinalizarPedido') &&
-            request['payload'] is Map &&
-            request['payload'].containsKey('PedidoId')) {
-          final pedidoId = request['payload']['PedidoId'];
-          final pedidosBox = await Hive.openBox('pedidosBox');
-          if (pedidosBox.containsKey(pedidoId)) {
-            await pedidosBox.put(pedidoId, 'Enviando');
-            print('$tag ↩️ Pedido $pedidoId marcado como "Enviando" por error');
-          }
-        }
-        break; // Salir del bucle
       }
-    }
 
-    print('$tag 🏁 Procesamiento finalizado.');
-    final restantes = failedRequestsBox.length;
-    print('$tag 📦 Requests restantes en box: $restantes');
+      print('$tag 🏁 Procesamiento finalizado.');
+      final restantes = failedRequestsBox.length;
+      print('$tag 📦 Requests restantes en box: $restantes');
 
-    if (restantes > 0) {
-      failedRequestsBox.toMap().forEach((key, value) {
-        print(
-            '$tag 🧾 Pendiente -> Key: $key | Endpoint: ${value['endpoint']}');
-      });
-    } else {
-      print('$tag ✅ No quedan requests pendientes.');
+      if (restantes > 0) {
+        failedRequestsBox.toMap().forEach((key, value) {
+          print(
+              '$tag 🧾 Pendiente -> Key: $key | Endpoint: ${value['endpoint']}');
+        });
+      } else {
+        print('$tag ✅ No quedan requests pendientes.');
+      }
+    } finally {
+      // 🔓 Liberar lock siempre
+      _isProcessingPendingRequests = false;
     }
   }
 
@@ -760,12 +820,20 @@ class RioGasService {
         print('🌐 [HTTP_POST] Headers: ${jsonEncode(headers)}');
         print('🌐 [HTTP_POST] Body original recibido: ${jsonEncode(body)}');
         print('🌐 [HTTP_POST] Body final con token: $bodyJson');
-        print('🌐 [HTTP_POST] Enviando request...');
+        print('🌐 [HTTP_POST] Enviando request con timeout de 30s...');
 
-        final response = await http.post(
+        final response = await _client
+            .post(
           Uri.parse(fullUrl),
           headers: headers,
           body: bodyJson,
+        )
+            .timeout(
+          Duration(seconds: 30),
+          onTimeout: () {
+            print('⏱️ [HTTP_POST] TIMEOUT de 30s alcanzado para $endpoint');
+            throw TimeoutException('Request timeout después de 30 segundos');
+          },
         );
 
         print('📦 [HTTP_POST] ===== RESPUESTA RECIBIDA =====');
@@ -1148,7 +1216,8 @@ class RioGasService {
         endpoint == 'RegistrarCoordenadasBatch' ||
         endpoint == 'RegistrarCierre' ||
         endpoint == 'DescargaPedidos' ||
-        endpoint == 'DescargaPedidosV2';
+        endpoint == 'DescargaPedidosV2' ||
+        endpoint == 'ValidarDispositivo';
   }
 
   static Future<Map<String, dynamic>?> actualizarMoviles(
@@ -1541,7 +1610,7 @@ class RioGasService {
       };
 
       // Send the request to RioGas
-      var response = await _post('RegistrarUltLog', payload);
+      var response = await _post('RegistrarSesion', payload);
 
       if (response != null) {
         print('✅ Último log registrado exitosamente en RioGas.');

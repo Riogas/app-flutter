@@ -1,5 +1,6 @@
 import 'package:hive/hive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/riogas_service.dart'; // 🆕 Para resetear HTTP client
 
 // 🌍 Enumeración para los ambientes de la aplicación
 enum Environment { production, development }
@@ -14,23 +15,18 @@ class AppEnvironment {
 
   // URLs de desarrollo por defecto (fallback si no existe constante 611)
   static const String _devUrlFallback =
-      'http://190.64.89.170:8888/ICA_Geos_/appservices/';
+      'https://sgm.riogas.com.uy/appservices/';
 
   // Getter para URL de desarrollo (usa constante 611 o fallback)
   static String get devUrl => _devUrlFromConstant ?? _devUrlFallback;
 
   // Inicializar desde SharedPreferences y cargar constante 611
   static Future<void> initialize() async {
-    final prefs = await SharedPreferences.getInstance();
-    final envString = prefs.getString(_keyEnvironment);
-
-    if (envString == 'development') {
-      _currentEnvironment = Environment.development;
-      print('🌍 [AMBIENTE] Aplicación iniciada en modo DESARROLLO');
-    } else {
-      _currentEnvironment = Environment.production;
-      print('🌍 [AMBIENTE] Aplicación iniciada en modo PRODUCCIÓN');
-    }
+    // 🔒 SIEMPRE iniciar en PRODUCCIÓN (ignorar preferencia guardada)
+    _currentEnvironment = Environment.production;
+    print('🌍 [AMBIENTE] Aplicación SIEMPRE inicia en modo PRODUCCIÓN');
+    print(
+        'ℹ️ [AMBIENTE] El ambiente se cambiará después del login si el usuario es especial');
 
     // 🔧 Cargar constante 611 para URL de desarrollo
     await _loadDevUrlFromConstant();
@@ -79,6 +75,9 @@ class AppEnvironment {
     );
     print(
         '🌍 [AMBIENTE] Cambiado a: ${environment == Environment.development ? "DESARROLLO" : "PRODUCCIÓN"}');
+
+    // 🔄 Resetear el cliente HTTP para aplicar nueva configuración SSL
+    RioGasService.resetHttpClient();
   }
 
   // 🆕 Cambiar el ambiente SOLO durante la sesión actual (no persiste en SharedPreferences)
@@ -88,6 +87,9 @@ class AppEnvironment {
         '🌍 [AMBIENTE] Cambiado temporalmente a: ${environment == Environment.development ? "DESARROLLO" : "PRODUCCIÓN"}');
     print(
         'ℹ️ [AMBIENTE] Este cambio NO persiste. Al cerrar sesión, volverá a PRODUCCIÓN.');
+
+    // 🔄 Resetear el cliente HTTP para aplicar nueva configuración SSL
+    RioGasService.resetHttpClient();
   }
 
   // 🆕 Resetear a producción (llamar al cerrar sesión)
@@ -96,6 +98,9 @@ class AppEnvironment {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyEnvironment); // Eliminar preferencia guardada
     print('🌍 [AMBIENTE] Reseteado a PRODUCCIÓN (por defecto)');
+
+    // 🔄 Resetear el cliente HTTP para aplicar nueva configuración SSL
+    RioGasService.resetHttpClient();
   }
 
   // Obtener el nombre legible del ambiente

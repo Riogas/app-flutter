@@ -1,32 +1,32 @@
-import 'package:firebase_core/firebase_core.dart';
+﻿import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart'; // Para MethodChannel
 import 'package:hive/hive.dart';
-import 'dart:convert'; // Para calcular el tamaño de los datos
+import 'dart:convert'; // Para calcular el tamaÃ±o de los datos
 import 'dart:async'; // Para Timer
 import '../utils/error_event.dart';
-import '../utils/config.dart'; // Importa el archivo de configuración
-import '../utils/constantes.dart'; // Importa la función getConstantValue
+import '../utils/config.dart'; // Importa el archivo de configuraciÃ³n
+import '../utils/constantes.dart'; // Importa la funciÃ³n getConstantValue
 import 'riogas_service.dart'; // Para registrarCierre
 import 'persistent_stream_manager.dart'; // Para cancelar streams
-import 'logout_service.dart'; // 🔥 Para auto-logout por cambio de día
+import 'logout_service.dart'; // ðŸ”¥ Para auto-logout por cambio de dÃ­a
 
-// Función utilitaria para abrir cajas Hive de forma segura
+// FunciÃ³n utilitaria para abrir cajas Hive de forma segura
 dynamic openBoxSafe(String boxName) async {
   try {
     if (!Hive.isBoxOpen(boxName)) {
-      // Si tu versión de Hive soporta boxExists, puedes agregar aquí la verificación
+      // Si tu versiÃ³n de Hive soporta boxExists, puedes agregar aquÃ­ la verificaciÃ³n
       // if (!await Hive.boxExists(boxName)) {
-      //   print('⚠️ La caja $boxName no existe en disco.');
+      //   print('âš ï¸ La caja $boxName no existe en disco.');
       //   return null;
       // }
       return await Hive.openBox(boxName);
     }
     return Hive.box(boxName);
   } catch (e) {
-    print('❌ Error abriendo la caja $boxName: $e');
+    print('âŒ Error abriendo la caja $boxName: $e');
     return null;
   }
 }
@@ -42,12 +42,6 @@ class FirebaseService {
 
   // Timer para refresh proactivo del token
   static Timer? _tokenRefreshTimer;
-
-  // 🛡️ OPCIÓN 4: Variables para protección contra race conditions
-  static Map<String, dynamic>? _lastValidSessionData;
-  static DateTime? _lastValidSessionTimestamp;
-  static DateTime? _lastServerNullTimestamp;
-  static const Duration _sessionGracePeriod = Duration(seconds: 5);
 
   Future<void> initializeFirebase() async {
     //WidgetsFlutterBinding.ensureInitialized();
@@ -74,39 +68,39 @@ class FirebaseService {
     startProactiveTokenRefresh();
   }
 
-  /// Configura el listener de cambios en el estado de autenticación
+  /// Configura el listener de cambios en el estado de autenticaciÃ³n
   void _setupAuthStateListener() {
     if (_authListenerInitialized) {
-      print('ℹ️ [FIREBASE_SERVICE] Listener de auth ya inicializado');
+      print('â„¹ï¸ [FIREBASE_SERVICE] Listener de auth ya inicializado');
       return;
     }
 
     FirebaseAuth.instance.authStateChanges().listen((User? user) async {
       if (user == null) {
-        print('🔴 [FIREBASE_SERVICE] Usuario desautenticado o token expirado');
+        print('ðŸ”´ [FIREBASE_SERVICE] Usuario desautenticado o token expirado');
         print('   Timestamp: ${DateTime.now().toIso8601String()}');
 
         // Intentar re-autenticar si hay credenciales guardadas
         if (Config.firestoreEmail.isNotEmpty &&
             Config.firestorePassword.isNotEmpty) {
           print(
-              '🔄 [FIREBASE_SERVICE] Intentando re-autenticación automática...');
+              'ðŸ”„ [FIREBASE_SERVICE] Intentando re-autenticaciÃ³n automÃ¡tica...');
           await signInWithEmailAndPassword();
         } else {
-          print('⚠️ [FIREBASE_SERVICE] No hay credenciales para re-autenticar');
+          print('âš ï¸ [FIREBASE_SERVICE] No hay credenciales para re-autenticar');
         }
       } else {
-        print('✅ [FIREBASE_SERVICE] Usuario autenticado: ${user.email}');
+        print('âœ… [FIREBASE_SERVICE] Usuario autenticado: ${user.email}');
         print('   UID: ${user.uid}');
         print('   Timestamp: ${DateTime.now().toIso8601String()}');
         _user = user;
       }
     }, onError: (error) {
-      print('❌ [FIREBASE_SERVICE] Error en authStateChanges: $error');
+      print('âŒ [FIREBASE_SERVICE] Error en authStateChanges: $error');
     });
 
     _authListenerInitialized = true;
-    print('✅ [FIREBASE_SERVICE] Listener de auth state inicializado');
+    print('âœ… [FIREBASE_SERVICE] Listener de auth state inicializado');
   }
 
   /// Inicia el timer para refresh proactivo del token cada 45 minutos
@@ -118,43 +112,43 @@ class FirebaseService {
     // Crear nuevo timer que se ejecuta cada 45 minutos
     _tokenRefreshTimer =
         Timer.periodic(const Duration(minutes: 45), (timer) async {
-      print('⏰ [FIREBASE_SERVICE] Timer de refresh de token ejecutado');
+      print('â° [FIREBASE_SERVICE] Timer de refresh de token ejecutado');
       print('   Timestamp: ${DateTime.now().toIso8601String()}');
 
       bool refreshed = await refreshAuthToken();
 
       if (refreshed) {
-        print('✅ [FIREBASE_SERVICE] Token refrescado proactivamente');
+        print('âœ… [FIREBASE_SERVICE] Token refrescado proactivamente');
       } else {
-        print('❌ [FIREBASE_SERVICE] Falló el refresh proactivo del token');
+        print('âŒ [FIREBASE_SERVICE] FallÃ³ el refresh proactivo del token');
       }
     });
 
     print(
-        '✅ [FIREBASE_SERVICE] Timer de refresh proactivo iniciado (cada 45 min)');
+        'âœ… [FIREBASE_SERVICE] Timer de refresh proactivo iniciado (cada 45 min)');
   }
 
   /// Detiene el timer de refresh proactivo
   void stopProactiveTokenRefresh() {
     _tokenRefreshTimer?.cancel();
     _tokenRefreshTimer = null;
-    print('🛑 [FIREBASE_SERVICE] Timer de refresh proactivo detenido');
+    print('ðŸ›‘ [FIREBASE_SERVICE] Timer de refresh proactivo detenido');
   }
 
   /// Refresca el token del usuario actual
-  /// Llama a este método antes de operaciones críticas o periódicamente
+  /// Llama a este mÃ©todo antes de operaciones crÃ­ticas o periÃ³dicamente
   Future<bool> refreshAuthToken() async {
     try {
       final User? currentUser = FirebaseAuth.instance.currentUser;
 
       if (currentUser == null) {
         print(
-            '⚠️ [FIREBASE_SERVICE] No hay usuario autenticado para refrescar token');
+            'âš ï¸ [FIREBASE_SERVICE] No hay usuario autenticado para refrescar token');
 
         // Intentar re-autenticar
         if (Config.firestoreEmail.isNotEmpty &&
             Config.firestorePassword.isNotEmpty) {
-          print('🔄 [FIREBASE_SERVICE] Intentando re-autenticación...');
+          print('ðŸ”„ [FIREBASE_SERVICE] Intentando re-autenticaciÃ³n...');
           await signInWithEmailAndPassword();
           return FirebaseAuth.instance.currentUser != null;
         }
@@ -163,45 +157,45 @@ class FirebaseService {
       }
 
       print(
-          '🔄 [FIREBASE_SERVICE] Refrescando token para: ${currentUser.email}');
+          'ðŸ”„ [FIREBASE_SERVICE] Refrescando token para: ${currentUser.email}');
 
       // getIdToken(true) fuerza el refresh del token
       String? token = await currentUser.getIdToken(true);
 
       if (token != null) {
-        print('✅ [FIREBASE_SERVICE] Token refrescado exitosamente');
+        print('âœ… [FIREBASE_SERVICE] Token refrescado exitosamente');
         print('   Timestamp: ${DateTime.now().toIso8601String()}');
         return true;
       } else {
-        print('❌ [FIREBASE_SERVICE] No se pudo obtener el token');
+        print('âŒ [FIREBASE_SERVICE] No se pudo obtener el token');
         return false;
       }
     } catch (e) {
-      print('❌ [FIREBASE_SERVICE] Error refrescando token: $e');
+      print('âŒ [FIREBASE_SERVICE] Error refrescando token: $e');
       await _logError('Token Refresh Error', e.toString());
       return false;
     }
   }
 
-  /// Verifica si el usuario está autenticado y el token es válido
-  /// Retorna true si está todo OK, false si necesita re-autenticación
+  /// Verifica si el usuario estÃ¡ autenticado y el token es vÃ¡lido
+  /// Retorna true si estÃ¡ todo OK, false si necesita re-autenticaciÃ³n
   Future<bool> ensureAuthenticated() async {
     final User? currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
       print(
-          '⚠️ [FIREBASE_SERVICE] Usuario no autenticado, intentando login...');
+          'âš ï¸ [FIREBASE_SERVICE] Usuario no autenticado, intentando login...');
       await signInWithEmailAndPassword();
       return FirebaseAuth.instance.currentUser != null;
     }
 
-    // Verificar si el token necesita refresh (opcional, getIdToken lo hace automáticamente)
+    // Verificar si el token necesita refresh (opcional, getIdToken lo hace automÃ¡ticamente)
     try {
       String? token =
-          await currentUser.getIdToken(false); // false = usa cache si es válido
+          await currentUser.getIdToken(false); // false = usa cache si es vÃ¡lido
       return token != null;
     } catch (e) {
-      print('❌ [FIREBASE_SERVICE] Error verificando autenticación: $e');
+      print('âŒ [FIREBASE_SERVICE] Error verificando autenticaciÃ³n: $e');
       // Intentar refresh
       return await refreshAuthToken();
     }
@@ -209,19 +203,19 @@ class FirebaseService {
 
   Future<void> signInWithEmailAndPassword() async {
     try {
-      // Verificar que las credenciales no estén vacías
+      // Verificar que las credenciales no estÃ©n vacÃ­as
       if (Config.firestoreEmail.isEmpty || Config.firestorePassword.isEmpty) {
         print(
-            '⚠️ [FIREBASE_SERVICE] Credenciales vacías, no se puede hacer login');
+            'âš ï¸ [FIREBASE_SERVICE] Credenciales vacÃ­as, no se puede hacer login');
         print(
             '   Email: "${Config.firestoreEmail}", Password: "${Config.firestorePassword}"');
         await _logError('Firebase Auth Error',
-            'Credenciales vacías - Usuario no ha hecho login');
+            'Credenciales vacÃ­as - Usuario no ha hecho login');
         return;
       }
 
       print(
-          '🔐 [FIREBASE_SERVICE] Intentando login con: ${Config.firestoreEmail}');
+          'ðŸ” [FIREBASE_SERVICE] Intentando login con: ${Config.firestoreEmail}');
 
       UserCredential userCredential =
           await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -229,11 +223,11 @@ class FirebaseService {
         password: Config.firestorePassword, // Utiliza la variable global
       );
       _user = userCredential.user;
-      print('✅ [FIREBASE_SERVICE] Usuario autenticado: ${_user?.email}');
+      print('âœ… [FIREBASE_SERVICE] Usuario autenticado: ${_user?.email}');
       // print("User signed in: ${_user?.email}");
     } on FirebaseAuthException catch (e) {
       print(
-          '❌ [FIREBASE_SERVICE] Error de autenticación: ${e.code} - ${e.message}');
+          'âŒ [FIREBASE_SERVICE] Error de autenticaciÃ³n: ${e.code} - ${e.message}');
       // print("Error signing in: $e");
       await _logError('Firebase Auth Error', e.toString());
     }
@@ -247,7 +241,7 @@ class FirebaseService {
           .first
           .timeout(const Duration(seconds: 3));
 
-      print('✅ Firestore stream is active.'); // 👈 aquí va el print
+      print('âœ… Firestore stream is active.'); // ðŸ‘ˆ aquÃ­ va el print
 
       await _updateConnectionErrorState(false);
       return true;
@@ -267,7 +261,7 @@ class FirebaseService {
     if (conexionBox == null) return;
     DateTime? now = DateTime.now();
     if (now == null) {
-      // print('⚠ Error: DateTime.now() returned null.');
+      // print('âš  Error: DateTime.now() returned null.');
       return; // Handle the error or exit the function gracefully
     }
 
@@ -280,7 +274,7 @@ class FirebaseService {
       DateTime firstErrorTime = conexionBox.get('firstErrorTimeFirestore');
       if (now.difference(firstErrorTime).inMinutes >= 5) {
         // print(
-        //   '⚠ Error persistente: No hay conexión con Firestore durante más de 5 minutos.',
+        //   'âš  Error persistente: No hay conexiÃ³n con Firestore durante mÃ¡s de 5 minutos.',
         // );
       }
     } else {
@@ -294,10 +288,10 @@ class FirebaseService {
     streamCount++;
     streamCounters[streamName] = (streamCounters[streamName] ?? 0) + 1;
     print(
-        '🔁 Nueva instancia del stream $streamName (${streamCounters[streamName]} de este tipo, $streamCount total)');
+        'ðŸ” Nueva instancia del stream $streamName (${streamCounters[streamName]} de este tipo, $streamCount total)');
     stream.listen(
       (event) async {
-        print('✅ Stream "$streamName" received data: $event');
+        print('âœ… Stream "$streamName" received data: $event');
         var conexionBox = await openBoxSafe('conexionBox');
         if (conexionBox == null) return;
         DateTime now = DateTime.now();
@@ -305,7 +299,7 @@ class FirebaseService {
         conexionBox.put('lastSuccessfulConnection', now.toIso8601String());
       },
       onError: (error) async {
-        print('❌ Stream "$streamName" encountered an error: $error');
+        print('âŒ Stream "$streamName" encountered an error: $error');
         var conexionBox = await openBoxSafe('conexionBox');
         if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
@@ -320,7 +314,7 @@ class FirebaseService {
         streamCount--;
         streamCounters[streamName] = (streamCounters[streamName] ?? 1) - 1;
         print(
-            '⚠ Stream "$streamName" has been closed. (${streamCounters[streamName]} de este tipo, $streamCount total)');
+            'âš  Stream "$streamName" has been closed. (${streamCounters[streamName]} de este tipo, $streamCount total)');
         var conexionBox = await openBoxSafe('conexionBox');
         if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
@@ -365,7 +359,7 @@ class FirebaseService {
     streamCount++;
     streamCounters[streamName] = (streamCounters[streamName] ?? 0) + 1;
     print(
-        '🔁 Nueva instancia del stream con uso $streamName (${streamCounters[streamName]} de este tipo, $streamCount total)');
+        'ðŸ” Nueva instancia del stream con uso $streamName (${streamCounters[streamName]} de este tipo, $streamCount total)');
     int totalBytes = 0;
     DateTime startTime = DateTime.now();
     stream.listen(
@@ -397,12 +391,12 @@ class FirebaseService {
           int dataSize = utf8.encode(jsonData).length;
           totalBytes += dataSize;
 
-          print('✅ Stream "$streamName" recibió datos');
-          print('📊 "$streamName" Tamaño del evento: $dataSize bytes');
+          print('âœ… Stream "$streamName" recibiÃ³ datos');
+          print('ðŸ“Š "$streamName" TamaÃ±o del evento: $dataSize bytes');
 
           if (DateTime.now().difference(startTime).inMinutes >= 1) {
             print(
-                '📈 Consumo del stream "$streamName" en el último minuto: $totalBytes bytes');
+                'ðŸ“ˆ Consumo del stream "$streamName" en el Ãºltimo minuto: $totalBytes bytes');
             totalBytes = 0;
             startTime = DateTime.now();
           }
@@ -413,11 +407,11 @@ class FirebaseService {
           conexionBox.put(
               'lastSuccessfulConnection', DateTime.now().toIso8601String());
         } catch (e) {
-          print('❌ Error al procesar el evento del stream "$streamName": $e');
+          print('âŒ Error al procesar el evento del stream "$streamName": $e');
         }
       },
       onError: (error) async {
-        print('❌ Stream "$streamName" encontró un error: $error');
+        print('âŒ Stream "$streamName" encontrÃ³ un error: $error');
         var conexionBox = await openBoxSafe('conexionBox');
         if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
@@ -427,7 +421,7 @@ class FirebaseService {
         streamCount--;
         streamCounters[streamName] = (streamCounters[streamName] ?? 1) - 1;
         print(
-            '⚠ Stream "$streamName" se ha cerrado. (${streamCounters[streamName]} de este tipo, $streamCount total)');
+            'âš  Stream "$streamName" se ha cerrado. (${streamCounters[streamName]} de este tipo, $streamCount total)');
         var conexionBox = await openBoxSafe('conexionBox');
         if (conexionBox == null) return;
         conexionBox.put('ConexionFirestore', false);
@@ -436,7 +430,7 @@ class FirebaseService {
     );
   }
 
-  /// Convierte todos los tipos especiales de Firestore (GeoPoint, Timestamp) a tipos válidos de JSON
+  /// Convierte todos los tipos especiales de Firestore (GeoPoint, Timestamp) a tipos vÃ¡lidos de JSON
   Map<String, dynamic> _convertFirestoreData(Map<String, dynamic> data) {
     final result = <String, dynamic>{};
 
@@ -471,28 +465,28 @@ class FirebaseService {
 
   static const String kFirebaseSesionesTag = '[FIREBASE_SESIONES]';
 
-  /// 🚨 Verifica SINCRÓNICAMENTE si el documento de sesión existe y es válido
-  /// Retorna: true si sesión válida, false si debe desloguearse
+  /// ðŸš¨ Verifica SINCRÃ“NICAMENTE si el documento de sesiÃ³n existe y es vÃ¡lido
+  /// Retorna: true si sesiÃ³n vÃ¡lida, false si debe desloguearse
   ///
-  /// Este método se ejecuta ANTES de inicializar streams para evitar
-  /// mostrar datos de pedidos cuando la sesión ya no es válida
+  /// Este mÃ©todo se ejecuta ANTES de inicializar streams para evitar
+  /// mostrar datos de pedidos cuando la sesiÃ³n ya no es vÃ¡lida
   Future<bool> verificarSesionValida() async {
-    print('$kFirebaseSesionesTag 🔍 INICIO verificación síncrona de sesión');
+    print('$kFirebaseSesionesTag ðŸ” INICIO verificaciÃ³n sÃ­ncrona de sesiÃ³n');
 
     var box = await openBoxSafe('sessionBox');
     if (box == null) {
-      print('$kFirebaseSesionesTag ❌ No se pudo abrir sessionBox');
+      print('$kFirebaseSesionesTag âŒ No se pudo abrir sessionBox');
       return false;
     }
 
-    // Verificar cambio de día primero
+    // Verificar cambio de dÃ­a primero
     String? loginDate = box.get('loginDate');
     String currentDate = DateTime.now().toIso8601String().split('T')[0];
 
     if (loginDate != null && loginDate != currentDate) {
       print(
-          '$kFirebaseSesionesTag 🌅 Cambio de día detectado - Sesión inválida');
-      print('$kFirebaseSesionesTag    Login: $loginDate → Hoy: $currentDate');
+          '$kFirebaseSesionesTag ðŸŒ… Cambio de dÃ­a detectado - SesiÃ³n invÃ¡lida');
+      print('$kFirebaseSesionesTag    Login: $loginDate â†’ Hoy: $currentDate');
       return false;
     }
 
@@ -504,8 +498,8 @@ class FirebaseService {
     String collectionName = 'sessions-$escenarioId';
 
     print(
-        '$kFirebaseSesionesTag 📍 Verificando doc: $collectionName/$fechaActual/activeSessions/$usuarioDocName');
-    print('$kFirebaseSesionesTag 📱 deviceId local: $deviceId');
+        '$kFirebaseSesionesTag ðŸ“ Verificando doc: $collectionName/$fechaActual/activeSessions/$usuarioDocName');
+    print('$kFirebaseSesionesTag ðŸ“± deviceId local: $deviceId');
 
     try {
       DocumentSnapshot snapshot = await FirebaseFirestore.instance
@@ -518,11 +512,11 @@ class FirebaseService {
           .timeout(
             Duration(seconds: 5),
             onTimeout: () =>
-                throw TimeoutException('Timeout verificando sesión'),
+                throw TimeoutException('Timeout verificando sesiÃ³n'),
           );
 
       if (!snapshot.exists) {
-        print('$kFirebaseSesionesTag ⚠️ Documento NO existe - Sesión inválida');
+        print('$kFirebaseSesionesTag âš ï¸ Documento NO existe - SesiÃ³n invÃ¡lida');
         return false;
       }
 
@@ -530,22 +524,22 @@ class FirebaseService {
       String firestoreDeviceId = data['idTerminal'] ?? '';
 
       print(
-          '$kFirebaseSesionesTag 📱 deviceId en Firestore: $firestoreDeviceId');
+          '$kFirebaseSesionesTag ðŸ“± deviceId en Firestore: $firestoreDeviceId');
 
       if (firestoreDeviceId != deviceId) {
         print(
-            '$kFirebaseSesionesTag ⚠️ idTerminal NO coincide - Sesión usurpada por otro dispositivo');
+            '$kFirebaseSesionesTag âš ï¸ idTerminal NO coincide - SesiÃ³n usurpada por otro dispositivo');
         print(
-            '$kFirebaseSesionesTag    Local: $deviceId ≠ Firestore: $firestoreDeviceId');
+            '$kFirebaseSesionesTag    Local: $deviceId â‰  Firestore: $firestoreDeviceId');
         return false;
       }
 
-      print('$kFirebaseSesionesTag ✅ Sesión VÁLIDA - deviceId coincide');
+      print('$kFirebaseSesionesTag âœ… SesiÃ³n VÃLIDA - deviceId coincide');
       return true;
     } catch (e) {
-      print('$kFirebaseSesionesTag ❌ Error verificando sesión: $e');
+      print('$kFirebaseSesionesTag âŒ Error verificando sesiÃ³n: $e');
       // En caso de error de red, ser conservador y permitir continuar
-      // (el stream de sesiones lo validará de forma reactiva después)
+      // (el stream de sesiones lo validarÃ¡ de forma reactiva despuÃ©s)
       return true;
     }
   }
@@ -558,19 +552,19 @@ class FirebaseService {
       return;
     }
 
-    // 🌅 VERIFICAR CAMBIO DE DÍA - Auto-logout si es necesario
+    // ðŸŒ… VERIFICAR CAMBIO DE DÃA - Auto-logout si es necesario
     String? loginDate = box.get('loginDate');
     String currentDate = DateTime.now().toIso8601String().split('T')[0];
 
     if (loginDate != null && loginDate != currentDate) {
-      print('$kFirebaseSesionesTag 🌅 CAMBIO DE DÍA DETECTADO');
+      print('$kFirebaseSesionesTag ðŸŒ… CAMBIO DE DÃA DETECTADO');
       print('$kFirebaseSesionesTag    Login: $loginDate');
       print('$kFirebaseSesionesTag    Hoy: $currentDate');
-      print('$kFirebaseSesionesTag 🛑 Iniciando auto-logout...');
+      print('$kFirebaseSesionesTag ðŸ›‘ Iniciando auto-logout...');
 
       await _performAutoLogout(box);
       yield null; // Terminar stream
-      return; // Salir del método
+      return; // Salir del mÃ©todo
     }
 
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
@@ -581,8 +575,12 @@ class FirebaseService {
     String fechaActual =
         now.toIso8601String().split('T')[0].replaceAll('-', '');
 
-    // Referencia al documento del usuario en activeSessions
-    String usuarioDocName = 'Usuario-${box.get('username', defaultValue: '0')}';
+    // ðŸ”¹ Referencia al documento del usuario en activeSessions
+    // IMPORTANTE: El ID ahora incluye deviceId para permitir mÃºltiples sesiones del mismo usuario
+    String idUsuario = box.get('username', defaultValue: '0');
+    String idTerminal = box.get('deviceId', defaultValue: '');
+    String usuarioDocName = 'Usuario-$idUsuario-${idTerminal.substring(0, 8)}';
+    
     DocumentReference usuarioDocRef = FirebaseFirestore.instance
         .collection(collectionName)
         .doc(fechaActual)
@@ -592,13 +590,13 @@ class FirebaseService {
     print(
         '$kFirebaseSesionesTag Referencia a doc: $collectionName/$fechaActual/activeSessions/$usuarioDocName');
 
-    // ✅ SOLUCIÓN 2: Intentar leer del caché local primero, luego del servidor
+    // âœ… SOLUCIÃ“N 2: Intentar leer del cachÃ© local primero, luego del servidor
     try {
-      print('$kFirebaseSesionesTag 📡 [T4] Intentando leer del caché local...');
+      print('$kFirebaseSesionesTag ðŸ“¡ [T4] Intentando leer del cachÃ© local...');
       print(
-          '$kFirebaseSesionesTag ⏱️ Timestamp: ${DateTime.now().millisecondsSinceEpoch}');
+          '$kFirebaseSesionesTag â±ï¸ Timestamp: ${DateTime.now().millisecondsSinceEpoch}');
 
-      // 1️⃣ Intentar leer del caché local primero (rápido)
+      // 1ï¸âƒ£ Intentar leer del cachÃ© local primero (rÃ¡pido)
       DocumentSnapshot snapshot = await usuarioDocRef
           .get(
         const GetOptions(source: Source.cache),
@@ -607,22 +605,22 @@ class FirebaseService {
         Duration(seconds: 2),
         onTimeout: () {
           print(
-              '$kFirebaseSesionesTag ⚠️ Timeout leyendo caché, intentando servidor...');
-          throw TimeoutException('Timeout caché');
+              '$kFirebaseSesionesTag âš ï¸ Timeout leyendo cachÃ©, intentando servidor...');
+          throw TimeoutException('Timeout cachÃ©');
         },
       );
 
       if (snapshot.exists && snapshot.data() != null) {
         var data = snapshot.data() as Map<String, dynamic>;
         print(
-            '$kFirebaseSesionesTag ✅ Documento encontrado en CACHÉ: ${data['idUsuario']}');
+            '$kFirebaseSesionesTag âœ… Documento encontrado en CACHÃ‰: ${data['idUsuario']}');
         print(
-            '$kFirebaseSesionesTag 📝 [T5] Timestamp: ${DateTime.now().millisecondsSinceEpoch}');
+            '$kFirebaseSesionesTag ðŸ“ [T5] Timestamp: ${DateTime.now().millisecondsSinceEpoch}');
         yield data;
       } else {
-        // 2️⃣ Si no está en caché, leer del servidor
+        // 2ï¸âƒ£ Si no estÃ¡ en cachÃ©, leer del servidor
         print(
-            '$kFirebaseSesionesTag 📡 No encontrado en caché, leyendo del SERVIDOR...');
+            '$kFirebaseSesionesTag ðŸ“¡ No encontrado en cachÃ©, leyendo del SERVIDOR...');
         snapshot = await usuarioDocRef
             .get(
           const GetOptions(source: Source.server),
@@ -630,7 +628,7 @@ class FirebaseService {
             .timeout(
           Duration(seconds: 5),
           onTimeout: () {
-            print('$kFirebaseSesionesTag ⚠️ Timeout leyendo servidor');
+            print('$kFirebaseSesionesTag âš ï¸ Timeout leyendo servidor');
             throw TimeoutException('Timeout servidor');
           },
         );
@@ -638,40 +636,34 @@ class FirebaseService {
         if (snapshot.exists) {
           var data = snapshot.data() as Map<String, dynamic>;
           print(
-              '$kFirebaseSesionesTag ✅ Documento encontrado en SERVIDOR: ${data['idUsuario']}');
+              '$kFirebaseSesionesTag âœ… Documento encontrado en SERVIDOR: ${data['idUsuario']}');
           print(
-              '$kFirebaseSesionesTag 📝 [T5] Timestamp: ${DateTime.now().millisecondsSinceEpoch}');
+              '$kFirebaseSesionesTag ðŸ“ [T5] Timestamp: ${DateTime.now().millisecondsSinceEpoch}');
           yield data;
         } else {
           print(
-              '$kFirebaseSesionesTag ⚠️ Documento NO encontrado ni en caché ni en servidor');
+              '$kFirebaseSesionesTag âš ï¸ Documento NO encontrado ni en cachÃ© ni en servidor');
           print(
-              '$kFirebaseSesionesTag ⚠️ Esta situación causará eliminación de sesión si ocurre después de crear el documento');
+              '$kFirebaseSesionesTag âš ï¸ Esta situaciÃ³n causarÃ¡ eliminaciÃ³n de sesiÃ³n si ocurre despuÃ©s de crear el documento');
           //await _deleteAllHiveBoxes();
           yield null;
         }
       }
     } catch (error) {
       print(
-          '$kFirebaseSesionesTag ❌ Error al obtener el documento inicial: $error');
-      print('$kFirebaseSesionesTag ❌ Stack trace:');
+          '$kFirebaseSesionesTag âŒ Error al obtener el documento inicial: $error');
+      print('$kFirebaseSesionesTag âŒ Stack trace:');
       print(StackTrace.current);
       await _logError('Firestore Error', error.toString());
       yield null;
     }
 
     print(
-        '$kFirebaseSesionesTag 🔊 Iniciando snapshots() stream para escuchar cambios en tiempo real...');
-    print(
-        '$kFirebaseSesionesTag 📍 Documento a observar: $collectionName/$fechaActual/activeSessions/$usuarioDocName');
-    print(
-        '$kFirebaseSesionesTag 🔑 usuario: ${box.get('username')}, movil: $movil, escenario: $escenarioId');
-    print('$kFirebaseSesionesTag 📱 deviceId: ${box.get('deviceId')}');
-
+        '$kFirebaseSesionesTag ðŸ”Š Iniciando snapshots() stream para escuchar cambios en tiempo real...');
     Stream<Map<String, dynamic>?> sesionesStream = usuarioDocRef
         .snapshots(includeMetadataChanges: false)
         .handleError((error) async {
-      print('$kFirebaseSesionesTag ❌ Error en el stream de Firestore: $error');
+      print('$kFirebaseSesionesTag âŒ Error en el stream de Firestore: $error');
       if (error is FirebaseException && error.code == 'permission-denied') {
         await _logFirestorePermissionError(
           error.message ?? 'Permission denied',
@@ -681,155 +673,30 @@ class FirebaseService {
       }
     }).asyncMap((snapshot) async {
       print(
-          '$kFirebaseSesionesTag ════════════════════════════════════════════════════════');
-      print('$kFirebaseSesionesTag 🔔 SNAPSHOT RECIBIDO - Análisis Detallado');
-      print(
-          '$kFirebaseSesionesTag ════════════════════════════════════════════════════════');
-      print(
-          '$kFirebaseSesionesTag ⏰ Timestamp: ${DateTime.now().toIso8601String()}');
-      print(
-          '$kFirebaseSesionesTag 📍 Buscando: $collectionName/$fechaActual/activeSessions/$usuarioDocName');
-      print('$kFirebaseSesionesTag 📄 Document ID esperado: $usuarioDocName');
-      print('$kFirebaseSesionesTag ✅ snapshot.exists: ${snapshot.exists}');
-      print('$kFirebaseSesionesTag 🔑 snapshot.id: ${snapshot.id}');
-      print(
-          '$kFirebaseSesionesTag 📋 snapshot.reference.path: ${snapshot.reference.path}');
-      print('$kFirebaseSesionesTag 📊 snapshot.metadata:');
-      print(
-          '$kFirebaseSesionesTag    - hasPendingWrites: ${snapshot.metadata.hasPendingWrites}');
-      print(
-          '$kFirebaseSesionesTag    - isFromCache: ${snapshot.metadata.isFromCache}');
-
+          '$kFirebaseSesionesTag ðŸ”” Snapshot recibido en snapshots().map() - exists=${snapshot.exists}');
       if (snapshot.exists) {
         var data = snapshot.data() as Map<String, dynamic>;
-
-        // 🛡️ OPCIÓN 4: Guardar sesión válida en memoria
-        _lastValidSessionData = data;
-        _lastValidSessionTimestamp = DateTime.now();
-        _lastServerNullTimestamp = null; // Reset del timestamp de "null"
-
-        print('$kFirebaseSesionesTag ✅✅✅ DOCUMENTO ENCONTRADO ✅✅✅');
-        print('$kFirebaseSesionesTag 🛡️ Guardado en memoria (Opción 4)');
-        print('$kFirebaseSesionesTag ⏰ Timestamp: $_lastValidSessionTimestamp');
-        print('$kFirebaseSesionesTag � Contenido del documento:');
-        print('$kFirebaseSesionesTag    - idUsuario: ${data['idUsuario']}');
-        print('$kFirebaseSesionesTag    - idTerminal: ${data['idTerminal']}');
-        print('$kFirebaseSesionesTag    - movil: ${data['movil']}');
-        print('$kFirebaseSesionesTag    - idSesion: ${data['idSesion']}');
-        print('$kFirebaseSesionesTag    - estado: ${data['estado']}');
         print(
-            '$kFirebaseSesionesTag    - fchHoraInicio: ${data['fchHoraInicio']}');
-        print('$kFirebaseSesionesTag 📦 Data completo: $data');
+            '$kFirebaseSesionesTag ðŸ”„ [${DateTime.now()}] Documento actualizado en Firestore: $data');
         print(
-            '$kFirebaseSesionesTag ════════════════════════════════════════════════════════');
+            '$kFirebaseSesionesTag ðŸ“‹ Metadatos del documento: ${snapshot.metadata}');
         return data;
       } else {
-        print('$kFirebaseSesionesTag 🔴 DOCUMENTO NO EXISTE EN SNAPSHOT');
-
-        // 🛡️ OPCIÓN 4: DEBOUNCE - Verificar si estamos en período de gracia
-        if (!snapshot.metadata.isFromCache &&
-            _lastValidSessionData != null &&
-            _lastValidSessionTimestamp != null) {
-          final timeSinceLastValid =
-              DateTime.now().difference(_lastValidSessionTimestamp!);
-
-          print('$kFirebaseSesionesTag 🛡️ OPCIÓN 4: DEBOUNCE ACTIVO');
-          print(
-              '$kFirebaseSesionesTag ⏰ Tiempo desde última sesión válida: ${timeSinceLastValid.inMilliseconds}ms');
-          print(
-              '$kFirebaseSesionesTag ⏰ Período de gracia: ${_sessionGracePeriod.inMilliseconds}ms');
-
-          if (timeSinceLastValid < _sessionGracePeriod) {
-            // ✅ Dentro del período de gracia - IGNORAR snapshot falso
-            print('$kFirebaseSesionesTag ✅✅✅ DENTRO DEL PERÍODO DE GRACIA ✅✅✅');
-            print(
-                '$kFirebaseSesionesTag 🛡️ IGNORANDO snapshot falso del servidor');
-            print('$kFirebaseSesionesTag 📦 Devolviendo sesión desde memoria');
-            print(
-                '$kFirebaseSesionesTag 💡 Esto previene logout por Firebase Auth refresh');
-            print(
-                '$kFirebaseSesionesTag ════════════════════════════════════════════════════════');
-            return _lastValidSessionData;
-          } else {
-            // ❌ Fuera del período de gracia - Eliminación real
-            print(
-                '$kFirebaseSesionesTag ⏰ FUERA del período de gracia (${timeSinceLastValid.inSeconds}s > ${_sessionGracePeriod.inSeconds}s)');
-            print('$kFirebaseSesionesTag ❌ Eliminación CONFIRMADA por timeout');
-          }
-        }
-
-        // 🛡️ OPCIÓN 3 (FALLBACK): Si el servidor dice que no existe pero NO viene del caché,
-        // re-leer del caché antes de asumir eliminación (protege contra race conditions)
-        if (!snapshot.metadata.isFromCache) {
-          print(
-              '$kFirebaseSesionesTag � Snapshot del SERVIDOR dice "no existe"');
-          print(
-              '$kFirebaseSesionesTag 🛡️ OPCIÓN 3 (FALLBACK): RE-LEYENDO DEL CACHÉ para validar...');
-
-          try {
-            DocumentSnapshot cacheSnapshot = await usuarioDocRef
-                .get(
-              const GetOptions(source: Source.cache),
-            )
-                .timeout(
-              Duration(seconds: 2),
-              onTimeout: () {
-                print(
-                    '$kFirebaseSesionesTag ⚠️ Timeout leyendo caché de validación');
-                throw TimeoutException('Cache validation timeout');
-              },
-            );
-
-            if (cacheSnapshot.exists) {
-              var cacheData = cacheSnapshot.data() as Map<String, dynamic>;
-              print('$kFirebaseSesionesTag ✅ DOCUMENTO ENCONTRADO EN CACHÉ!');
-              print(
-                  '$kFirebaseSesionesTag 🛡️ IGNORANDO snapshot falso del servidor');
-              print(
-                  '$kFirebaseSesionesTag 📦 Usando data del caché: ${cacheData['idSesion']}');
-              print(
-                  '$kFirebaseSesionesTag 💡 Opción 3 funcionó (caché aún válido)');
-              print(
-                  '$kFirebaseSesionesTag ════════════════════════════════════════════════════════');
-              return cacheData; // ✅ Usar data del caché
-            } else {
-              print(
-                  '$kFirebaseSesionesTag ❌ Tampoco existe en caché - Eliminación CONFIRMADA');
-            }
-          } catch (e) {
-            print('$kFirebaseSesionesTag ⚠️ Error verificando caché: $e');
-            // Continuar con el flujo normal de "no existe"
-          }
-        } else {
-          print('$kFirebaseSesionesTag 📦 Snapshot del CACHÉ dice "no existe"');
-        }
-
-        print('$kFirebaseSesionesTag 🔴🔴🔴 ELIMINACIÓN CONFIRMADA 🔴🔴🔴');
-        print('$kFirebaseSesionesTag ⚠️ Razones posibles:');
-        print('$kFirebaseSesionesTag    1. El documento nunca fue creado');
         print(
-            '$kFirebaseSesionesTag    2. El documento fue eliminado externamente');
+            '$kFirebaseSesionesTag ðŸ”´ðŸ”´ðŸ”´ SNAPSHOT.EXISTS = FALSE - DOCUMENTO ELIMINADO/NO ENCONTRADO ðŸ”´ðŸ”´ðŸ”´');
         print(
-            '$kFirebaseSesionesTag    3. El ID del documento no coincide con el esperado');
-        print('$kFirebaseSesionesTag    4. Problema de permisos de Firestore');
-        print('$kFirebaseSesionesTag 🔍 Verificar en Firebase Console:');
+            '$kFirebaseSesionesTag âš ï¸ Timestamp: ${DateTime.now().millisecondsSinceEpoch}');
+        print('$kFirebaseSesionesTag âš ï¸ Metadatos: ${snapshot.metadata}');
         print(
-            '$kFirebaseSesionesTag    Ruta: $collectionName → $fechaActual → activeSessions');
-        print(
-            '$kFirebaseSesionesTag    Buscar documento con ID: $usuarioDocName');
-        print(
-            '$kFirebaseSesionesTag 💡 Comparar con session_service.dart línea 334:');
-        print(
-            '$kFirebaseSesionesTag    ¿El ID creado coincide con: $usuarioDocName?');
-        print(
-            '$kFirebaseSesionesTag ════════════════════════════════════════════════════════');
+            '$kFirebaseSesionesTag âš ï¸ Esta eliminaciÃ³n puede ser incorrecta si acabamos de crear el documento');
+        //await _deleteAllHiveBoxes();
         return null;
       }
     });
 
     print(
-        '$kFirebaseSesionesTag 📡 Iniciando escucha de cambios en Firestore (estructura nueva).');
-    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+        '$kFirebaseSesionesTag ðŸ“¡ Iniciando escucha de cambios en Firestore (estructura nueva).');
+    // âš ï¸ ELIMINAR DUPLICACIÃ“N: Solo usar monitorStreamWithUsage
     // monitorStream(sesionesStream, 'SesionesStream');
     monitorStreamWithUsage(sesionesStream, 'SesionesStream');
     yield* sesionesStream;
@@ -874,7 +741,7 @@ class FirebaseService {
     final int fechaAyer = int.tryParse(fechaAyerStr) ?? 0;
 
     print(
-        "📅 Fechas para consulta de pedidos: hoy=$fechaActual | ayer=$fechaAyer");
+        "ðŸ“… Fechas para consulta de pedidos: hoy=$fechaActual | ayer=$fechaAyer");
 
     // Build the query
     Query pedidosQuery = _firestore
@@ -902,23 +769,23 @@ class FirebaseService {
       }
       /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
+        // Notificar al usuario sobre la pÃ©rdida de conectividad
+        // print('âš  PÃ©rdida de conectividad con Firestore.');
       }*/
     }).map((snapshot) {
-      print("📥 Snapshot recibido con ${snapshot.docs.length} docs");
+      print("ðŸ“¥ Snapshot recibido con ${snapshot.docs.length} docs");
       for (var change in snapshot.docChanges) {
         if (change.type == DocumentChangeType.removed) {
-          print("🗑️ Eliminado: ${change.doc.id}");
+          print("ðŸ—‘ï¸ Eliminado: ${change.doc.id}");
         }
       }
       return snapshot.docs;
     });
 
-    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // âš ï¸ ELIMINAR DUPLICACIÃ“N: Solo usar monitorStreamWithUsage
     // monitorStream(pedidosStream, 'PedidosStream'); // Monitorea el stream
     print(
-        '📡 Iniciando escucha de cambios en Firestore de pedidos antes del tamaño.');
+        'ðŸ“¡ Iniciando escucha de cambios en Firestore de pedidos antes del tamaÃ±o.');
     monitorStreamWithUsage(pedidosStream, 'PedidosStream');
     yield* pedidosStream;
   }
@@ -947,7 +814,7 @@ class FirebaseService {
             //.where('FchMsj', isEqualTo: fechaActual)
             .snapshots()
             .handleError((error) async {
-          // print('❌ Error in Firestore stream: $error');
+          // print('âŒ Error in Firestore stream: $error');
           if (error is FirebaseException && error.code == 'permission-denied') {
             await _logFirestorePermissionError(
               error.message ?? 'Permission denied',
@@ -957,7 +824,7 @@ class FirebaseService {
           }
           /*bool isConnected = await checkFirestoreConnectivity();
           if (!isConnected) {
-            // print('⚠ Pérdida de conectividad con Firestore.');
+            // print('âš  PÃ©rdida de conectividad con Firestore.');
           }*/
         }).map((snapshot) {
           // print('Fetched ${snapshot.docs.length} mensajes');
@@ -967,17 +834,17 @@ class FirebaseService {
           return snapshot.docs;
         });
 
-        // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+        // âš ï¸ ELIMINAR DUPLICACIÃ“N: Solo usar monitorStreamWithUsage
         // monitorStream(mensajesStream, 'MensajesStream'); // Monitorea el stream
         monitorStreamWithUsage(mensajesStream, 'MensajesStream');
         yield* mensajesStream;
       } catch (e, stackTrace) {
-        // print('❌ Error setting up Firestore stream: $e');
+        // print('âŒ Error setting up Firestore stream: $e');
         // print('StackTrace: $stackTrace');
         await _logError('Stream Setup Error', e.toString());
       }
     } catch (e, stackTrace) {
-      // print('❌ Error in getMensajesStream: $e');
+      // print('âŒ Error in getMensajesStream: $e');
       // print('StackTrace: $stackTrace');
       await _logError('General Error', e.toString());
     }
@@ -1019,8 +886,8 @@ class FirebaseService {
       await _logError('Firestore Error', error.toString());
       /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
+        // Notificar al usuario sobre la pÃ©rdida de conectividad
+        // print('âš  PÃ©rdida de conectividad con Firestore.');
       }*/
     });
   }
@@ -1043,8 +910,8 @@ class FirebaseService {
       await _logError('Firestore Error', error.toString());
       /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
+        // Notificar al usuario sobre la pÃ©rdida de conectividad
+        // print('âš  PÃ©rdida de conectividad con Firestore.');
       }*/
     });
   }
@@ -1072,15 +939,15 @@ class FirebaseService {
       }
       /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
+        // Notificar al usuario sobre la pÃ©rdida de conectividad
+        // print('âš  PÃ©rdida de conectividad con Firestore.');
       }*/
     }).map((snapshot) {
       // print('Fetched movil: ${snapshot.data()}');
       return snapshot;
     });
 
-    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // âš ï¸ ELIMINAR DUPLICACIÃ“N: Solo usar monitorStreamWithUsage
     // monitorStream(movilStream, 'MovilStream'); // Monitorea el stream
     monitorStreamWithUsage(movilStream, 'MovilStream');
     yield* movilStream;
@@ -1105,8 +972,8 @@ class FirebaseService {
       await _logError('Firestore Error', error.toString());
       /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
+        // Notificar al usuario sobre la pÃ©rdida de conectividad
+        // print('âš  PÃ©rdida de conectividad con Firestore.');
       }*/
     });
   }
@@ -1133,8 +1000,8 @@ class FirebaseService {
       }
       /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
+        // Notificar al usuario sobre la pÃ©rdida de conectividad
+        // print('âš  PÃ©rdida de conectividad con Firestore.');
       }*/
     }).map((snapshot) {
       // print('Fetched ${snapshot.docs.length} subestado moviles');
@@ -1146,7 +1013,7 @@ class FirebaseService {
       }).toList();
     });
 
-    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // âš ï¸ ELIMINAR DUPLICACIÃ“N: Solo usar monitorStreamWithUsage
     // monitorStream(
     //   subEstadoMovilesStream,
     //   'SubEstadoMovilesStream',
@@ -1179,8 +1046,8 @@ class FirebaseService {
       }
       /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
+        // Notificar al usuario sobre la pÃ©rdida de conectividad
+        // print('âš  PÃ©rdida de conectividad con Firestore.');
       }*/
     }).map((snapshot) {
       // print(
@@ -1194,7 +1061,7 @@ class FirebaseService {
       }).toList();
     });
 
-    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // âš ï¸ ELIMINAR DUPLICACIÃ“N: Solo usar monitorStreamWithUsage
     // monitorStream(
     //   subEstadoFinalizacionPedidosStream,
     //   'SubEstadoFinalizacionPedidosStream',
@@ -1229,8 +1096,8 @@ class FirebaseService {
       }
       /*bool isConnected = await checkFirestoreConnectivity();
       if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
+        // Notificar al usuario sobre la pÃ©rdida de conectividad
+        // print('âš  PÃ©rdida de conectividad con Firestore.');
       }*/
     }).map((snapshot) {
       // print(
@@ -1244,7 +1111,7 @@ class FirebaseService {
       }).toList();
     });
 
-    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
+    // âš ï¸ ELIMINAR DUPLICACIÃ“N: Solo usar monitorStreamWithUsage
     // monitorStream(
     //   SubEstadoFinalizacionServicesStream,
     //   'SubEstadoFinalizacionServicesStream',
@@ -1256,31 +1123,31 @@ class FirebaseService {
     yield* SubEstadoFinalizacionServicesStream;
   }
 
-  // Agrega más métodos para otras consultas según sea necesario
+  // Agrega mÃ¡s mÃ©todos para otras consultas segÃºn sea necesario
 
-  /// 🌅 Auto-logout al cambio de día
+  /// ðŸŒ… Auto-logout al cambio de dÃ­a
   Future<void> _performAutoLogout(Box sessionBox) async {
     try {
       final movil = sessionBox.get('movil', defaultValue: 0);
       final usuario = sessionBox.get('username', defaultValue: '');
 
-      print('$kFirebaseSesionesTag 🛑 AUTO-LOGOUT por cambio de día');
+      print('$kFirebaseSesionesTag ðŸ›‘ AUTO-LOGOUT por cambio de dÃ­a');
       print('$kFirebaseSesionesTag    Movil: $movil, Usuario: $usuario');
 
-      // 🔥 USAR LogoutService.executeLogout() para consistencia
+      // ðŸ”¥ USAR LogoutService.executeLogout() para consistencia
       // Esto garantiza que:
       // 1. firstLoginDone se resetee a true
       // 2. GPS service se detenga correctamente
       // 3. Backend registre el cierre
       // 4. Hive y SharedPreferences se limpien
       await LogoutService.executeLogout(
-        isRemoteLogout: false, // Es auto-logout por cambio de día
+        isRemoteLogout: false, // Es auto-logout por cambio de dÃ­a
       );
 
       print(
-          '$kFirebaseSesionesTag ✅ AUTO-LOGOUT COMPLETADO (via LogoutService)');
+          '$kFirebaseSesionesTag âœ… AUTO-LOGOUT COMPLETADO (via LogoutService)');
     } catch (e) {
-      print('$kFirebaseSesionesTag ❌ Error en auto-logout: $e');
+      print('$kFirebaseSesionesTag âŒ Error en auto-logout: $e');
     }
   }
 
@@ -1299,3 +1166,4 @@ class FirebaseService {
     await errorBox.add(errorEvent);
   }
 }
+

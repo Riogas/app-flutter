@@ -1,4 +1,4 @@
-﻿import 'package:MoveIT/main.dart';
+import 'package:MoveIT/main.dart';
 import 'package:flutter/material.dart';
 import 'pending_orders.dart';
 // import 'pending_orders_debug.dart'; // Commented out - not currently used
@@ -11,10 +11,10 @@ import 'package:hive/hive.dart';
 import 'dart:async';
 import '../services/session_service.dart';
 import '../services/firebase_service.dart';
-import '../services/location_service.dart'; // ðŸ”¹ Importamos LocationService
-import '../services/riogas_service.dart'; // ðŸ”¹ Importamos LocationService
-import '../services/logout_service.dart'; // ðŸ”¥ Servicio de logout (forced logout)
-import '../services/debug_config_manager.dart'; // ðŸ†• Sistema de logging remoto
+import '../services/location_service.dart'; // 🔹 Importamos LocationService
+import '../services/riogas_service.dart'; // 🔹 Importamos LocationService
+import '../services/logout_service.dart'; // 🔥 Servicio de logout (forced logout)
+import '../services/debug_config_manager.dart'; // 🆕 Sistema de logging remoto
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart'; // Import Geolocator for Position
 import 'package:MoveIT/pages/login_page.dart';
@@ -32,7 +32,7 @@ import 'package:flutter/services.dart'; // Import SystemNavigator
 import '../utils/stream_manager.dart'; // o el path correcto
 import '../services/persistent_stream_manager.dart';
 
-// FunciÃ³n utilitaria para abrir cajas Hive de forma segura
+// Función utilitaria para abrir cajas Hive de forma segura
 dynamic openBoxSafe(String boxName) async {
   try {
     if (!Hive.isBoxOpen(boxName)) {
@@ -40,7 +40,7 @@ dynamic openBoxSafe(String boxName) async {
     }
     return Hive.box(boxName);
   } catch (e) {
-    print('âŒ Error abriendo la caja $boxName: $e');
+    print('❌ Error abriendo la caja $boxName: $e');
     return null;
   }
 }
@@ -55,13 +55,13 @@ class _HomePageState extends State<HomePage>
   final FirebaseService _firebaseService = FirebaseService();
   final PersistentStreamManager _streamManager = PersistentStreamManager();
   StreamSubscription<LatLng>?
-      _locationSubscription; // ðŸ”¹ Guardamos la suscripciÃ³n
+      _locationSubscription; // 🔹 Guardamos la suscripción
   final LocationService _locationService =
-      LocationService(); // ðŸ”¹ Definimos _locationService
+      LocationService(); // 🔹 Definimos _locationService
   int _selectedIndex = 0;
-  // ðŸ”¹ Use ValueNotifier for message counter to avoid UI rebuilds
+  // 🔹 Use ValueNotifier for message counter to avoid UI rebuilds
   late ValueNotifier<int> _messageCountNotifier;
-  // ðŸ”¹ Use ValueNotifier for pending orders counter
+  // 🔹 Use ValueNotifier for pending orders counter
   late ValueNotifier<int> _pendingOrdersCountNotifier;
   bool _constantsLoaded = false;
   StreamSubscription? _ordersSubscription;
@@ -84,13 +84,13 @@ class _HomePageState extends State<HomePage>
   bool _isDialogVisible =
       false; // Flag to track if the dialog is already visible
 
-  // ðŸ”¹ FIX: Create stable stream for session management to prevent child widget rebuilds
+  // 🔹 FIX: Create stable stream for session management to prevent child widget rebuilds
   late Stream<Map<String, dynamic>?> _sesionesStream;
 
-  // ðŸš¨ Flag para bloquear UI mientras se verifica sesiÃ³n
+  // 🚨 Flag para bloquear UI mientras se verifica sesión
   bool _isVerifyingSession = true;
 
-  // ðŸ†• Variables para cooldown de cambio de estado
+  // 🆕 Variables para cooldown de cambio de estado
   DateTime? _lastEstadoChangeAttempt;
   bool _isEstadoChanging = false;
   int _estadoCooldownSeconds = 90;
@@ -113,18 +113,18 @@ class _HomePageState extends State<HomePage>
 
     if (!streamManager.isProperlyInitialized) {
       streamManager.initialize().then((_) {
-        print('âœ… [HomePage] StreamManager inicializado correctamente');
+        print('✅ [HomePage] StreamManager inicializado correctamente');
         setState(
-            () {}); // Para asegurar reconstrucciÃ³n si usÃ¡s ValueListenableBuilder
+            () {}); // Para asegurar reconstrucción si usás ValueListenableBuilder
       });
     }
 
-    // ðŸ†• Inicializar sistema de logging remoto (en caso de que app se haya cerrado y reabierto)
+    // 🆕 Inicializar sistema de logging remoto (en caso de que app se haya cerrado y reabierto)
     _initDebugConfigListener();
 
-    // ðŸ”¹ Initialize message counter notifier
+    // 🔹 Initialize message counter notifier
     _messageCountNotifier = ValueNotifier<int>(0);
-    // ðŸ”¹ Initialize pending orders counter notifier
+    // 🔹 Initialize pending orders counter notifier
     _pendingOrdersCountNotifier = ValueNotifier<int>(0);
 
     _blinkController = AnimationController(
@@ -132,31 +132,31 @@ class _HomePageState extends State<HomePage>
       vsync: this,
     )..repeat(reverse: true); // Blinking effect
 
-    // ðŸ”¹ FIX: Initialize stable session stream to prevent child widget rebuilds
+    // 🔹 FIX: Initialize stable session stream to prevent child widget rebuilds
     _sesionesStream = _firebaseService.getSesionesStream();
 
     _initializeHomePage();
-    //_initPedidosBoxListener(); // Reemplazado por el nuevo mÃ©todo reactivo
-    _setupPedidosBoxReactiveCounter(); // <-- Nuevo mÃ©todo reactivo
+    //_initPedidosBoxListener(); // Reemplazado por el nuevo método reactivo
+    _setupPedidosBoxReactiveCounter(); // <-- Nuevo método reactivo
     _initMensajesBoxListener(); // Add this to initialize the listener
 
-    // ðŸ”¹ Resetear la bandera para futuros chequeos de sesiÃ³n
+    // 🔹 Resetear la bandera para futuros chequeos de sesión
     Future.delayed(Duration(seconds: 10), () async {
       var box = await Hive.openBox('sessionBox');
       await box.put('firstLoginDone', false);
       // print(
-      //   "ðŸ”„ Reset de la bandera firstLoginDone, futuras sesiones serÃ¡n chequeadas normalmente.",
+      //   "🔄 Reset de la bandera firstLoginDone, futuras sesiones serán chequeadas normalmente.",
       // );
     });
 
-    // ðŸ”¹ Inicializar el servicio de ubicaciÃ³n
+    // 🔹 Inicializar el servicio de ubicación
     _initializeLocationService();
 
-    // ðŸ”¹ Escuchar cambios en Firestore para pedidos y mensajes
+    // 🔹 Escuchar cambios en Firestore para pedidos y mensajes
     // REMOVED: _listenToFirestoreChangesWithDelay(); // This was creating duplicate direct Firestore subscriptions
     // The required streams are already handled by _listenToMessages() and _listenToPendingOrders()
 
-    // ðŸ”¹ Inicializar la verificaciÃ³n de conectividad
+    // 🔹 Inicializar la verificación de conectividad
     _checkInternetConnectivity();
 
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
@@ -166,7 +166,7 @@ class _HomePageState extends State<HomePage>
     });
 
     connectivitySubscription =
-        _connectivitySubscription; // ðŸ”¹ Asignar a la global
+        _connectivitySubscription; // 🔹 Asignar a la global
 
     /*// Start the counter for periodic connectivity checks
     _counterService.startCounter(
@@ -174,37 +174,37 @@ class _HomePageState extends State<HomePage>
       onTick: _checkConnectivityAndPerformAction,
     );*/
 
-    // ðŸ”¹ Inicializar la verificaciÃ³n de conectividad periÃ³dica
+    // 🔹 Inicializar la verificación de conectividad periódica
     _connectivityCheckTimer = Timer.periodic(
       Duration(seconds: 90),
       (timer) => _checkInternetConnectivity(),
     );
 
-    connectivityCheckTimer = _connectivityCheckTimer; // ðŸ”¹ Asignar a la global
+    connectivityCheckTimer = _connectivityCheckTimer; // 🔹 Asignar a la global
 
     // Obtener el valor de la constante 200
     //_initializeRetryInterval();
 
     _initGpsListener();
 
-    // ðŸ†• Listener para resetear cooldown cuando cambia el estado desde Firestore
+    // 🆕 Listener para resetear cooldown cuando cambia el estado desde Firestore
     _streamManager.movilNotifier.addListener(_onMovilStateChanged);
   }
 
-  /// ðŸ†• Resetea el cooldown cuando el estado del mÃ³vil cambia desde Firestore
+  /// 🆕 Resetea el cooldown cuando el estado del móvil cambia desde Firestore
   void _onMovilStateChanged() {
     if (_lastEstadoChangeAttempt != null) {
-      // Si hay un cooldown activo, resetearlo porque el estado cambiÃ³
+      // Si hay un cooldown activo, resetearlo porque el estado cambió
       _stopEstadoCooldownTimer();
       setState(() {
         _lastEstadoChangeAttempt = null;
       });
       print(
-          'âœ… [ESTADO_COOLDOWN] Cooldown reseteado por cambio de estado desde Firestore');
+          '✅ [ESTADO_COOLDOWN] Cooldown reseteado por cambio de estado desde Firestore');
     }
   }
 
-  /// ðŸ†• Inicia el timer de cooldown que actualiza la UI cada segundo
+  /// 🆕 Inicia el timer de cooldown que actualiza la UI cada segundo
   void _startEstadoCooldownTimer() {
     _estadoCooldownTimer?.cancel(); // Cancelar timer previo si existe
 
@@ -218,12 +218,12 @@ class _HomePageState extends State<HomePage>
       final elapsed = DateTime.now().difference(_lastEstadoChangeAttempt!);
 
       if (elapsed.inSeconds >= _estadoCooldownSeconds) {
-        // Cooldown expirÃ³, resetear
+        // Cooldown expiró, resetear
         _stopEstadoCooldownTimer();
         setState(() {
           _lastEstadoChangeAttempt = null;
         });
-        print('âœ… [ESTADO_COOLDOWN] Cooldown expirado automÃ¡ticamente');
+        print('✅ [ESTADO_COOLDOWN] Cooldown expirado automáticamente');
       } else {
         // Actualizar UI para mostrar countdown actualizado
         setState(() {});
@@ -231,13 +231,13 @@ class _HomePageState extends State<HomePage>
     });
   }
 
-  /// ðŸ†• Detiene el timer de cooldown
+  /// 🆕 Detiene el timer de cooldown
   void _stopEstadoCooldownTimer() {
     _estadoCooldownTimer?.cancel();
     _estadoCooldownTimer = null;
   }
 
-  /// ðŸ†• Inicializa el listener de debug config desde Firestore
+  /// 🆕 Inicializa el listener de debug config desde Firestore
   /// Se ejecuta en initState de HomePage para detectar cambios de debugMode
   /// incluso si la app fue cerrada y reabierta sin hacer login de nuevo
   Future<void> _initDebugConfigListener() async {
@@ -247,17 +247,17 @@ class _HomePageState extends State<HomePage>
 
       if (movil == null || movil == "0") {
         print(
-            'âš ï¸ [DEBUG_CONFIG] No hay mÃ³vil en sesiÃ³n, saltando inicializaciÃ³n');
+            '⚠️ [DEBUG_CONFIG] No hay móvil en sesión, saltando inicialización');
         return;
       }
 
-      // Forzar reinicio del listener (en caso de que app se cerrÃ³ y reabriÃ³)
+      // Forzar reinicio del listener (en caso de que app se cerró y reabrió)
       await DebugConfigManager.startListening(movil);
       print(
-          'âœ… [DEBUG_CONFIG] Listener reiniciado en HomePage para mÃ³vil $movil');
+          '✅ [DEBUG_CONFIG] Listener reiniciado en HomePage para móvil $movil');
     } catch (e) {
-      print('âš ï¸ [DEBUG_CONFIG] Error reiniciando listener en HomePage: $e');
-      // No bloqueamos la inicializaciÃ³n de HomePage si falla esto
+      print('⚠️ [DEBUG_CONFIG] Error reiniciando listener en HomePage: $e');
+      // No bloqueamos la inicialización de HomePage si falla esto
     }
   }
 
@@ -268,14 +268,14 @@ class _HomePageState extends State<HomePage>
     print("valor de la constante 200: $retryIntervalString");
 
     if (retryInterval != null && retryInterval > 0) {
-      // Llamar periÃ³dicamente a monitorAndSendErrors solo si el valor es vÃ¡lido
+      // Llamar periódicamente a monitorAndSendErrors solo si el valor es válido
       Timer.periodic(Duration(seconds: retryInterval), (timer) async {
         print("Monitor de errores activado.");
         await RioGasService.monitorAndSendErrors();
       });
     } else {
       print(
-          "âŒ No se pudo iniciar el monitor de errores: valor de la constante 200 no vÃ¡lido.");
+          "❌ No se pudo iniciar el monitor de errores: valor de la constante 200 no válido.");
     }
 
     _connectionCheck.startMonitoring();
@@ -290,25 +290,25 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _blinkController.dispose(); // Dispose the animation controller
-    _messageCountNotifier.dispose(); // ðŸ”¹ Dispose message counter notifier
+    _messageCountNotifier.dispose(); // 🔹 Dispose message counter notifier
     _pendingOrdersCountNotifier
-        .dispose(); // ðŸ”¹ Dispose pending orders counter notifier
+        .dispose(); // 🔹 Dispose pending orders counter notifier
     _counterService.stopCounter(); // Stop the counter when disposing
     _ordersSubscription?.cancel();
     _locationServiceCompleter.future.then((_) {
-      _locationSubscription?.cancel(); // ðŸ”¹ Cancelamos el stream de ubicaciÃ³n
+      _locationSubscription?.cancel(); // 🔹 Cancelamos el stream de ubicación
       _locationService
-          .stopLocationUpdates(); // ðŸ”¹ Detenemos el servicio correctamente
+          .stopLocationUpdates(); // 🔹 Detenemos el servicio correctamente
     });
     _connectivitySubscription
-        ?.cancel(); // ðŸ”¹ Cancelar la suscripciÃ³n de conectividad
+        ?.cancel(); // 🔹 Cancelar la suscripción de conectividad
     _connectivityCheckTimer.cancel(); // Cancel the timer when disposing
     _connectionCheck.stopMonitoring();
     _connectionStatusNotifier.dispose(); // Dispose the notifier
     _gpsSubscription?.cancel();
     _gpsStreamController.close();
 
-    // ðŸ†• Detener timer de cooldown y remover listener del estado del mÃ³vil
+    // 🆕 Detener timer de cooldown y remover listener del estado del móvil
     _stopEstadoCooldownTimer();
     _streamManager.movilNotifier.removeListener(_onMovilStateChanged);
 
@@ -316,16 +316,72 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _initializeHomePage() async {
-    print('ðŸ  [HOME_PAGE] _initializeHomePage() iniciando...');
-    print('â„¹ï¸ [HOME_PAGE] SIMPLIFICADO: Deslogueo forzado manejado exclusivamente por FCM');
-    print('â„¹ï¸ [HOME_PAGE] No se verifica sesiÃ³n aquÃ­ para evitar race conditions');
+    print('🏠 [HOME_PAGE] _initializeHomePage() iniciando...');
+    print('🏠 [HOME_PAGE] _isVerifyingSession = $_isVerifyingSession');
 
-    // ðŸ”“ Desbloquear UI inmediatamente
+    // � IMPORTANTE: Si es la primera vez que se carga HomePage después del login,
+    // esperamos 2 segundos para dar tiempo a que Firestore sincronice el documento
+    // de sesión recién creado con el servidor
+    var sessionBoxFirstLogin = await Hive.openBox('sessionBox');
+    bool isFirstLogin =
+        sessionBoxFirstLogin.get('isFirstLoginDone', defaultValue: false) ==
+            false;
+
+    if (isFirstLogin) {
+      print(
+          '🏠 [HOME_PAGE] ⏰ Primera carga después de login - Esperando 2s para sincronización Firestore...');
+      print(
+          '🏠 [HOME_PAGE]    Razón: Permitir que saveSession() confirme escritura en servidor');
+      print(
+          '🏠 [HOME_PAGE]    Timestamp inicio: ${DateTime.now().toIso8601String()}');
+
+      await Future.delayed(Duration(seconds: 2));
+
+      print(
+          '🏠 [HOME_PAGE] ⏰ Fin de espera: ${DateTime.now().toIso8601String()}');
+      print('🏠 [HOME_PAGE] ✅ Marcando isFirstLoginDone = true');
+
+      await sessionBoxFirstLogin.put('isFirstLoginDone', true);
+    } else {
+      print(
+          '🏠 [HOME_PAGE] ℹ️ No es primera carga - Verificando sesión sin delay');
+    }
+
+    // �🚨 PASO 1: VERIFICACIÓN TEMPRANA DE SESIÓN (antes de cargar datos)
+    print(
+        '🔐 [HOME_PAGE] Verificando validez de sesión ANTES de inicializar streams...');
+    bool sesionValida = await _firebaseService.verificarSesionValida();
+
+    if (!sesionValida) {
+      print(
+          '🚫 [HOME_PAGE] Sesión INVÁLIDA detectada - Redirigiendo a login SIN mostrar UI');
+
+      // Obtener info del usuario que tiene la sesión actual (si es posible)
+      final usuarioActual = await obtenerUsuarioLogueadoActual();
+
+      Future.microtask(() {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/login', arguments: {
+            'forcedLogout': true,
+            'mensaje': usuarioActual['nomUsuario'] != 'Desconocido'
+                ? 'Se ha conectado el usuario ${usuarioActual['nomUsuario']} con el móvil ${usuarioActual['movil']} en otro dispositivo.'
+                : 'Su sesión ha expirado o está siendo usada en otro dispositivo.',
+          });
+        }
+      });
+      return; // ⛔ NO continuar con la inicialización
+    }
+
+    print(
+        '✅ [HOME_PAGE] Sesión VÁLIDA - Continuando con inicialización normal');
+
+    // 🔓 Desbloquear UI ahora que la sesión está verificada
+    print('🔓 [HOME_PAGE] Desbloqueando UI (_isVerifyingSession = false)');
     setState(() {
       _isVerifyingSession = false;
     });
 
-    // Cargar datos de sesiÃ³n e inicializar servicios
+    // PASO 2: Cargar datos de sesión e inicializar servicios
     await _loadSessionData();
     await RioGasService.initializeService();
 
@@ -345,7 +401,7 @@ class _HomePageState extends State<HomePage>
       _isFirstLoad = false;
     });
 
-    print('âœ… [HomePage] _initializeHomePage() completado exitosamente');
+    print('✅ [HomePage] _initializeHomePage() completado exitosamente');
   }
 
   Future<void> _initializeLocationService() async {
@@ -356,11 +412,11 @@ class _HomePageState extends State<HomePage>
       _locationServiceCompleter.complete();
 
       locationSubscription =
-          _locationSubscription; // ðŸ”¹ Guardamos la suscripciÃ³n
+          _locationSubscription; // 🔹 Guardamos la suscripción
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Error al inicializar el servicio de ubicaciÃ³n: $e')),
+            content: Text('Error al inicializar el servicio de ubicación: $e')),
       );
       _locationServiceCompleter.completeError(e);
     }
@@ -389,7 +445,7 @@ class _HomePageState extends State<HomePage>
           _constantsLoaded = true;
         });
       } catch (e) {
-        // print("âŒ Error al obtener documentos de 'Constantes-1000': $e");
+        // print("❌ Error al obtener documentos de 'Constantes-1000': $e");
       }
     }
   }
@@ -400,35 +456,35 @@ class _HomePageState extends State<HomePage>
     setState(() {
       pedidosBox = box;
     });
-    // ðŸ”¹ Initialize pending orders counter from existing data (No LeÃ­do)
+    // 🔹 Initialize pending orders counter from existing data (No Leído)
     int initialCount = _countPedidosNoLeidos(box);
     _pendingOrdersCountNotifier.value = initialCount;
 
-    // ðŸ”¹ Listen for changes in pedidosBox and update the notifier
+    // 🔹 Listen for changes in pedidosBox and update the notifier
     box.watch().listen((event) {
       int pendingCount = _countPedidosNoLeidos(box);
       _pendingOrdersCountNotifier.value = pendingCount;
     });
-    // Ya no es necesario agregar listeners manuales aquÃ­, la lÃ³gica de sincronizaciÃ³n estÃ¡ centralizada en PersistentStreamManager
+    // Ya no es necesario agregar listeners manuales aquí, la lógica de sincronización está centralizada en PersistentStreamManager
   }
 
-// Helper to count pedidos "No LeÃ­do" (same logic as PendingOrdersPage)
+// Helper to count pedidos "No Leído" (same logic as PendingOrdersPage)
   int _countPedidosNoLeidos(Box box) {
     int count = 0;
     print('[PEDIDOS] Recorriendo ${box.keys.length} pedidos en pedidosBox...');
     for (var key in box.keys) {
       var pedidoEstado = box.get(key);
-      print('[PEDIDOS] Pedido $key â†’ Estado: $pedidoEstado');
-      if (pedidoEstado == null || pedidoEstado == 'No LeÃ­do') {
+      print('[PEDIDOS] Pedido $key → Estado: $pedidoEstado');
+      if (pedidoEstado == null || pedidoEstado == 'No Leído') {
         count++;
-        print('[PEDIDOS] Pedido $key estÃ¡ sin leer (null o "No LeÃ­do")');
+        print('[PEDIDOS] Pedido $key está sin leer (null o "No Leído")');
       }
     }
-    print('[PEDIDOS] Total de pedidos no leÃ­dos: $count');
+    print('[PEDIDOS] Total de pedidos no leídos: $count');
     return count;
   }
 
-  // Refresca el contador de pedidos no leÃ­dos basado en los pedidos actuales del stream y su estado en Hive
+  // Refresca el contador de pedidos no leídos basado en los pedidos actuales del stream y su estado en Hive
   void _setupPedidosBoxReactiveCounter() async {
     final box = await openBoxSafe('pedidosBox');
     if (box == null) {
@@ -442,7 +498,7 @@ class _HomePageState extends State<HomePage>
 
     // Escucha cambios en el stream de pedidos y en Hive
     void updatePedidosCount() async {
-      // Solo cuentan los pedidos que estÃ¡n en el stream y NO estÃ¡n en Hive como 'Procesando'
+      // Solo cuentan los pedidos que están en el stream y NO están en Hive como 'Procesando'
       final pedidos = _streamManager.pedidos;
       print('[PEDIDOS][DEBUG] pedidos en stream: ${pedidos.length}');
       int count = 0;
@@ -452,8 +508,8 @@ class _HomePageState extends State<HomePage>
             int.tryParse(pedidoIdStr.replaceAll(RegExp(r'[^0-9]'), ''));
         var estado = box.get(pedidoIdNum ?? pedidoIdStr);
         print(
-            '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} â†’ clave Hive: ${pedidoIdNum ?? pedidoIdStr}, estado: $estado');
-        // Solo NO cuenta los que estÃ¡n en Hive como 'Procesando'
+            '[PEDIDOS][DEBUG] pedido.id: ${pedido.id} → clave Hive: ${pedidoIdNum ?? pedidoIdStr}, estado: $estado');
+        // Solo NO cuenta los que están en Hive como 'Procesando'
         if (estado != 'Procesando') {
           count++;
           print(
@@ -470,7 +526,7 @@ class _HomePageState extends State<HomePage>
     // Inicializa el contador con el valor actual
     updatePedidosCount();
 
-    // Escucha cambios en Hive (incluye cualquier actualizaciÃ³n de estado de un pedido)
+    // Escucha cambios en Hive (incluye cualquier actualización de estado de un pedido)
     box.watch().listen((event) {
       print(
           '[PEDIDOS][WATCH] Evento en pedidosBox: key=${event.key}, value=${event.value}, deleted=${event.deleted}');
@@ -483,13 +539,13 @@ class _HomePageState extends State<HomePage>
       updatePedidosCount();
     });
 
-    // Refuerza la actualizaciÃ³n del contador al volver de una pantalla (por ejemplo, OrderDetail)
+    // Refuerza la actualización del contador al volver de una pantalla (por ejemplo, OrderDetail)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       updatePedidosCount();
     });
   }
 
-  // Refresca el contador de mensajes no leÃ­dos basado en los mensajes actuales del stream y su estado en Hive
+  // Refresca el contador de mensajes no leídos basado en los mensajes actuales del stream y su estado en Hive
   void _initMensajesBoxListener() async {
     var mensajesBox = await openBoxSafe('mensajesBox');
     if (mensajesBox == null) return;
@@ -503,7 +559,7 @@ class _HomePageState extends State<HomePage>
           count++;
         }
       }
-      print('[MENSAJES][SMART COUNT] Total de mensajes no leÃ­dos: $count');
+      print('[MENSAJES][SMART COUNT] Total de mensajes no leídos: $count');
       _messageCountNotifier.value = count;
     }
 
@@ -528,19 +584,19 @@ class _HomePageState extends State<HomePage>
       _gpsStreamController.add(isEnabled);
     });
 
-    gpsSubscription = _gpsSubscription; // ðŸ”¹ Asignar a la global
+    gpsSubscription = _gpsSubscription; // 🔹 Asignar a la global
   }
 
   void _listenToMessages() async {
-    // Ya no se agrega manualmente ningÃºn listener aquÃ­. El ValueListenableBuilder en el build() se encarga de reaccionar a los cambios.
-    // Si necesitas inicializar datos de Hive, hazlo aquÃ­ una sola vez si es necesario.
-    // La lÃ³gica de actualizaciÃ³n de Hive y procesamiento de mensajes debe estar en PersistentStreamManager o en los listeners de Hive.
+    // Ya no se agrega manualmente ningún listener aquí. El ValueListenableBuilder en el build() se encarga de reaccionar a los cambios.
+    // Si necesitas inicializar datos de Hive, hazlo aquí una sola vez si es necesario.
+    // La lógica de actualización de Hive y procesamiento de mensajes debe estar en PersistentStreamManager o en los listeners de Hive.
     var mensajesBox = await openBoxSafe('mensajesBox');
     if (mensajesBox == null) return;
-    // LÃ³gica de inicializaciÃ³n si es necesaria, pero sin listeners manuales.
+    // Lógica de inicialización si es necesaria, pero sin listeners manuales.
   }
 
-  // ðŸ”¹ Separate method for expensive operations that run in background
+  // 🔹 Separate method for expensive operations that run in background
   void _processNewMessagesInBackground(
       List<DocumentSnapshot> newMessages) async {
     // Run expensive operations without blocking the UI
@@ -604,18 +660,18 @@ class _HomePageState extends State<HomePage>
                 velocidad,
                 distanciaRecorrida);
           } catch (e) {
-            print('âŒ Error processing message ${message.id}: $e');
+            print('❌ Error processing message ${message.id}: $e');
           }
         }
       } catch (e) {
-        print('âŒ Error in background message processing: $e');
+        print('❌ Error in background message processing: $e');
       }
     });
   }
 
   void _listenToPendingOrders() {
-    // Ya no se agrega manualmente ningÃºn listener aquÃ­. El ValueListenableBuilder en el build() se encarga de reaccionar a los cambios.
-    // Si necesitas inicializar datos de Hive, hazlo aquÃ­ una sola vez si es necesario.
+    // Ya no se agrega manualmente ningún listener aquí. El ValueListenableBuilder en el build() se encarga de reaccionar a los cambios.
+    // Si necesitas inicializar datos de Hive, hazlo aquí una sola vez si es necesario.
   }
 
   Future<void> _callDescargaLecturaPedidos(
@@ -630,7 +686,7 @@ class _HomePageState extends State<HomePage>
 
     final locationService = LocationService();
 
-    // Invoca el mÃ©todo para obtener la ubicaciÃ³n
+    // Invoca el método para obtener la ubicación
     final locationData = await locationService.getCurrentLocation();
 
     if (locationData != null) {
@@ -642,7 +698,7 @@ class _HomePageState extends State<HomePage>
       print('Latitud: $latitude, Longitud: $longitude');
       print('UTMX: $utmX, UTMY: $utmY');
     } else {
-      print('No se pudo obtener la ubicaciÃ³n.');
+      print('No se pudo obtener la ubicación.');
     }
 
     String latitud = locationData?['latitude'].toString() ?? '';
@@ -700,7 +756,7 @@ class _HomePageState extends State<HomePage>
       sound: RawResourceAndroidNotificationSound(
         'iphone_notification',
       ), // Archivo en res/raw
-      //vibrationPattern: Int64List.fromList([0, 500, 100, 1500]), // VibraciÃ³n prolongada
+      //vibrationPattern: Int64List.fromList([0, 500, 100, 1500]), // Vibración prolongada
     );
     const NotificationDetails platformChannelSpecifics = NotificationDetails(
       android: androidPlatformChannelSpecifics,
@@ -726,27 +782,27 @@ class _HomePageState extends State<HomePage>
     String movil,
   ) async {
     final mensaje =
-        'Se ha conectado el usuario $nomUsuario con el mÃ³vil $movil en otro dispositivo.';
+        'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.';
     print(
         '[HOME_SESSION] forzarDeslogueoYRedirigir llamado con nomUsuario: $nomUsuario, movil: $movil');
     print('[HOME_SESSION] Mensaje de deslogueo: $mensaje');
 
-    // ðŸ”¥ EJECUTAR LIMPIEZA INMEDIATAMENTE (antes de mostrar diÃ¡logo o navegar)
-    print('[HOME_SESSION] ðŸ§¹ Ejecutando limpieza ANTES de navegar...');
+    // 🔥 EJECUTAR LIMPIEZA INMEDIATAMENTE (antes de mostrar diálogo o navegar)
+    print('[HOME_SESSION] 🧹 Ejecutando limpieza ANTES de navegar...');
     try {
       await LogoutService.executeLogout(
         isRemoteLogout: true, // Es un logout forzado por otro dispositivo
       );
-      print('[HOME_SESSION] âœ… Limpieza completada exitosamente');
+      print('[HOME_SESSION] ✅ Limpieza completada exitosamente');
     } catch (e) {
-      print('[HOME_SESSION] âŒ Error durante limpieza: $e');
-      // Continuar con navegaciÃ³n de todas formas
+      print('[HOME_SESSION] ❌ Error durante limpieza: $e');
+      // Continuar con navegación de todas formas
     }
 
     // Esperar brevemente para permitir que el build actual finalice
     Future.delayed(Duration(milliseconds: 100), () {
       if (!context.mounted) {
-        print('[HOME_SESSION] ðŸš« Contexto desmontado. Cancelando navegaciÃ³n.');
+        print('[HOME_SESSION] 🚫 Contexto desmontado. Cancelando navegación.');
         return;
       }
 
@@ -757,7 +813,7 @@ class _HomePageState extends State<HomePage>
         });
         print('[HOME_SESSION] Navegando a LoginPage con forcedLogout');
       } catch (e) {
-        print('[HOME_SESSION] âŒ Error navegando a LoginPage: $e');
+        print('[HOME_SESSION] ❌ Error navegando a LoginPage: $e');
       }
     });
   }
@@ -771,8 +827,8 @@ class _HomePageState extends State<HomePage>
       title: Text('Deslogueo forzado'),
       content: Text(
         (nomUsuario == 'Desconocido' || movil == 'Desconocido')
-            ? 'Se ha terminado su tiempo de sesiÃ³n, por favor ingrese nuevamente.'
-            : 'Se ha conectado el usuario $nomUsuario con el mÃ³vil $movil en otro dispositivo.',
+            ? 'Se ha terminado su tiempo de sesión, por favor ingrese nuevamente.'
+            : 'Se ha conectado el usuario $nomUsuario con el móvil $movil en otro dispositivo.',
       ),
       actions: [
         TextButton(
@@ -793,12 +849,12 @@ class _HomePageState extends State<HomePage>
                 'mensajesBox',
               ).then((box) => box.clear()); // Clear mensajesBox
 
-              // ðŸ†• Detener sistema de logging remoto
+              // 🆕 Detener sistema de logging remoto
               try {
                 await DebugConfigManager.stopListening();
-                print('âœ… [DEBUG_CONFIG] Sistema de logging remoto detenido');
+                print('✅ [DEBUG_CONFIG] Sistema de logging remoto detenido');
               } catch (e) {
-                print('âš ï¸ [DEBUG_CONFIG] Error deteniendo logging remoto: $e');
+                print('⚠️ [DEBUG_CONFIG] Error deteniendo logging remoto: $e');
               }
 
               // Cancel all active streams and listeners
@@ -823,20 +879,20 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _checkInternetConnectivity() async {
-    // print('ðŸ” Verificando conectividad a Internet...');
+    // print('🔍 Verificando conectividad a Internet...');
     var conexionBox = await Hive.openBox('conexionBox');
     var connectivityResult =
         await InternetConnectionChecker.createInstance().hasConnection;
 
     if (!connectivityResult) {
-      // print('âŒ No hay conexiÃ³n a Internet.');
+      // print('❌ No hay conexión a Internet.');
       await conexionBox.put('network', false);
       final mostrarDesconexion = await getConstantValue('230');
       if (mostrarDesconexion != null && mostrarDesconexion == 'S') {
         if (!showPopup) _showNoInternetDialog(); // entra a modo "bloqueo"
       }
     } else {
-      // print('âœ… ConexiÃ³n a Internet disponible.');
+      // print('✅ Conexión a Internet disponible.');
       await conexionBox.put('network', true);
       showPopup = false;
     }
@@ -854,15 +910,15 @@ class _HomePageState extends State<HomePage>
         barrierDismissible: false, // No puede cerrarse tocando fuera del dialog
         builder: (BuildContext context) {
           return AlertDialog(
-            title: Text('Sin ConexiÃ³n a Internet'),
+            title: Text('Sin Conexión a Internet'),
             content: Text(
               sinConexString ??
-                  'No tienes conexiÃ³n a Internet. Por favor, verifica tu conexiÃ³n.',
+                  'No tienes conexión a Internet. Por favor, verifica tu conexión.',
             ),
             actions: <Widget>[
               TextButton(
                 onPressed: () async {
-                  Navigator.of(context).pop(); // Cierra el diÃ¡logo actual
+                  Navigator.of(context).pop(); // Cierra el diálogo actual
                   _isDialogVisible = false; // Reset the flag
                   showPopup = true;
                 },
@@ -876,30 +932,30 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _retryInternetConnectivity() async {
-    // print('ðŸ” Reintento de conexiÃ³n iniciado...');
+    // print('🔁 Reintento de conexión iniciado...');
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none ||
         (connectivityResult is List &&
             connectivityResult.contains(ConnectivityResult.none))) {
-      // print('ðŸš« AÃºn sin conexiÃ³n. Mostrando diÃ¡logo nuevamente.');
+      // print('🚫 Aún sin conexión. Mostrando diálogo nuevamente.');
       final mostrarDesconexion = await getConstantValue('230');
       if (mostrarDesconexion != null && mostrarDesconexion == 'S') {
-        _showNoInternetDialog(); // vuelve a mostrar el diÃ¡logo si sigue sin internet
+        _showNoInternetDialog(); // vuelve a mostrar el diálogo si sigue sin internet
       }
     } else {
-      // print('âœ… ConexiÃ³n restaurada.');
-      // AquÃ­ podÃ©s continuar con el flujo normal de tu app
+      // print('✅ Conexión restaurada.');
+      // Aquí podés continuar con el flujo normal de tu app
     }
   }
 
   void _checkConnectivityAndPerformAction() async {
-    // print('ðŸ”„ Checking connectivity...');
+    // print('🔄 Checking connectivity...');
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
-      // print('âŒ No connectivity detected. Performing fallback action...');
+      // print('❌ No connectivity detected. Performing fallback action...');
       // Placeholder for future action when no connectivity is detected
     } else {
-      // print('âœ… Connectivity available.');
+      // print('✅ Connectivity available.');
       // Placeholder for future action when connectivity is available
     }
   }
@@ -908,11 +964,11 @@ class _HomePageState extends State<HomePage>
     var mensajesBox = await openBoxSafe('mensajesBox');
     if (mensajesBox == null) return;
     await mensajesBox.put(messageId, 'Leido'); // Mark as read
-    // print('ðŸ“¨ Mensaje $messageId marcado como "Leido" en Hive.');
+    // print('📨 Mensaje $messageId marcado como "Leido" en Hive.');
   }
 
   void _showRioGasConnectivityModal() {
-    // print('âš ï¸ Showing RioGas connectivity modal...');
+    // print('⚠️ Showing RioGas connectivity modal...');
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -920,7 +976,7 @@ class _HomePageState extends State<HomePage>
         return AlertDialog(
           title: Text('Conectividad con RioGas'),
           content: Text(
-            'Actualmente no hay conectividad con RioGas. Por favor, verifica tu conexiÃ³n.',
+            'Actualmente no hay conectividad con RioGas. Por favor, verifica tu conexión.',
           ),
           actions: [
             TextButton(
@@ -948,7 +1004,7 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _updateConnectionStatus(Map<String, dynamic> status) async {
     // Log the incoming status for debugging
-    print('ðŸ”„ Actualizando estado de conexiÃ³n: $status');
+    print('🔄 Actualizando estado de conexión: $status');
 
     //String? token = await FirebaseMessaging.instance.getToken();
     //print('token: $token');
@@ -956,17 +1012,17 @@ class _HomePageState extends State<HomePage>
     if (_connectionStatusNotifier.value['network'] != status['network'] ||
         _connectionStatusNotifier.value['firestore'] != status['firestore'] ||
         _connectionStatusNotifier.value['riogas'] != status['riogas']) {
-      print('ðŸ”” Cambio detectado en el estado de conexiÃ³n. Actualizando...');
+      print('🔔 Cambio detectado en el estado de conexión. Actualizando...');
       _connectionStatusNotifier.value = status;
     } else {
-      print('âœ… No hay cambios en el estado de conexiÃ³n.');
+      print('✅ No hay cambios en el estado de conexión.');
     }
   }
 
   @override
   @override
   Widget build(BuildContext context) {
-    // ðŸš¨ BLOQUEO TOTAL: Si estamos verificando sesiÃ³n, mostrar solo loader
+    // 🚨 BLOQUEO TOTAL: Si estamos verificando sesión, mostrar solo loader
     if (_isVerifyingSession) {
       return Scaffold(
         backgroundColor: Colors.white,
@@ -979,7 +1035,7 @@ class _HomePageState extends State<HomePage>
               ),
               SizedBox(height: 20),
               Text(
-                'Verificando sesiÃ³n...',
+                'Verificando sesión...',
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey[700],
@@ -992,7 +1048,7 @@ class _HomePageState extends State<HomePage>
       );
     }
 
-    // âœ… SesiÃ³n verificada - Mostrar UI normal
+    // ✅ Sesión verificada - Mostrar UI normal
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -1000,7 +1056,7 @@ class _HomePageState extends State<HomePage>
           style: TextStyle(fontSize: 14.0), // Reduced font size
         ),
         toolbarHeight:
-            64.0, // ðŸ†• Aumentado de 40 a 64 para mejor visualizaciÃ³n del chip
+            64.0, // 🆕 Aumentado de 40 a 64 para mejor visualización del chip
         backgroundColor: Colors.lightBlueAccent,
         actions: [
           Padding(
@@ -1076,7 +1132,7 @@ class _HomePageState extends State<HomePage>
                           : '000000';
                       Color estadoColor = Color(int.parse('0xff$hexColor'));
 
-                      // ðŸ”’ Verificar si estÃ¡ en cooldown
+                      // 🔒 Verificar si está en cooldown
                       bool isInCooldown = _lastEstadoChangeAttempt != null;
                       int cooldownRemaining = 0;
 
@@ -1091,11 +1147,11 @@ class _HomePageState extends State<HomePage>
                       return GestureDetector(
                         onTap: isInCooldown
                             ? () {
-                                // ðŸš« Mostrar warning cuando estÃ¡ en cooldown
+                                // 🚫 Mostrar warning cuando está en cooldown
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      'â±ï¸ Debe esperar $cooldownRemaining segundos para cambiar el estado nuevamente',
+                                      '⏱️ Debe esperar $cooldownRemaining segundos para cambiar el estado nuevamente',
                                       style: TextStyle(color: Colors.white),
                                     ),
                                     backgroundColor: Colors.orange,
@@ -1118,7 +1174,7 @@ class _HomePageState extends State<HomePage>
                               Container(
                                 padding: EdgeInsets.symmetric(
                                     horizontal: 10,
-                                    vertical: 6), // ðŸ†• Aumentado padding
+                                    vertical: 6), // 🆕 Aumentado padding
                                 decoration: BoxDecoration(
                                   color:
                                       isInCooldown ? Colors.grey : estadoColor,
@@ -1131,7 +1187,7 @@ class _HomePageState extends State<HomePage>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      'Movil:$_movil - ${isInCooldown ? "ðŸ”’" : estadoText}',
+                                      'Movil:$_movil - ${isInCooldown ? "🔒" : estadoText}',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 14,
@@ -1170,7 +1226,7 @@ class _HomePageState extends State<HomePage>
                     },
                   );
                 } catch (e) {
-                  return Text('Error al cargar el estado del mÃ³vil.');
+                  return Text('Error al cargar el estado del móvil.');
                 }
               },
             ),
@@ -1181,10 +1237,10 @@ class _HomePageState extends State<HomePage>
           ? ValueListenableBuilder<Map<String, dynamic>?>(
               valueListenable: _streamManager.sesionesNotifier,
               builder: (context, data, _) {
-                // ðŸ”¹ SIMPLIFICADO: Solo mostrar UI, el deslogueo forzado se maneja por FCM
+                // 🔹 SIMPLIFICADO: Solo mostrar UI, el deslogueo forzado se maneja por FCM
                 print('[HOME_SESSION] (LIVE) Data de sesionesNotifier: $data');
 
-                // â„¹ï¸ El listener del stream de sesiones estÃ¡ activo pero NO dispara logout automÃ¡tico
+                // ℹ️ El listener del stream de sesiones está activo pero NO dispara logout automático
                 // El logout forzado se maneja exclusivamente por FCM en firebase_messaging_handler.dart
 
                 return _widgetOptions.elementAt(_selectedIndex);
@@ -1203,11 +1259,11 @@ class _HomePageState extends State<HomePage>
                 return ValueListenableBuilder<Map<String, dynamic>?>(
                   valueListenable: _streamManager.sesionesNotifier,
                   builder: (context, data, _) {
-                    // ðŸ”¹ SIMPLIFICADO: Solo mostrar UI, el deslogueo forzado se maneja por FCM
+                    // 🔹 SIMPLIFICADO: Solo mostrar UI, el deslogueo forzado se maneja por FCM
                     print(
                         '[HOME_SESSION] (POST-FUTURE) Data de sesionesNotifier: $data');
 
-                    // â„¹ï¸ El listener del stream de sesiones estÃ¡ activo pero NO dispara logout automÃ¡tico
+                    // ℹ️ El listener del stream de sesiones está activo pero NO dispara logout automático
                     // El logout forzado se maneja exclusivamente por FCM en firebase_messaging_handler.dart
 
                     return _widgetOptions.elementAt(_selectedIndex);
@@ -1230,10 +1286,10 @@ class _HomePageState extends State<HomePage>
                   _buildBottomNavigationBarItem(
                     Icons.message,
                     'Mensajes',
-                    messageCount, // ðŸ”¹ Use ValueNotifier value instead of _unreadMessages
+                    messageCount, // 🔹 Use ValueNotifier value instead of _unreadMessages
                   ),
                   _buildBottomNavigationBarItem(
-                      Icons.settings, 'ConfiguraciÃ³n', 0),
+                      Icons.settings, 'Configuración', 0),
                 ],
                 currentIndex: _selectedIndex,
                 selectedItemColor: Colors.blue,
@@ -1278,17 +1334,17 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<Map<String, String>> obtenerUsuarioLogueadoActual() async {
-    const tag = '[ðŸ” OBTENER_USUARIO_LOGUEADO_ACTUAL]';
+    const tag = '[🔍 OBTENER_USUARIO_LOGUEADO_ACTUAL]';
     const int maxReintentos = 3;
     const Duration esperaEntreIntentos = Duration(seconds: 2);
 
     try {
       print(
-          '$tag ðŸŸ¢ INICIO del proceso de obtenciÃ³n de usuario logueado actual');
+          '$tag 🟢 INICIO del proceso de obtención de usuario logueado actual');
 
       final box = await openBoxSafe('sessionBox');
       if (box == null) {
-        print('$tag âŒ No se pudo abrir la caja Hive: sessionBox');
+        print('$tag ❌ No se pudo abrir la caja Hive: sessionBox');
         return {
           'nomUsuario': 'Desconocido',
           'movil': 'Desconocido',
@@ -1299,7 +1355,7 @@ class _HomePageState extends State<HomePage>
       final escenarioId = box.get('escenario', defaultValue: '0').toString();
       final username = box.get('username', defaultValue: '0').toString();
 
-      print('$tag ðŸ“¦ Datos leÃ­dos desde Hive:');
+      print('$tag 📦 Datos leídos desde Hive:');
       print('$tag    - movil: $movilActual');
       print('$tag    - escenarioId: $escenarioId');
       print('$tag    - username: $username');
@@ -1313,32 +1369,32 @@ class _HomePageState extends State<HomePage>
           .doc(fechaActual)
           .collection('activeSessions');
 
-      print('$tag ðŸ“‚ ColecciÃ³n: $collectionName');
-      print('$tag ðŸ“… Fecha actual formateada: $fechaActual');
+      print('$tag 📂 Colección: $collectionName');
+      print('$tag 📅 Fecha actual formateada: $fechaActual');
       print(
-          '$tag ðŸ“¡ Consultando Firestore: $collectionName/$fechaActual/activeSessions');
+          '$tag 📡 Consultando Firestore: $collectionName/$fechaActual/activeSessions');
 
       for (int intento = 1; intento <= maxReintentos; intento++) {
-        print('$tag ðŸ” Intento $intento de $maxReintentos');
+        print('$tag 🔁 Intento $intento de $maxReintentos');
 
         final querySnapshot = await activeSessionsRef.get(
           const GetOptions(source: Source.server),
         );
 
         print(
-            '$tag ðŸ”„ Documentos encontrados en activeSessions: ${querySnapshot.docs.length}');
+            '$tag 🔄 Documentos encontrados en activeSessions: ${querySnapshot.docs.length}');
 
         for (final doc in querySnapshot.docs) {
           final data = doc.data();
           final docId = doc.id;
           final docMovil = data['movil']?.toString() ?? 'null';
 
-          print('$tag    âž¤ Documento ID: $docId');
+          print('$tag    ➤ Documento ID: $docId');
           print('$tag       - movil: $docMovil');
 
           if (docMovil == movilActual) {
-            print('$tag âœ… Documento coincidente encontrado: $docId');
-            print('$tag    â†ªï¸ nomUsuario: ${data['nomUsuario'] ?? 'null'}');
+            print('$tag ✅ Documento coincidente encontrado: $docId');
+            print('$tag    ↪️ nomUsuario: ${data['nomUsuario'] ?? 'null'}');
             return {
               'nomUsuario': data['nomUsuario']?.toString() ?? 'Desconocido',
               'movil': data['movil']?.toString() ?? 'Desconocido',
@@ -1348,20 +1404,20 @@ class _HomePageState extends State<HomePage>
 
         if (intento < maxReintentos) {
           print(
-              '$tag â³ Documento no encontrado aÃºn. Esperando ${esperaEntreIntentos.inSeconds}s antes de reintentar...');
+              '$tag ⏳ Documento no encontrado aún. Esperando ${esperaEntreIntentos.inSeconds}s antes de reintentar...');
           await Future.delayed(esperaEntreIntentos);
         }
       }
 
       print(
-          '$tag âš ï¸ No se encontrÃ³ ningÃºn documento con mÃ³vil = $movilActual luego de $maxReintentos intentos');
+          '$tag ⚠️ No se encontró ningún documento con móvil = $movilActual luego de $maxReintentos intentos');
       return {
         'nomUsuario': 'Desconocido',
         'movil': movilActual,
       };
     } catch (e, st) {
-      print('$tag âŒ Error inesperado al obtener usuario logueado: $e');
-      print('$tag ðŸ§µ StackTrace:\n$st');
+      print('$tag ❌ Error inesperado al obtener usuario logueado: $e');
+      print('$tag 🧵 StackTrace:\n$st');
       return {
         'nomUsuario': 'Desconocido',
         'movil': 'Desconocido',
@@ -1451,9 +1507,9 @@ class _HomePageState extends State<HomePage>
                         maxLines: 3,
                         decoration: InputDecoration(
                           border: OutlineInputBorder(),
-                          labelText: 'ObservaciÃ³n',
+                          labelText: 'Observación',
                           hintText:
-                              'Ingrese una observaciÃ³n (mÃ­n. 5 caracteres)',
+                              'Ingrese una observación (mín. 5 caracteres)',
                         ),
                       ),
                     ),
@@ -1469,7 +1525,7 @@ class _HomePageState extends State<HomePage>
                       ? null
                       : () async {
                           if (selectedEstadoDesc != null) {
-                            // 1ï¸âƒ£ VERIFICAR COOLDOWN
+                            // 1️⃣ VERIFICAR COOLDOWN
                             if (_lastEstadoChangeAttempt != null) {
                               final elapsed = DateTime.now()
                                   .difference(_lastEstadoChangeAttempt!);
@@ -1479,7 +1535,7 @@ class _HomePageState extends State<HomePage>
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      'â±ï¸ Debe esperar $remaining segundos para reintentar cambiar el estado',
+                                      '⏱️ Debe esperar $remaining segundos para reintentar cambiar el estado',
                                       style: TextStyle(color: Colors.white),
                                     ),
                                     backgroundColor: Colors.orange,
@@ -1490,13 +1546,13 @@ class _HomePageState extends State<HomePage>
                               }
                             }
 
-                            // 2ï¸âƒ£ VALIDAR OBSERVACIÃ“N
+                            // 2️⃣ VALIDAR OBSERVACIÓN
                             if (permiteObservacion &&
                                 observacion.trim().length < 5) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'La observaciÃ³n debe tener al menos 5 caracteres.',
+                                    'La observación debe tener al menos 5 caracteres.',
                                     style: TextStyle(color: Colors.white),
                                   ),
                                 ),
@@ -1504,7 +1560,7 @@ class _HomePageState extends State<HomePage>
                               return;
                             }
 
-                            // 3ï¸âƒ£ CALCULAR NUEVO ESTADO
+                            // 3️⃣ CALCULAR NUEVO ESTADO
                             final selectedSubEstado = subEstados.firstWhere(
                               (s) => s['SubEstadoDesc'] == selectedEstadoDesc,
                               orElse: () => {'SubEstadoCod': currentEstado},
@@ -1514,7 +1570,7 @@ class _HomePageState extends State<HomePage>
                                         .toString()) ??
                                 currentEstado;
 
-                            // 4ï¸âƒ£ MOSTRAR LOADING
+                            // 4️⃣ MOSTRAR LOADING
                             showDialog(
                               context: context,
                               barrierDismissible: false,
@@ -1531,7 +1587,7 @@ class _HomePageState extends State<HomePage>
 
                             setState(() => _isEstadoChanging = true);
 
-                            // 5ï¸âƒ£ OBTENER DATOS DE UBICACIÃ“N
+                            // 5️⃣ OBTENER DATOS DE UBICACIÓN
                             var locationBox = await openBoxSafe('locationBox');
                             if (locationBox == null) {
                               Navigator.of(context, rootNavigator: true).pop();
@@ -1560,7 +1616,7 @@ class _HomePageState extends State<HomePage>
                               utmY = locationData['utmY'].toString();
                             }
 
-                            // 6ï¸âƒ£ LLAMAR A RIOGAS PRIMERO âœ…
+                            // 6️⃣ LLAMAR A RIOGAS PRIMERO ✅
                             final result =
                                 await RioGasService.actualizarMoviles(
                               int.parse(await Hive.box('sessionBox')
@@ -1578,14 +1634,14 @@ class _HomePageState extends State<HomePage>
                               utmY,
                               DateTime.now().toUtc().toIso8601String(),
                               '', // inAux1
-                              observacion, // âœ… Se pasa aquÃ­ la observaciÃ³n
+                              observacion, // ✅ Se pasa aquí la observación
                               velocidad,
                               distanciaRecorrida,
                             );
 
-                            // 7ï¸âƒ£ VALIDAR RESULTADO Y ACTUALIZAR FIRESTORE CONDICIONALMENTE
+                            // 7️⃣ VALIDAR RESULTADO Y ACTUALIZAR FIRESTORE CONDICIONALMENTE
                             if (result != null && result['error'] == null) {
-                              // âœ… Ã‰XITO: Actualizar Firestore
+                              // ✅ ÉXITO: Actualizar Firestore
                               await _firebaseService
                                   .updateMovilEstado(newEstadoNro);
 
@@ -1601,7 +1657,7 @@ class _HomePageState extends State<HomePage>
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'âœ… Estado actualizado correctamente',
+                                    '✅ Estado actualizado correctamente',
                                     style: TextStyle(color: Colors.white),
                                   ),
                                   backgroundColor: Colors.green,
@@ -1609,27 +1665,27 @@ class _HomePageState extends State<HomePage>
                                 ),
                               );
                             } else {
-                              // âŒ ERROR: NO actualizar Firestore, iniciar cooldown
+                              // ❌ ERROR: NO actualizar Firestore, iniciar cooldown
                               setState(() {
                                 _isEstadoChanging = false;
                                 _lastEstadoChangeAttempt = DateTime.now();
                               });
 
-                              // ðŸ†• Iniciar timer de cooldown para actualizar UI cada segundo
+                              // 🆕 Iniciar timer de cooldown para actualizar UI cada segundo
                               _startEstadoCooldownTimer();
 
-                              // âŒ Cerrar TODOS los diÃ¡logos (loading + selecciÃ³n de estado)
+                              // ❌ Cerrar TODOS los diálogos (loading + selección de estado)
                               Navigator.of(context, rootNavigator: true)
                                   .pop(); // Cierra loading
                               Navigator.of(context)
-                                  .pop(); // Cierra diÃ¡logo de selecciÃ³n
+                                  .pop(); // Cierra diálogo de selección
 
                               final errorMsg = result?['error']?.toString() ??
                                   'Error desconocido';
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'âŒ Error al actualizar estado: $errorMsg\nâ±ï¸ El botÃ³n de estado estarÃ¡ deshabilitado por $_estadoCooldownSeconds segundos',
+                                    '❌ Error al actualizar estado: $errorMsg\n⏱️ El botón de estado estará deshabilitado por $_estadoCooldownSeconds segundos',
                                     style: TextStyle(color: Colors.white),
                                   ),
                                   backgroundColor: Colors.red,
@@ -1660,13 +1716,13 @@ class _HomePageState extends State<HomePage>
     final permiteBaja = movilData['PermiteBajaMomentanea'] ?? 'N';
     final estadoActual = movilData['EstadoNro'];
 
-    print('ðŸ” Manejo de estado del mÃ³vil:');
-    print('MÃ³vil ID: $movilId');
+    print('🔍 Manejo de estado del móvil:');
+    print('Móvil ID: $movilId');
     print('Estado actual: $estadoActual');
 
     print('Subestados: $subEstados');
 
-    // Obtener el TipoEstado actual del mÃ³vil
+    // Obtener el TipoEstado actual del móvil
     final subEstadoActual = subEstados.firstWhere(
       (s) => s['SubEstadoCod'].toString() == estadoActual.toString(),
       orElse: () => <String, dynamic>{},
@@ -1675,7 +1731,7 @@ class _HomePageState extends State<HomePage>
 
     print('TipoEstado actual: $tipoEstadoActual');
 
-    // âœ… Verificar que tipoEstadoActual no sea null o vacÃ­o
+    // ✅ Verificar que tipoEstadoActual no sea null o vacío
     if (tipoEstadoActual == null ||
         tipoEstadoActual.toString().trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1689,7 +1745,7 @@ class _HomePageState extends State<HomePage>
       return;
     }
 
-    // Filtrar subestados vÃ¡lidos
+    // Filtrar subestados válidos
     final subEstadosValidos = subEstados.where((subEstado) {
       final visible = subEstado['VisibleEnCombo'] ?? true;
       if (!visible) return false;
@@ -1710,7 +1766,7 @@ class _HomePageState extends State<HomePage>
     }).toList();
 
     print('Estado actual: $tipoEstadoActual');
-    print('Subestados vÃ¡lidos: $subEstadosValidos');
+    print('Subestados válidos: $subEstadosValidos');
 
     if (subEstadosValidos.isNotEmpty) {
       _showEstadoDropdown(
@@ -1832,7 +1888,7 @@ class _HomePageState extends State<HomePage>
             return AlertDialog(
               title: Text('Permiso de GPS requerido'),
               content: Text(
-                'La aplicaciÃ³n requiere que habilites los permisos de ubicaciÃ³n TODO EL TIEMPO para funcionar correctamente. Por favor, habilÃ­talos.',
+                'La aplicación requiere que habilites los permisos de ubicación TODO EL TIEMPO para funcionar correctamente. Por favor, habilítalos.',
               ),
               actions: <Widget>[
                 TextButton(

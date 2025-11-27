@@ -58,7 +58,7 @@ private fun invokeRegistrarCoordenadasApiWithRetry(...) {
 1. **Usuario hace login** en `login_page.dart`
 2. **Se construye baseUrl** según constantes:
    - **Producción:** Constante 600 + 601 → `https://www.riogas.uy/ica_geos_/appservices/`
-   - **Desarrollo:** Constante 611 → `http://201.217.139.98:8888/ICA_Geos_/appservices/`
+   - **Desarrollo:** Constante 611 → `https://sgm-dev.glp.riogas.com.uy/appservices/`
 
 3. **Se guarda en SharedPreferences nativo** (línea 1501):
    ```dart
@@ -79,7 +79,7 @@ private fun invokeRegistrarCoordenadasApiWithRetry(...) {
 | Ambiente | BaseUrl Guardada | URL Final GPS |
 |----------|------------------|---------------|
 | **🏭 Producción** | `https://www.riogas.uy/ica_geos_/appservices/` | `https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas` |
-| **🔧 Desarrollo** | `http://190.64.89.170:8888/ICA_Geos_/appservices/` | `http://190.64.89.170:8888/ICA_Geos_/appservices/RegistrarCoordenadas` |
+| **🔧 Desarrollo** | `https://sgm-dev.glp.riogas.com.uy/appservices/` | `https://sgm-dev.glp.riogas.com.uy/appservices/RegistrarCoordenadas` |
 
 ---
 
@@ -104,11 +104,11 @@ adb logcat | Select-String "URL_AMBIENTE|LocationHelper.*URL|SETTINGS.*baseUrl"
 ```
 🔄 [SETTINGS] Actualizando baseUrl del servicio GPS...
 🔄 [SETTINGS] Nuevo ambiente: DESARROLLO
-🔄 [SETTINGS] Nueva URL: http://190.64.89.170:8888/ICA_Geos_/appservices/
+🔄 [SETTINGS] Nueva URL: https://sgm-dev.glp.riogas.com.uy/appservices/
 ✅ [SETTINGS] BaseUrl del servicio GPS actualizada exitosamente
-🌍 [URL_AMBIENTE] BaseUrl obtenida: http://190.64.89.170:8888/ICA_Geos_/appservices/
-🌍 [URL_AMBIENTE] URL completa: http://190.64.89.170:8888/ICA_Geos_/appservices/RegistrarCoordenadas
-🌐 Request (intento 1/3): URL=http://190.64.89.170:8888/ICA_Geos_/appservices/RegistrarCoordenadas
+🌍 [URL_AMBIENTE] BaseUrl obtenida: https://sgm-dev.glp.riogas.com.uy/appservices/
+🌍 [URL_AMBIENTE] URL completa: https://sgm-dev.glp.riogas.com.uy/appservices/RegistrarCoordenadas
+🌐 Request (intento 1/3): URL=https://sgm-dev.glp.riogas.com.uy/appservices/RegistrarCoordenadas
 ```
 
 ### 4. Cambiar a producción y verificar
@@ -132,7 +132,7 @@ En **Settings → Modo Desarrollo → OFF** (sin cerrar sesión)
 
 ### Ver a qué URL está pegando el GPS en tiempo real:
 ```powershell
-adb logcat | Select-String "190.64.89.170|www.riogas.uy|URL_AMBIENTE"
+adb logcat | Select-String "sgm-dev.glp.riogas.com.uy|www.riogas.uy|URL_AMBIENTE"
 ```
 
 ### Ver cambios de ambiente en Settings:
@@ -186,7 +186,7 @@ El valor de `baseUrl` persiste en SharedPreferences hasta:
 | `LocationHelper.kt` | 1124-1138 | URL dinámica desde SharedPreferences |
 | `login_page.dart` | 1501-1503 | Guarda baseUrl al hacer login |
 | `settings_page.dart` | 1448-1477 | 🆕 Actualiza baseUrl al cambiar ambiente |
-| `constantes.dart` | 16-17 | URL de desarrollo actualizada a `190.64.89.170:8888` |
+| `constantes.dart` | 16-17 | URL de desarrollo actualizada a `sgm-dev.glp.riogas.com.uy` |
 
 ---
 
@@ -201,7 +201,7 @@ Después de instalar la app actualizada:
 - [ ] Verificar request se envía a URL de producción
 - [ ] **Cambiar a modo DESARROLLO en Settings** (sin cerrar sesión)
 - [ ] Ver logs nuevamente en tiempo real
-- [ ] Verificar URL contiene: `http://190.64.89.170:8888`
+- [ ] Verificar URL contiene: `https://sgm-dev.glp.riogas.com.uy`
 - [ ] Esperar 3 minutos
 - [ ] Verificar request se envía a URL de desarrollo
 - [ ] **Cambiar a modo PRODUCCIÓN** (sin cerrar sesión)
@@ -219,7 +219,7 @@ Después de instalar la app actualizada:
 
 ✅ **Después del fix (versión actual):**
 - GPS respeta configuración de ambiente
-- En desarrollo → `http://190.64.89.170:8888`
+- En desarrollo → `https://sgm-dev.glp.riogas.com.uy`
 - En producción → `https://www.riogas.uy`
 - **Se actualiza inmediatamente** al cambiar ambiente en Settings
 - **No requiere logout/login** para aplicar cambios
@@ -227,7 +227,7 @@ Después de instalar la app actualizada:
 ---
 
 **Fecha de implementación:** 11 de noviembre de 2025  
-**Última actualización:** 13 de noviembre de 2025  
+**Última actualización:** 25 de noviembre de 2025 (URL de desarrollo actualizada)  
 **Archivo principal:** `LocationHelper.kt` + `settings_page.dart`  
 **Líneas modificadas:** `LocationHelper.kt` (1124-1138) | `settings_page.dart` (1448-1477)  
 **Impacto:** Servicio GPS respeta ambiente y se actualiza en tiempo real
