@@ -39,7 +39,6 @@ import '../services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogS
 import 'package:screen_protector/screen_protector.dart';
 import 'services/remote_logout_listener.dart'; // 🚨 Importar listener de logout remoto
 import 'services/fcm_token_manager.dart'; // 🔑 Importar FCM Token Manager
-import 'services/gps_service_manager.dart'; // 🛑 GPS Service Manager para Force GPS
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -532,29 +531,6 @@ Future<void> _initializeFirebaseMessaging() async {
     print('📩 [FCM FG] Mensaje recibido en foreground');
     print('📩 [FCM FG] Message ID: ${message.messageId}');
     print('📩 [FCM FG] Data: ${message.data}');
-
-    // 🛑 Manejar comando Force GPS
-    final action = message.data['action'];
-    if (action == 'force_gps_execution') {
-      print('🛑 [FCM] Comando Force GPS recibido');
-      MainLogger.log('🛑 Force GPS recibido via FCM', context: 'FCM');
-
-      try {
-        final success = await GpsServiceManager.forceStopAllGpsProcesses();
-        if (success) {
-          print('✅ [FCM] Force GPS ejecutado correctamente');
-          MainLogger.log('✅ Force GPS ejecutado exitosamente', context: 'FCM');
-        } else {
-          print('⚠️ [FCM] Force GPS falló al detener procesos');
-          MainLogger.logError('Force GPS falló', context: 'FCM');
-        }
-      } catch (e, stackTrace) {
-        print('❌ [FCM] Error ejecutando Force GPS: $e');
-        MainLogger.logError('Force GPS error crítico',
-            error: e, stackTrace: stackTrace, context: 'FCM');
-      }
-      return; // No mostrar notificación para comandos de sistema
-    }
 
     RemoteNotification? notification = message.notification;
     AndroidNotification? android = message.notification?.android;
