@@ -3,8 +3,6 @@ package com.example.moveit
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.ActivityManager
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -37,6 +35,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.tasks.Task
+import com.google.android.gms.tasks.Tasks
 
 // 🆕 Sistema de logging condicional para diagnóstico
 import com.riogas.appmovil.DebugLogger
@@ -59,18 +58,6 @@ object LocationHelper {
     // 🆕 THREAD POOL para limitar threads concurrentes
     private val apiExecutor = java.util.concurrent.Executors.newFixedThreadPool(2) // Máximo 2 threads simultáneos
     private val pendingRequests = java.util.concurrent.atomic.AtomicInteger(0)
-    
-    // 🆕 FASE 2: Ventana deslizante para promedio ponderado
-    private data class LocationSample(
-        val lat: Double,
-        val lon: Double,
-        val accuracy: Float,
-        val time: Long,
-        val speed: Float
-    )
-    
-    private val locationBuffer = mutableListOf<LocationSample>()
-    private const val MAX_BUFFER_SIZE = 15 // Mantener últimos 15 fixes
     
     // 🆕 FASE 2: Info de satélites GNSS
     private var lastSatelliteCount = 0
@@ -486,79 +473,6 @@ object LocationHelper {
     }
     
     /**
-     * 🆕 FASE 2: Agregar fix al buffer de ventana deslizante
-     */
-    private fun addToLocationBuffer(location: Location) {
-        val sample = LocationSample(
-            lat = location.latitude,
-            lon = location.longitude,
-            accuracy = location.accuracy,
-            time = location.time,
-            speed = location.speed
-        )
-        
-        locationBuffer.add(sample)
-        
-        // Mantener solo últimos MAX_BUFFER_SIZE fixes
-        while (locationBuffer.size > MAX_BUFFER_SIZE) {
-            locationBuffer.removeAt(0)
-        }
-        
-        Log.d(TAG, "📊 [BUFFER] Fix agregado al buffer (${locationBuffer.size}/$MAX_BUFFER_SIZE)")
-    }
-    
-    /**
-     * 🆕 FASE 2: Calcular promedio ponderado de coordenadas
-     * Peso mayor para fixes con mejor accuracy
-     */
-    private fun getWeightedAverageLocation(): Location? {
-        if (locationBuffer.isEmpty()) return null
-        
-        var sumLat = 0.0
-        var sumLon = 0.0
-        var sumWeight = 0.0
-        var bestAccuracy = Float.MAX_VALUE
-        var newestTime = 0L
-        
-        locationBuffer.forEach { sample ->
-            // Peso = 1 / accuracy^2 (mejor accuracy = mayor peso)
-            val weight = 1.0 / (sample.accuracy * sample.accuracy)
-            sumLat += sample.lat * weight
-            sumLon += sample.lon * weight
-            sumWeight += weight
-            
-            if (sample.accuracy < bestAccuracy) {
-                bestAccuracy = sample.accuracy
-            }
-            if (sample.time > newestTime) {
-                newestTime = sample.time
-            }
-        }
-        
-        val avgLat = sumLat / sumWeight
-        val avgLon = sumLon / sumWeight
-        
-        // Accuracy efectiva (mejor que el promedio simple)
-        val effectiveAccuracy = bestAccuracy * 0.6f // 40% mejor que el mejor fix
-        
-        Log.i(TAG, "🧮 [WEIGHTED_AVG] Promedio de ${locationBuffer.size} fixes:")
-        Log.i(TAG, "   - Lat: $avgLat | Lon: $avgLon")
-        Log.i(TAG, "   - Accuracy efectiva: ${effectiveAccuracy}m (vs ${bestAccuracy}m del mejor fix)")
-        Log.i(TAG, "   - Peso total: ${String.format("%.4f", sumWeight)}")
-        
-        // Crear Location con valores promediados
-        val avgLocation = Location("fused").apply {
-            latitude = avgLat
-            longitude = avgLon
-            accuracy = effectiveAccuracy
-            time = newestTime
-            speed = locationBuffer.last().speed // Usar velocidad del último fix
-        }
-        
-        return avgLocation
-    }
-    
-    /**
      * 🆕 FASE 2: Registrar callback de GNSS para monitorear satélites
      */
     private fun registerGnssCallback(context: Context) {
@@ -620,148 +534,6 @@ object LocationHelper {
         }
     }
 
-    fun scheduleLocationAlarm(context: Context, intervalMinutes: Double, movil: String, escenario: String, usuario: String, deviceId: String) {
-        // 🧹 LIMPIAR FLAGS: Cuando se programa alarma desde login, habilitar servicio
-        val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
-        
-        // Verificar si el servicio estaba deshabilitado
-        val wasDisabled = ServiceStatusFlags.isServiceDisabled(context)
-        if (wasDisabled) {
-            Log.w(TAG, "⚠️ [SCHEDULE] Servicio estaba deshabilitado, HABILITANDO automáticamente en login")
-            ServiceStatusFlags.setServiceDisabled(context, false, "login: habilitar servicio automáticamente")
-            ServiceStatusFlags.setWatchdogDisabled(context, false, "login: habilitar servicio automáticamente")
-            prefs.edit().apply {
-                remove("stop_reason")
-                remove("stop_timestamp")
-                remove("auto_stopped")
-            }.apply()
-            Log.i(TAG, "✅ [SCHEDULE] Flags de deshabilitación limpiados exitosamente")
-        }
-        
-        // 💾 GUARDAR parámetros para poder reiniciar después de reboot o cierre de app
-        prefs.edit().apply {
-            putString("last_movil", movil)
-            putString("last_escenario", escenario)
-            putString("last_usuario", usuario)
-            putString("last_deviceId", deviceId)
-            putFloat("last_interval", intervalMinutes.toFloat()) // 🆕 Guardamos como Float para soportar decimales
-            putLong("last_schedule_time", System.currentTimeMillis())
-        }.apply()
-        
-        // 🆕 Formatear intervalo para log (30 segundos o X minutos)
-        val intervalDesc = if (intervalMinutes < 1.0) {
-            "${(intervalMinutes * 60).toInt()} segundos"
-        } else {
-            "${intervalMinutes} min"
-        }
-        Log.d(TAG, "💾 Parámetros guardados para auto-reinicio: movil=$movil, interval=$intervalDesc")
-        
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(context, LocationReceiver::class.java).apply {
-            putExtra("movil", movil)
-            putExtra("escenario", escenario)
-            putExtra("usuario", usuario)
-            putExtra("deviceId", deviceId)
-            putExtra("interval", intervalMinutes.toFloat()) // 🆕 Guardar como Float para soportar decimales
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context, 1710, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        
-        // Cancelar alarma anterior si existe
-        alarmManager.cancel(pendingIntent)
-        
-        // 🆕 Calcular trigger time en milisegundos (soporta decimales)
-        val triggerAtMillis = SystemClock.elapsedRealtime() + (intervalMinutes * 60 * 1000).toLong()
-        
-        // Usar setExactAndAllowWhileIdle para alarmas exactas que funcionan en Doze mode
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                // Android 12+ (API 31+) - Requiere manejo especial de permisos
-                // Intentar usar alarma exacta, con fallback automático si falla
-                try {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        triggerAtMillis,
-                        pendingIntent
-                    )
-                    Log.d(TAG, "🔁 AlarmManager EXACTO (Android 12+) configurado para $intervalMinutes min (movil=$movil)")
-                    DebugLogger.i(TAG, "Alarma EXACTA configurada (Android 12+)", mapOf(
-                        "movil" to movil,
-                        "intervalMinutes" to intervalMinutes,
-                        "nextTriggerIn" to "${intervalMinutes}min"
-                    ))
-                } catch (se: SecurityException) {
-                    // No tiene permiso SCHEDULE_EXACT_ALARM, usar alarma inexacta
-                    Log.w(TAG, "⚠️ Sin permiso SCHEDULE_EXACT_ALARM, usando alarma INEXACTA")
-                    DebugLogger.w(TAG, "Sin permiso SCHEDULE_EXACT_ALARM, fallback a INEXACTA", mapOf("movil" to movil))
-                    alarmManager.setAndAllowWhileIdle(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        triggerAtMillis,
-                        pendingIntent
-                    )
-                    Log.w(TAG, "⚠️ AlarmManager INEXACTO configurado como fallback para $intervalMinutes min (movil=$movil)")
-                }
-            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                // Android 6-11 (API 23-30) - No requiere permiso especial
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    triggerAtMillis,
-                    pendingIntent
-                )
-                Log.d(TAG, "🔁 AlarmManager EXACTO (API 23-30) configurado para $intervalMinutes min (movil=$movil)")
-                DebugLogger.i(TAG, "Alarma EXACTA configurada (API 23-30)", mapOf(
-                    "movil" to movil,
-                    "intervalMinutes" to intervalMinutes
-                ))
-            } else {
-                // Android 5 o inferior (API < 23)
-                alarmManager.setExact(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    triggerAtMillis,
-                    pendingIntent
-                )
-                Log.d(TAG, "🔁 AlarmManager EXACTO (API < 23) configurado para $intervalMinutes min (movil=$movil)")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error al configurar alarma: ${e.message}")
-            DebugLogger.e(TAG, "Error crítico configurando alarma", e, mapOf(
-                "movil" to movil,
-                "intervalMinutes" to intervalMinutes
-            ))
-            // Último fallback - usar alarma inexacta básica
-            try {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    triggerAtMillis,
-                    pendingIntent
-                )
-                Log.w(TAG, "⚠️ Usando alarma INEXACTA como último recurso para $intervalMinutes min (movil=$movil)")
-            } catch (e2: Exception) {
-                Log.e(TAG, "❌ Error CRÍTICO: No se pudo configurar ningún tipo de alarma: ${e2.message}")
-                DebugLogger.e(TAG, "FALLO TOTAL: No se pudo configurar NINGUNA alarma", e2, mapOf("movil" to movil))
-            }
-        }
-
-        // NO obtener ubicación aquí - ese es el trabajo del ForegroundLocationService
-        // Este método SOLO debe programar la alarma para el próximo intervalo
-        Log.d(TAG, "✅ Alarma programada exitosamente, el servicio obtendrá la ubicación cuando se dispare")
-    }
-
-    /**
-     * Reprograma la siguiente alarma después de la ejecución actual
-     * Necesario porque setExactAndAllowWhileIdle no es repetitivo
-     */
-    fun rescheduleNextAlarm(context: Context, intervalMinutes: Double, movil: String, escenario: String, usuario: String, deviceId: String) {
-        val intervalDesc = if (intervalMinutes < 1.0) {
-            "${(intervalMinutes * 60).toInt()} segundos"
-        } else {
-            "$intervalMinutes min"
-        }
-        Log.d(TAG, "🔄 Reprogramando siguiente alarma para $intervalDesc")
-        scheduleLocationAlarm(context, intervalMinutes, movil, escenario, usuario, deviceId)
-    }
-
     @SuppressLint("MissingPermission")
     fun getCurrentLocation(
         context: Context,
@@ -772,10 +544,10 @@ object LocationHelper {
         executionCounter: Int = 0, // 🆕 Contador de ejecuciones para control de envío a Riogas
         isFirstExecution: Boolean = false // 🆕 Flag para envío instantáneo al login
     ): Map<String, Any?> {
-        // 🔥 CRÍTICO: INICIAR FOREGROUND SERVICE ANTES DE PEDIR GPS
-        // Sin esto, Android 10+ puede bloquear/throttlear la ubicación en background
-        Log.d(TAG, "🚀 [FOREGROUND] Asegurando que el servicio esté en foreground...")
-        Log.d(TAG, "🔢 [COUNTER] Ejecución #$executionCounter ${if (isFirstExecution) "🎯 PRIMER LOGIN (envío instantáneo a RioGas)" else "(Riogas cada 6 ejecuciones)"}")
+        // Fix puntual SIN warm-up ni arranque de servicios: el tracking continuo
+        // (LocationTrackingService) mantiene el chip GPS caliente. Este método solo
+        // obtiene una ubicación puntual para el pipeline legacy (RioGas/n8n) vía Dart.
+        Log.d(TAG, "📍 [PUNTUAL] getCurrentLocation ejecución #$executionCounter (isFirstExecution=$isFirstExecution)")
         DebugLogger.i(TAG, "getCurrentLocation iniciado", mapOf(
             "movil" to movil,
             "escenario" to escenario,
@@ -784,74 +556,7 @@ object LocationHelper {
             "executionCounter" to executionCounter,
             "isFirstExecution" to isFirstExecution
         ))
-        
-        try {
-            val serviceIntent = Intent(context, ForegroundLocationService::class.java).apply {
-                putExtra("movil", movil)
-                putExtra("escenario", escenario)
-                putExtra("usuario", usuario)
-                putExtra("deviceId", deviceId)
-            }
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-                Log.d(TAG, "✅ [FOREGROUND] Servicio iniciado como foreground (Android 8+)")
-                DebugLogger.i(TAG, "Servicio foreground iniciado", mapOf("android_version" to Build.VERSION.SDK_INT))
-            } else {
-                context.startService(serviceIntent)
-                Log.d(TAG, "✅ [FOREGROUND] Servicio iniciado (Android <8)")
-            }
-            
-            // Dar tiempo al servicio para establecerse como foreground
-            Thread.sleep(500)
-            
-        } catch (e: SecurityException) {
-            Log.e(TAG, "❌ [FOREGROUND] SecurityException iniciando servicio", e)
-            com.riogas.appmovil.CriticalLogger.logCritical(
-                TAG,
-                "ERROR: Sin permisos para iniciar servicio GPS desde LocationHelper",
-                e,
-                mapOf(
-                    "movil" to movil,
-                    "android_version" to Build.VERSION.SDK_INT,
-                    "context" to "getCurrentLocation"
-                ),
-                "SERVICE_START_FAILED"
-            )
-            // Continuar de todas formas (intentará obtener ubicación sin servicio foreground)
-            
-        } catch (e: IllegalStateException) {
-            Log.e(TAG, "❌ [FOREGROUND] IllegalStateException iniciando servicio", e)
-            com.riogas.appmovil.CriticalLogger.logCritical(
-                TAG,
-                "ERROR: Servicio GPS bloqueado por background restrictions desde LocationHelper",
-                e,
-                mapOf(
-                    "movil" to movil,
-                    "android_version" to Build.VERSION.SDK_INT,
-                    "context" to "getCurrentLocation"
-                ),
-                "SERVICE_START_FAILED"
-            )
-            // Continuar de todas formas (intentará obtener ubicación sin servicio foreground)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ [FOREGROUND] Error desconocido iniciando servicio", e)
-            com.riogas.appmovil.CriticalLogger.logCritical(
-                TAG,
-                "ERROR: Fallo desconocido iniciando servicio GPS desde LocationHelper",
-                e,
-                mapOf(
-                    "movil" to movil,
-                    "android_version" to Build.VERSION.SDK_INT,
-                    "error_type" to e.javaClass.simpleName,
-                    "context" to "getCurrentLocation"
-                ),
-                "SERVICE_START_FAILED"
-            )
-            // Continuar de todas formas (intentará obtener ubicación sin servicio foreground)
-        }
-        
+
         // 🆕 USAR FUSED LOCATION API (Google Play Services) - Lo mismo que usa Flutter internamente
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
 
@@ -917,228 +622,29 @@ object LocationHelper {
         var location: Location? = null
         var providerUsed = "fused"
         
-        // 🆕 FASE 2: Limpiar buffer de ventana deslizante para nuevo ciclo
-        locationBuffer.clear()
-        Log.d(TAG, "🧹 [BUFFER] Buffer limpiado para nuevo ciclo")
-        
-        // 🆕 FASE 2: Registrar callback GNSS para monitorear satélites
-        // ❌ DESHABILITADO: Solo genera logs, no mejora GPS, causa spam indoor
-        // registerGnssCallback(context)
-        
         try {
-            Log.d(TAG, "🎯 [FUSED-START] Solicitando ubicación ACTUAL (sin usar caché antigua)...")
-            
-            // 🔧 VERIFICAR DISPONIBILIDAD DE GOOGLE PLAY SERVICES
+            Log.d(TAG, "🎯 [FUSED-START] Solicitando ubicación puntual (fix único)...")
+
             val googleApiAvailability = GoogleApiAvailability.getInstance()
             val resultCode = googleApiAvailability.isGooglePlayServicesAvailable(context)
-            
             if (resultCode != ConnectionResult.SUCCESS) {
                 Log.e(TAG, "❌ [FUSED-ERROR] Google Play Services no disponible: código=$resultCode")
                 throw Exception("Google Play Services no disponible")
             }
-            
-            Log.d(TAG, "✅ [FUSED-CHECK] Google Play Services disponible")
-            
-            // 🔧 VERIFICAR LOCATION SETTINGS ANTES DE SOLICITAR
-            // 🆕 FASE 1: Warm-up GPS - Tomar 5-7 fixes para calentar el chip GPS
-            val locationRequest = LocationRequest.Builder(
-                Priority.PRIORITY_HIGH_ACCURACY, // 🔥 ALTA PRECISIÓN (GPS)
-                2000L // 🆕 Cada 2 segundos
-            ).apply {
-                setWaitForAccurateLocation(false) // 🆕 Recibir todos los fixes, no esperar el mejor
-                setMaxUpdates(7) // 🆕 Tomar 7 fixes (14 segundos de warm-up)
-                setDurationMillis(20000L) // 🆕 Máximo 20 segundos (antes 45s)
-                setMinUpdateIntervalMillis(1000) // 🆕 Mínimo 1s entre fixes
-            }.build()
-            
-            val settingsRequest = LocationSettingsRequest.Builder()
-                .addLocationRequest(locationRequest)
-                .setAlwaysShow(false)
-                .build()
-            
-            val settingsClient = LocationServices.getSettingsClient(context)
-            val settingsTask = settingsClient.checkLocationSettings(settingsRequest)
-            
-            // Esperar resultado de settings (bloqueante)
-            var settingsOk = false
-            try {
-                settingsTask.addOnSuccessListener {
-                    Log.d(TAG, "✅ [SETTINGS] Location settings satisfactorios (GPS ON, Precise location ON)")
-                    settingsOk = true
-                }.addOnFailureListener { exception ->
-                    Log.w(TAG, "⚠️ [SETTINGS] Location settings no óptimos: ${exception.message}")
-                    settingsOk = false
-                }
-                
-                // Esperar resultado (máx 2s)
-                var waited = 0
-                while (waited < 2000 && !settingsTask.isComplete) {
-                    Thread.sleep(100)
-                    waited += 100
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "⚠️ [SETTINGS] Error verificando settings: ${e.message}")
+
+            // Fix puntual: el chip GPS ya está caliente por el tracking continuo del FGS.
+            // Sin warm-up de 7 fixes, sin polling ni Thread.sleep: un getCurrentLocation con timeout.
+            val cts = CancellationTokenSource()
+            location = Tasks.await(
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token),
+                15, TimeUnit.SECONDS
+            )
+            if (location != null) {
+                providerUsed = location.provider ?: "fused"
+                Log.i(TAG, "📍 [COORDS] Lat: ${location.latitude}, Lng: ${location.longitude}, Accuracy=${location.accuracy}m")
+            } else {
+                Log.w(TAG, "❌ [NO-FIX] getCurrentLocation devolvió null")
             }
-            
-            // 🔥 🆕 FASE 1: WARM-UP GPS - Solicitar múltiples fixes para mejorar precisión
-            Log.d(TAG, "🔥 [WARM-UP] Iniciando warm-up GPS con 7 fixes (2s intervalo, 20s máx)")
-            Log.d(TAG, "⚙️ [CONFIG] WaitForAccurateLocation=false | MaxUpdates=7 | Interval=2s | Timeout=20s")
-            
-            val receivedLocations = mutableListOf<Location>()
-            val startTime = System.currentTimeMillis()
-            
-            // 🆕 Callback para recibir múltiples ubicaciones
-            val locationCallback = object : LocationCallback() {
-                override fun onLocationResult(locationResult: LocationResult) {
-                    for (loc in locationResult.locations) {
-                        receivedLocations.add(loc)
-                        
-                        // 🆕 FASE 2: Agregar cada fix al buffer de ventana deslizante
-                        addToLocationBuffer(loc)
-                        
-                        Log.d(TAG, "📍 [FIX ${receivedLocations.size}/7] Lat: ${loc.latitude}, Accuracy: ${loc.accuracy}m, Speed: ${loc.speed}m/s")
-                    }
-                }
-            }
-            
-            try {
-                // 🔥 Solicitar ubicaciones con el LocationRequest configurado arriba
-                fusedLocationClient.requestLocationUpdates(
-                    locationRequest,
-                    locationCallback,
-                    android.os.Looper.getMainLooper()
-                )
-                
-                Log.d(TAG, "✅ [REQUEST] requestLocationUpdates iniciado, esperando fixes...")
-                
-                // 🔥 Esperar hasta tener los 7 fixes o timeout de 20s
-                val timeoutMillis = 20000L
-                var elapsedTime = 0L
-                
-                while (receivedLocations.size < 7 && elapsedTime < timeoutMillis) {
-                    Thread.sleep(500)
-                    elapsedTime = System.currentTimeMillis() - startTime
-                    
-                    // Log progreso cada 5 segundos
-                    if (elapsedTime % 5000 < 500 && receivedLocations.isNotEmpty()) {
-                        Log.d(TAG, "⏳ [WARM-UP] ${receivedLocations.size} fixes recibidos en ${elapsedTime/1000}s")
-                    }
-                }
-                
-                // 🔥 Detener updates
-                fusedLocationClient.removeLocationUpdates(locationCallback)
-                
-                val waitDuration = (System.currentTimeMillis() - startTime) / 1000.0
-                Log.i(TAG, "🏁 [WARM-UP] Completado: ${receivedLocations.size} fixes en ${waitDuration}s")
-                
-                if (receivedLocations.isNotEmpty()) {
-                    // 🆕 FASE 1: FILTRO DE OUTLIERS + SELECCIÓN DEL MEJOR FIX
-                    val validLocations = receivedLocations.filter { loc ->
-                        // Filtro 1: Accuracy máxima 25m
-                        if (loc.accuracy > 25f) {
-                            Log.w(TAG, "🔇 [OUTLIER] Descartado por accuracy: ${loc.accuracy}m > 25m")
-                            return@filter false
-                        }
-                        
-                        // Filtro 2: Velocidad realista (< 180 km/h = 50 m/s)
-                        if (loc.hasSpeed() && loc.speed > 50f) {
-                            Log.w(TAG, "🔇 [OUTLIER] Descartado por velocidad: ${loc.speed}m/s > 50m/s (180 km/h)")
-                            return@filter false
-                        }
-                        
-                        // Filtro 3: Verificar saltos imposibles entre fixes consecutivos
-                        if (receivedLocations.size > 1) {
-                            val idx = receivedLocations.indexOf(loc)
-                            if (idx > 0) {
-                                val prevLoc = receivedLocations[idx - 1]
-                                val distance = prevLoc.distanceTo(loc)
-                                val timeDelta = (loc.time - prevLoc.time) / 1000.0 // segundos
-                                if (timeDelta > 0) {
-                                    val instantSpeed = distance / timeDelta // m/s
-                                    if (instantSpeed > 50f) {
-                                        Log.w(TAG, "🔇 [OUTLIER] Descartado por salto GPS: ${distance}m en ${timeDelta}s = ${instantSpeed}m/s")
-                                        return@filter false
-                                    }
-                                }
-                            }
-                        }
-                        
-                        true
-                    }
-                    
-                    Log.i(TAG, "✅ [FILTER] ${validLocations.size}/${receivedLocations.size} fixes pasaron filtros")
-                    
-                    if (validLocations.isNotEmpty()) {
-                        // 🆕 FASE 2: Usar promedio ponderado de fixes en vez de seleccionar solo el mejor
-                        if (locationBuffer.size >= 3) {
-                            // Calcular weighted average si tenemos suficientes fixes (3+)
-                            val weightedAvgLocation = getWeightedAverageLocation()
-                            if (weightedAvgLocation != null) {
-                                location = weightedAvgLocation
-                                providerUsed = "fused-weighted"
-                                
-                                Log.i(TAG, "🎯 [WEIGHTED] Usando promedio ponderado de ${locationBuffer.size} fixes")
-                                
-                                // Comparar con el mejor fix individual
-                                val bestSingleFix = validLocations.minByOrNull { it.accuracy }
-                                if (bestSingleFix != null) {
-                                    val improvement = ((bestSingleFix.accuracy - location.accuracy) / bestSingleFix.accuracy * 100)
-                                    Log.i(TAG, "📊 [IMPROVEMENT] Mejora vs mejor fix: ${String.format("%.1f", improvement)}% (${bestSingleFix.accuracy}m → ${location.accuracy}m)")
-                                }
-                            } else {
-                                // Fallback al mejor fix
-                                val bestFix = validLocations.minByOrNull { it.accuracy }
-                                if (bestFix != null) {
-                                    location = bestFix
-                                    providerUsed = location.provider ?: "fused"
-                                    Log.w(TAG, "⚠️ [FALLBACK] Weighted average falló, usando mejor fix único")
-                                } else {
-                                    Log.e(TAG, "❌ [CRITICAL] validLocations está vacío en fallback!")
-                                }
-                            }
-                        } else {
-                            // Pocos fixes, usar el mejor único
-                            val bestFix = validLocations.minByOrNull { it.accuracy }
-                            if (bestFix != null) {
-                                location = bestFix
-                                providerUsed = location.provider ?: "fused"
-                                Log.i(TAG, "🎯 [BEST] Solo ${locationBuffer.size} fixes en buffer, usando mejor de ${validLocations.size} válidos")
-                            } else {
-                                Log.e(TAG, "❌ [CRITICAL] validLocations está vacío después de filtros!")
-                            }
-                        }
-                        
-                        // 🛡️ SAFETY: Solo loguear si location no es null
-                        if (location != null) {
-                            Log.i(TAG, "📍 [COORDS] Lat: ${location.latitude}, Lng: ${location.longitude}")
-                            Log.i(TAG, "⚙️ [SPECS] Accuracy=${location.accuracy}m, Speed=${location.speed}m/s")
-                            Log.i(TAG, "⏱️ [TIME] Timestamp: ${location.time}, Edad: ${(System.currentTimeMillis() - location.time)/1000}s")
-                        } else {
-                            Log.e(TAG, "❌ [NULL] location es null después de procesar fixes")
-                        }
-                        
-                        // 🆕 FASE 2: Logging de GNSS si está disponible
-                        // ❌ DESHABILITADO: registerGnssCallback() comentado
-                        // if (lastSatelliteCount > 0) {
-                        //     Log.i(TAG, "🛰️ [GNSS] Satélites: $lastUsedSatellites/$lastSatelliteCount usados | SNR: ${String.format("%.1f", lastAvgSnr)}dB")
-                        // }
-                    } else {
-                        Log.w(TAG, "⚠️ [NO-VALID] Todos los fixes fueron descartados por filtros")
-                    }
-                } else {
-                    Log.w(TAG, "❌ [NO-FIXES] No se recibieron fixes en ${waitDuration}s")
-                }
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ [WARM-UP-ERROR] Error en warm-up: ${e.message}", e)
-                // Intentar remover el callback por si quedó colgado
-                try {
-                    fusedLocationClient.removeLocationUpdates(locationCallback)
-                } catch (ex: Exception) {
-                    Log.e(TAG, "Error removiendo callback: ${ex.message}")
-                }
-            }
-            
         } catch (e: SecurityException) {
             Log.e(TAG, "❌ [PERMISSION] Error de permisos: ${e.message}")
             Log.e(TAG, "❌ [PERMISSION] ¿Permisos FINE_LOCATION y BACKGROUND_LOCATION concedidos?")
@@ -1343,77 +849,6 @@ object LocationHelper {
                 )
             }
             
-            // 🔄 REINTENTAR SOLO SI NO ES PROBLEMA DE PERMISOS
-            if (failureReason != "NO_LOCATION_PERMISSION" && failureReason != "NO_BACKGROUND_PERMISSION") {
-                Log.w(TAG, "🔄 [RETRY] Reintentando obtener GPS real (no es problema de permisos)...")
-                
-                try {
-                    // Esperar 3 segundos antes de reintentar
-                    Thread.sleep(3000)
-                    
-                    // Segundo intento con FusedLocationProvider
-                    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-                    val lastKnownTask = fusedLocationClient.lastLocation
-                    
-                    var retrySuccess = false
-                    var retryAttempted = false
-                    
-                    lastKnownTask.addOnSuccessListener { retryLocation ->
-                        retryAttempted = true
-                        if (retryLocation != null) {
-                            val locationAge = (System.currentTimeMillis() - retryLocation.time) / 1000
-                            
-                            // Solo usar si tiene menos de 30 segundos de antigüedad
-                            if (locationAge < 30) {
-                                Log.i(TAG, "✅ [RETRY-SUCCESS] Obtenida ubicación reciente (${locationAge}s de antigüedad)")
-                                
-                                val lat = retryLocation.latitude
-                                val lon = retryLocation.longitude
-                                val (utmX, utmY) = convertToUTM(lat, lon)
-                                
-                                // Enviar esta coordenada real (NO CACHE)
-                                sendToN8nWebhook(
-                                    context, retryLocation, lat, lon, utmX, utmY, totalDistance, retryLocation.speed,
-                                    movil, escenario, usuario, deviceId, "fused-retry", "MOVIMIENTO", executionCounter
-                                )
-                                
-                                if (isFirstExecution || (executionCounter % 6 == 0)) {
-                                    invokeRegistrarCoordenadasV2Api(
-                                        context, lat, lon, utmX, utmY, totalDistance, retryLocation.speed,
-                                        movil, escenario, usuario, deviceId, "fused-retry", "MOVIMIENTO"
-                                    )
-                                }
-                                
-                                retrySuccess = true
-                            } else {
-                                Log.w(TAG, "⚠️ [RETRY-OLD] LastLocation demasiado antigua (${locationAge}s), descartando")
-                            }
-                        } else {
-                            Log.w(TAG, "⚠️ [RETRY-NULL] LastLocation es null")
-                        }
-                    }.addOnFailureListener { e ->
-                        retryAttempted = true
-                        Log.e(TAG, "❌ [RETRY-FAIL] Error en reintento: ${e.message}")
-                    }
-                    
-                    // Esperar resultado del reintento (máx 5s)
-                    var waited = 0
-                    while (!retryAttempted && waited < 5000) {
-                        Thread.sleep(200)
-                        waited += 200
-                    }
-                    
-                    if (!retrySuccess) {
-                        Log.e(TAG, "❌ [RETRY-TIMEOUT] Reintento falló - NO SE ENVIARÁN COORDENADAS")
-                    }
-                    
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ [RETRY-ERROR] Error durante reintento: ${e.message}", e)
-                }
-            } else {
-                Log.e(TAG, "🚫 [NO-RETRY] Problema de permisos detectado - NO se reintentará")
-            }
-            
             // 🚫 NUNCA RETORNAR COORDENADAS CACHE - Retornar mapa vacío
             Log.e(TAG, "🚫 [ABORT] NO se enviarán coordenadas CACHE a ningún servicio")
             
@@ -1560,7 +995,6 @@ object LocationHelper {
     // Necesaria para que FcmPushReceiver pueda enviar coordenadas forzadas
     fun invokeRegistrarCoordenadasV2ApiWithRetry(context: Context, lat: Double, lon: Double, utmX: Double, utmY: Double, totalDistance: Float, speed: Float, movil: String, escenario: String, usuario: String, deviceId: String, providerUsed: String, movementType: String, retryCount: Int) {
         val maxRetries = 1 // 🔧 Reducido de 3 a 1 (evita tormentas de requests con errores de datos)
-        val retryDelayMs = 5000L // 5 segundos fijos entre reintentos
         
         // 🌍 Obtener URL desde SharedPreferences (guardada por Flutter según ambiente)
         val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
@@ -1744,8 +1178,7 @@ object LocationHelper {
                                 val shouldRetry = response.code >= 500 // Solo errores de servidor (5xx)
                                 
                                 if (shouldRetry && currentAttempt < maxRetries - 1) {
-                                    Log.w(TAG, "🔄 Error ${response.code} (servidor), reintentando en ${retryDelayMs/1000}s... (${currentAttempt + 2}/$maxRetries)")
-                                    Thread.sleep(retryDelayMs) // Esperar 5 segundos
+                                    // Retry sin Thread.sleep (maxRetries=1 lo deja inalcanzable; la cola Room reintenta).
                                     currentAttempt++
                                 } else {
                                     if (!shouldRetry) {
@@ -1816,8 +1249,7 @@ object LocationHelper {
                         
                         // Reintentar si no hemos alcanzado el máximo
                         if (currentAttempt < maxRetries - 1) {
-                            Log.w(TAG, "🔄 Reintentando conexión en ${retryDelayMs/1000}s... (${currentAttempt + 2}/$maxRetries)")
-                            Thread.sleep(retryDelayMs) // Esperar 5 segundos
+                            // Retry sin Thread.sleep (ver arriba).
                             currentAttempt++
                         } else {
                             Log.e(TAG, "💥 Máximo de reintentos alcanzado (${maxRetries} intentos)")
@@ -1897,9 +1329,9 @@ object LocationHelper {
                 // 🆕 INTENTAR ENVIAR LOGS CRÍTICOS ANTES DE DETENER (si debugMode=true)
                 sendCriticalLogsBeforeShutdown(context)
                 
-                // 🆕 DETENER TAMBIÉN EL CriticalLogAlarmReceiver
-                Log.i(TAG, "🛑 Deteniendo CriticalLogAlarmReceiver por comando del servidor...")
-                com.riogas.appmovil.CriticalLogAlarmReceiver.cancel(context)
+                // Detener la subida periódica de logs críticos (WorkManager)
+                Log.i(TAG, "🛑 Cancelando CriticalLogUploadWorker por comando del servidor...")
+                com.riogas.appmovil.CriticalLogUploadWorker.cancel(context)
                 
                 // Detener servicio GPS usando el controlador centralizado
                 LocationServiceController.stopLocationServiceFromBackground(
@@ -2107,25 +1539,17 @@ object LocationHelper {
      */
     private fun updateLocationInterval(context: Context, newInterval: Double, movil: String, escenario: String, usuario: String, deviceId: String) {
         try {
-            // Cancelar alarma actual
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, LocationReceiver::class.java).apply {
-                putExtra("movil", movil)
-                putExtra("escenario", escenario)
-                putExtra("usuario", usuario)
-                putExtra("deviceId", deviceId)
-            }
-            val pendingIntent = PendingIntent.getBroadcast(context, 1710, intent, PendingIntent.FLAG_IMMUTABLE)
-            alarmManager.cancel(pendingIntent)
-            
-            // Programar nueva alarma con el nuevo intervalo
-            scheduleLocationAlarm(context, newInterval, movil, escenario, usuario, deviceId)
-            
+            // El tracking continuo (LocationTrackingService) lee el intervalo desde prefs.
+            // Sin AlarmManager: solo persistimos el nuevo valor en segundos.
+            val intervalSeconds = (newInterval * 60).toInt().coerceAtLeast(1)
+            context.getSharedPreferences("config", Context.MODE_PRIVATE)
+                .edit().putInt("tracking_interval_seconds", intervalSeconds).apply()
+
             LocationLogger.logEvent(context, "INTERVAL_UPDATED", mapOf(
                 "newInterval" to newInterval.toString(),
+                "intervalSeconds" to intervalSeconds.toString(),
                 "movil" to movil
             ))
-            
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error actualizando intervalo", e)
             LocationLogger.logError(context, "UPDATE_INTERVAL_ERROR", e.message ?: "Unknown error")

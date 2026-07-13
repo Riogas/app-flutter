@@ -1,7 +1,5 @@
 package com.example.moveit
 
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.PowerManager
@@ -17,8 +15,7 @@ import kotlinx.coroutines.launch
  */
 object LocationServiceController {
     private const val TAG = "LocationServiceController"
-    private const val ALARM_REQUEST_CODE = 1710
-    
+
     /**
      * Detiene el servicio de ubicación desde contexto de background
      * Puede ser llamado incluso cuando la app está cerrada
@@ -34,14 +31,14 @@ object LocationServiceController {
         Log.i(TAG, "🛑 Deteniendo servicio desde background: $reason")
         
         try {
-            // 1. Cancelar AlarmManager
-            cancelLocationAlarms(context, movil, escenario, usuario, deviceId)
-            
-            // 2. Marcar como deshabilitado en SharedPreferences
+            // 1. Cancelar WorkManager (health-check) — ya no hay alarmas que cancelar
+            WorkManagerHelper.cancelPeriodicWork(context)
+
+            // 2. Marcar como deshabilitado vía ServiceStatusFlags
             markServiceAsDisabled(context, reason)
-            
-            // 3. Detener servicio foreground si está activo
-            stopForegroundService(context)
+
+            // 3. Detener el tracking foreground nuevo
+            com.riogas.appmovil.tracking.LocationTrackingService.stop(context)
             
             // 4. Registrar evento en logs nativos
             LocationLogger.logEvent(context, "SERVICE_STOPPED", mapOf(
@@ -62,36 +59,6 @@ object LocationServiceController {
     }
     
     /**
-     * Cancela todas las alarmas programadas para el servicio de ubicación
-     */
-    private fun cancelLocationAlarms(context: Context, movil: String, escenario: String, usuario: String, deviceId: String) {
-        try {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, LocationReceiver::class.java).apply {
-                putExtra("movil", movil)
-                putExtra("escenario", escenario)
-                putExtra("usuario", usuario)
-                putExtra("deviceId", deviceId)
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context, 
-                ALARM_REQUEST_CODE, 
-                intent, 
-                PendingIntent.FLAG_IMMUTABLE
-            )
-            
-            alarmManager.cancel(pendingIntent)
-            pendingIntent.cancel()
-            
-            Log.i(TAG, "🔔 AlarmManager cancelado exitosamente")
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error cancelando alarmas", e)
-            LocationLogger.logError(context, "CANCEL_ALARM_ERROR", e.message ?: "Unknown error")
-        }
-    }
-    
-    /**
      * Marca el servicio como deshabilitado en SharedPreferences
      */
     private fun markServiceAsDisabled(context: Context, reason: String) {
@@ -108,24 +75,6 @@ object LocationServiceController {
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error guardando estado del servicio", e)
-        }
-    }
-    
-    /**
-     * Detiene el servicio foreground activo
-     */
-    private fun stopForegroundService(context: Context) {
-        try {
-            val serviceIntent = Intent(context, ForegroundLocationService::class.java).apply {
-                action = "STOP_FOREGROUND_SERVICE"
-            }
-            context.startService(serviceIntent)
-            
-            Log.i(TAG, "🛑 Señal de parada enviada al servicio foreground")
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error deteniendo servicio foreground", e)
-            LocationLogger.logError(context, "STOP_FOREGROUND_ERROR", e.message ?: "Unknown error")
         }
     }
     

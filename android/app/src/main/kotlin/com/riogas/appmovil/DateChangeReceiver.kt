@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.example.moveit.ForegroundLocationService
+import com.riogas.appmovil.tracking.LocationTrackingService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -100,8 +100,7 @@ class DateChangeReceiver : BroadcastReceiver() {
         // 1️⃣ Detener GPS service
         try {
             if (ServiceWatchdog.isGPSServiceRunning(context)) {
-                val stopIntent = Intent(context, ForegroundLocationService::class.java)
-                context.stopService(stopIntent)
+                LocationTrackingService.stop(context)
                 Log.i(TAG, "✅ GPS service detenido")
                 
                 CriticalLogger.logCritical(

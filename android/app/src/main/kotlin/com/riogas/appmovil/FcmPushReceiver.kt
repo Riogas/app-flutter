@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
-import com.example.moveit.ForegroundLocationService
+import com.riogas.appmovil.tracking.LocationTrackingService
 import com.example.moveit.LocationHelper
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -271,44 +271,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
                 "FCM_RESTART_GPS_STATES_CLEARED"
             )
 
-            // 2️⃣ Cancelar AlarmManager anterior
-            try {
-                val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                val alarmIntent = Intent(this, com.example.moveit.LocationReceiver::class.java)
-                val pendingIntent = PendingIntent.getBroadcast(
-                    this,
-                    1710,
-                    alarmIntent,
-                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-                )
-                if (pendingIntent != null) {
-                    alarmManager.cancel(pendingIntent)
-                    Log.i(TAG, "🧹 [FCM] AlarmManager anterior cancelado")
-                    CriticalLogger.logCritical(
-                        TAG,
-                        "FCM: AlarmManager anterior cancelado",
-                        mapOf(
-                            "movil" to movil,
-                            "step" to "3_alarm_cancelled",
-                            "trigger" to "fcm_remote_command"
-                        ),
-                        "FCM_RESTART_GPS_ALARM_CANCELLED"
-                    )
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "⚠️ [FCM] Error cancelando alarma: ${e.message}")
-                CriticalLogger.logCritical(
-                    TAG,
-                    "FCM ERROR: Error cancelando AlarmManager",
-                    e,
-                    mapOf(
-                        "movil" to movil,
-                        "error_message" to (e.message ?: "Sin mensaje"),
-                        "trigger" to "fcm_remote_command"
-                    ),
-                    "FCM_RESTART_GPS_ALARM_ERROR"
-                )
-            }
+            // 2️⃣ (Task 7) AlarmManager retirado: ya no hay alarmas de LocationReceiver que cancelar.
 
             // 3️⃣ Cancelar WorkManager anterior
             try {
@@ -341,7 +304,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
 
             // 4️⃣ MATAR servicio existente ANTES de iniciar uno nuevo (evitar duplicación)
             try {
-                val existingServiceIntent = Intent(this, ForegroundLocationService::class.java)
+                val existingServiceIntent = Intent(this, LocationTrackingService::class.java)
                 stopService(existingServiceIntent)
                 Log.i(TAG, "🔪 [FCM] Servicio GPS existente detenido para evitar duplicación")
                 Thread.sleep(500)  // Dar tiempo para que el servicio se detenga completamente
@@ -361,7 +324,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
             }
 
             // 5️⃣ Iniciar ForegroundLocationService NUEVO
-            val serviceIntent = Intent(this, ForegroundLocationService::class.java).apply {
+            val serviceIntent = Intent(this, LocationTrackingService::class.java).apply {
                 putExtra("movil", movil)
                 putExtra("escenario", escenario)
                 putExtra("usuario", usuario)
@@ -434,7 +397,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
         val movil = prefs.getString("last_movil", "unknown") ?: "unknown"
 
         try {
-            val serviceIntent = Intent(this, ForegroundLocationService::class.java)
+            val serviceIntent = Intent(this, LocationTrackingService::class.java)
             stopService(serviceIntent)
 
             // Marcar servicio como deshabilitado Y deshabilitar watchdog
@@ -654,7 +617,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
         try {
             // 🚨 PASO 3: REINICIAR SERVICIO GPS
             // 1️⃣ Verificar si el servicio está corriendo
-            val isServiceRunning = ServiceWatchdog.isServiceRunning(this, ForegroundLocationService::class.java)
+            val isServiceRunning = ServiceWatchdog.isServiceRunning(this, LocationTrackingService::class.java)
             
             if (!isServiceRunning) {
                 Log.w(TAG, "⚠️ [FCM] Servicio GPS muerto, reiniciándolo primero...")
@@ -688,7 +651,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
                 
                 // ✅ Flags ya limpiados al inicio del método
                 
-                val serviceIntent = Intent(this, ForegroundLocationService::class.java).apply {
+                val serviceIntent = Intent(this, LocationTrackingService::class.java).apply {
                     putExtra("movil", movil)
                     putExtra("escenario", escenario)
                     putExtra("usuario", usuario)
@@ -723,7 +686,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
                 Log.i(TAG, "🔪 [FCM] Servicio activo detectado, MATÁNDOLO para reiniciar con datos frescos...")
                 
                 try {
-                    val existingServiceIntent = Intent(this, ForegroundLocationService::class.java)
+                    val existingServiceIntent = Intent(this, LocationTrackingService::class.java)
                     stopService(existingServiceIntent)
                     Log.i(TAG, "🔪 [FCM] Servicio GPS existente detenido")
                     Thread.sleep(500)  // Dar tiempo para que el servicio se detenga completamente
@@ -751,7 +714,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
                 val correctUrl = if (isDevelopment) devUrl else prodUrl
                 flutterPrefs.edit().putString("flutter.baseUrl", correctUrl).apply()
                 
-                val serviceIntent = Intent(this, ForegroundLocationService::class.java).apply {
+                val serviceIntent = Intent(this, LocationTrackingService::class.java).apply {
                     putExtra("movil", movil)
                     putExtra("escenario", escenario)
                     putExtra("usuario", usuario)
@@ -872,7 +835,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
             
             // 1️⃣ Detener GPS Service
             try {
-                val serviceIntent = Intent(this, ForegroundLocationService::class.java)
+                val serviceIntent = Intent(this, LocationTrackingService::class.java)
                 stopService(serviceIntent)
                 Log.i(TAG, "🛑 [FCM] GPS service detenido")
                 
@@ -889,32 +852,16 @@ class FcmPushReceiver : FirebaseMessagingService() {
                 Log.e(TAG, "❌ [FCM] Error deteniendo GPS service", e)
             }
             
-            // 2️⃣ Cancelar AlarmManager (LocationReceiver)
+            // 2️⃣ (Task 7) AlarmManager retirado: ya no hay alarmas de LocationReceiver que cancelar.
+
+            // 3️⃣ Cancelar la subida periódica de logs críticos (WorkManager)
             try {
-                val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                val alarmIntent = Intent(this, com.example.moveit.LocationReceiver::class.java)
-                val pendingIntent = PendingIntent.getBroadcast(
-                    this,
-                    1710,
-                    alarmIntent,
-                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-                )
-                if (pendingIntent != null) {
-                    alarmManager.cancel(pendingIntent)
-                    Log.i(TAG, "🛑 [FCM] AlarmManager cancelado")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ [FCM] Error cancelando AlarmManager", e)
-            }
-            
-            // 3️⃣ Cancelar CriticalLogAlarmReceiver
-            try {
-                CriticalLogAlarmReceiver.cancel(this)
-                Log.i(TAG, "🛑 [FCM] CriticalLogAlarmReceiver cancelado")
-                
+                CriticalLogUploadWorker.cancel(this)
+                Log.i(TAG, "🛑 [FCM] CriticalLogUploadWorker cancelado")
+
                 CriticalLogger.logCritical(
                     TAG,
-                    "FCM: CriticalLogAlarmReceiver cancelado por logout remoto",
+                    "FCM: CriticalLogUploadWorker cancelado por logout remoto",
                     mapOf(
                         "movil" to movil,
                         "step" to "2_stop_critical_log"
@@ -922,7 +869,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
                     "FCM_LOGOUT_CRITICALLOG_STOPPED"
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "❌ [FCM] Error cancelando CriticalLogAlarmReceiver", e)
+                Log.e(TAG, "❌ [FCM] Error cancelando CriticalLogUploadWorker", e)
             }
             
             // 4️⃣ Marcar servicio como deshabilitado Y deshabilitar watchdog

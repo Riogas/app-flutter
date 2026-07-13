@@ -15,8 +15,6 @@
     import io.flutter.plugin.common.MethodChannel
     import io.flutter.FlutterInjector
     import com.google.firebase.FirebaseApp
-    import android.app.AlarmManager
-    import android.app.PendingIntent
     import android.content.Intent
     import android.content.BroadcastReceiver
     import android.content.IntentFilter
@@ -406,25 +404,14 @@
                             "source" to "Flutter_UI"
                         ))
 
-                        // 🆕 Iniciar ForegroundService desde foreground (Android 12+ compatible)
-                        val serviceIntent = Intent(this, ForegroundLocationService::class.java).apply {
-                            putExtra("movil", movil)
-                            putExtra("escenario", escenario)
-                            putExtra("usuario", usuario)
-                            putExtra("deviceId", deviceId)
-                            putExtra("intervalMinutes", interval)
-                            putExtra("EXECUTE_GPS", true) // 🆕 CAMBIO: Ejecutar GPS inmediatamente en el primer inicio
-                            putExtra("IS_FIRST_EXECUTION", true) // 🆕 Marcar como primera ejecución
-                        }
-                        
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            startForegroundService(serviceIntent)
-                        } else {
-                            startService(serviceIntent)
-                        }
-                        
-                        Log.d("MainActivity", "✅ ForegroundService iniciado desde Flutter - Sistema híbrido activado")
-                        result.success("✅ Servicio de ubicación iniciado con intervalo $interval minutos (Híbrido: AlarmManager + WorkManager)")
+                        // Persistir intervalo (segundos) para el tracking continuo
+                        prefs.edit().putInt("tracking_interval_seconds", (interval * 60).coerceAtLeast(1)).apply()
+
+                        // Arranque único del FGS nuevo (idempotente: si ya corre, actualiza extras)
+                        com.riogas.appmovil.tracking.LocationTrackingService.start(this, movil, escenario, usuario, deviceId)
+
+                        Log.d("MainActivity", "✅ LocationTrackingService iniciado desde Flutter")
+                        result.success("✅ Servicio de ubicación iniciado con intervalo $interval minutos")
                     }
                     "stopLocationService" -> {
                         val movil = call.argument<String>("movil") ?: "0"
@@ -432,19 +419,7 @@
                         val usuario = call.argument<String>("usuario") ?: "string"
                         val deviceId = call.argument<String>("deviceId") ?: "0"
 
-                        // 1. Cancelar AlarmManager
-                        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                        val intent = Intent(this, LocationReceiver::class.java).apply {
-                            putExtra("movil", movil)
-                            putExtra("escenario", escenario)
-                            putExtra("usuario", usuario)
-                            putExtra("deviceId", deviceId)
-                        }
-                        val pendingIntent = PendingIntent.getBroadcast(this, 1710, intent, PendingIntent.FLAG_IMMUTABLE)
-                        alarmManager.cancel(pendingIntent)
-                        Log.i("MainActivity", "🛑 AlarmManager cancelado desde Flutter")
-                        
-                        // 1b. Cancelar WorkManager también
+                        // 1. Cancelar WorkManager (ya no hay AlarmManager que cancelar)
                         try {
                             WorkManagerHelper.cancelPeriodicWork(this)
                             Log.i("MainActivity", "🛑 WorkManager cancelado desde Flutter")
@@ -465,11 +440,8 @@
                         }.apply()
                         Log.i("MainActivity", "📛 Bandera de desactivación guardada con detalles (service + watchdog)")
 
-                        // 3. Detener el servicio y eliminar notificación
-                        val stopIntent = Intent(this, ForegroundLocationService::class.java).apply {
-                            action = "STOP_FOREGROUND_SERVICE"
-                        }
-                        startService(stopIntent)
+                        // 3. Detener el tracking foreground nuevo
+                        com.riogas.appmovil.tracking.LocationTrackingService.stop(this)
                         Log.i("MainActivity", "🧹 Servicio detenido y notificación eliminada")
 
                         // 4. Resetear distancia diaria por parada manual
@@ -494,36 +466,20 @@
                         result.success(if (isInForeground) "foreground" else "background")
                     }
                     "isGpsServiceRunning" -> {
-                        // 🔍 Verificar si el servicio GPS está corriendo
-                        val isRunning = isServiceRunning(ForegroundLocationService::class.java)
+                        // 🔍 Verificar si el tracking GPS está corriendo
+                        val isRunning = com.riogas.appmovil.tracking.LocationTrackingService.isRunning
                         Log.d("MainActivity", "🔍 isGpsServiceRunning: $isRunning")
                         result.success(isRunning)
                     }
                     "forceStopGpsService" -> {
-                        // 🛑 Detener FORZOSAMENTE todos los procesos GPS activos
-                        Log.d("MainActivity", "🛑 forceStopGpsService - Deteniendo TODOS los procesos GPS")
+                        // 🛑 Detener FORZOSAMENTE el tracking GPS (force → disabled=true)
+                        Log.d("MainActivity", "🛑 forceStopGpsService - Deteniendo tracking GPS")
                         try {
-                            // 1. Detener el servicio foreground si está corriendo
-                            val serviceIntent = Intent(this, ForegroundLocationService::class.java)
-                            stopService(serviceIntent)
-                            
-                            // 2. Esperar un momento para asegurar que se detuvo
-                            Thread.sleep(500)
-                            
-                            // 3. Verificar que realmente se detuvo
-                            val stillRunning = isServiceRunning(ForegroundLocationService::class.java)
-                            
-                            if (stillRunning) {
-                                Log.w("MainActivity", "⚠️ Servicio GPS aún corriendo después de stopService()")
-                                // Intento adicional: enviar broadcast de detención
-                                val stopBroadcast = Intent("com.example.moveit.STOP_GPS_SERVICE")
-                                sendBroadcast(stopBroadcast)
-                                Thread.sleep(500)
-                            }
-                            
-                            val finalCheck = isServiceRunning(ForegroundLocationService::class.java)
-                            Log.d("MainActivity", "✅ forceStopGpsService completado - Servicio corriendo: $finalCheck")
-                            result.success(!finalCheck) // true si se detuvo exitosamente
+                            com.riogas.appmovil.tracking.LocationTrackingService.stop(this)
+                            com.riogas.appmovil.ServiceStatusFlags.setServiceDisabled(this, true, "forceStopGpsService desde Flutter UI")
+                            val stopped = !com.riogas.appmovil.tracking.LocationTrackingService.isRunning
+                            Log.d("MainActivity", "✅ forceStopGpsService completado - detenido: $stopped")
+                            result.success(stopped)
                         } catch (e: Exception) {
                             Log.e("MainActivity", "❌ Error en forceStopGpsService: ${e.message}")
                             result.success(false)
@@ -710,232 +666,34 @@
                             
                             Log.i("MainActivity", "✅ Parámetros sincronizados: Hive → SharedPreferences (movil=$movil, usuario=$usuario, escenario=$escenario)")
                             
-                            // 4️⃣ Verificar si hay alarmas programadas
-                            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                            val intent = Intent(this, LocationReceiver::class.java).apply {
-                                putExtra("movil", movil)
-                                putExtra("escenario", escenario)
-                                putExtra("usuario", usuario)
-                                putExtra("deviceId", deviceId)
-                            }
-                            val pendingIntent = PendingIntent.getBroadcast(
-                                this, 
-                                1710, 
-                                intent, 
-                                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-                            )
-                            
-                            // 5️⃣ Verificar si el ForegroundService está corriendo
-                            val isServiceRunning = isServiceRunning(ForegroundLocationService::class.java)
-                            val hasAlarmScheduled = (pendingIntent != null)
-                            
-                            Log.d("MainActivity", "📊 Estado: ServiceRunning=$isServiceRunning, AlarmScheduled=$hasAlarmScheduled, ParamsChanged=$paramsChanged")
-                            
-                            // 6️⃣ CRITICAL: Reiniciar si:
-                            // - Servicio NO está corriendo
-                            // - Alarma NO está programada  
-                            // - Parámetros no coinciden (movil diferente entre Hive y servicio)
-                            val needsRestart = !isServiceRunning || !hasAlarmScheduled || paramsChanged
-                            
-                            if (needsRestart) {
-                                val restartReason = when {
-                                    !isServiceRunning && !hasAlarmScheduled -> "both_dead"
-                                    !isServiceRunning -> "service_dead"
-                                    !hasAlarmScheduled -> "alarm_cancelled"
-                                    paramsChanged -> "movil_param_mismatch"
-                                    else -> "unknown"
-                                }
-                                
-                                Log.w("MainActivity", "⚠️ Reiniciando servicio - Razón: $restartReason (movil=$movil)")
-                                com.riogas.appmovil.DebugLogger.w("MainActivity", "Servicio requiere reinicio", mapOf(
-                                    "movil" to movil,
-                                    "isServiceRunning" to isServiceRunning,
-                                    "hasAlarmScheduled" to hasAlarmScheduled,
-                                    "paramsChanged" to paramsChanged,
-                                    "reason" to restartReason
-                                ))
-                                
-                                // Si servicio está corriendo con parámetros incorrectos, detenerlo primero
-                                if (isServiceRunning && paramsChanged) {
-                                    Log.w("MainActivity", "🛑 Deteniendo servicio con parámetros incorrectos antes de reiniciar")
-                                    val stopIntent = Intent(this, ForegroundLocationService::class.java)
-                                    stopService(stopIntent)
-                                    
-                                    LocationLogger.logEvent(this@MainActivity, "SERVICE_STOPPED_WRONG_PARAMS", mapOf<String, String>(
-                                        "old_movil" to lastMovilInPrefs,
-                                        "correct_movil" to movil,
-                                        "usuario" to (usuario ?: ""),
-                                        "deviceId" to (deviceId ?: "")
-                                    ))
-                                    
-                                    // Pequeña pausa para asegurar que el servicio se detenga
-                                    Thread.sleep(500)
-                                }
-                                
-                                // Cancelar cualquier alarma/worker existente para evitar duplicados
-                                if (hasAlarmScheduled) {
-                                    alarmManager.cancel(pendingIntent)
-                                    Log.d("MainActivity", "🧹 Alarma anterior cancelada")
-                                }
-                                
-                                try {
-                                    WorkManagerHelper.cancelPeriodicWork(this)
-                                    Log.d("MainActivity", "🧹 WorkManager anterior cancelado")
-                                } catch (e: Exception) {
-                                    Log.e("MainActivity", "⚠️ Error cancelando WorkManager: ${e.message}")
-                                }
-                                
-                                // Reiniciar ForegroundService desde foreground
-                                val serviceIntent = Intent(this, ForegroundLocationService::class.java).apply {
-                                    putExtra("movil", movil)
-                                    putExtra("escenario", escenario)
-                                    putExtra("usuario", usuario)
-                                    putExtra("deviceId", deviceId)
-                                    putExtra("intervalMinutes", intervalMinutes)
-                                    putExtra("EXECUTE_GPS", false)
-                                }
-                                
-                                // 🆕 try-catch para capturar errores al iniciar servicio
-                                try {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                        startForegroundService(serviceIntent)
-                                    } else {
-                                        startService(serviceIntent)
-                                    }
-                                    
-                                    Log.i("MainActivity", "✅ Servicio GPS iniciado exitosamente desde health check")
-                                    
-                                } catch (e: SecurityException) {
-                                    Log.e("MainActivity", "❌ SecurityException iniciando servicio GPS", e)
-                                    com.riogas.appmovil.CriticalLogger.logCritical(
-                                        "MainActivity",
-                                        "ERROR: Sin permisos para iniciar servicio GPS",
-                                        e,
-                                        mapOf(
-                                            "movil" to movil,
-                                            "android_version" to Build.VERSION.SDK_INT,
-                                            "context" to "checkAndRestartLocationService",
-                                            "reason" to restartReason
-                                        ),
-                                        "SERVICE_START_FAILED"
-                                    )
-                                    
-                                    result.success(mapOf<String, Any>(
-                                        "status" to "error",
-                                        "message" to "Sin permisos para iniciar servicio GPS",
-                                        "restarted" to false,
-                                        "error" to "SecurityException"
-                                    ))
-                                    return@setMethodCallHandler
-                                    
-                                } catch (e: IllegalStateException) {
-                                    Log.e("MainActivity", "❌ IllegalStateException iniciando servicio GPS", e)
-                                    com.riogas.appmovil.CriticalLogger.logCritical(
-                                        "MainActivity",
-                                        "ERROR: Servicio GPS bloqueado por background restrictions",
-                                        e,
-                                        mapOf(
-                                            "movil" to movil,
-                                            "android_version" to Build.VERSION.SDK_INT,
-                                            "context" to "checkAndRestartLocationService",
-                                            "reason" to restartReason
-                                        ),
-                                        "SERVICE_START_FAILED"
-                                    )
-                                    
-                                    result.success(mapOf<String, Any>(
-                                        "status" to "error",
-                                        "message" to "Servicio bloqueado por restricciones de Android",
-                                        "restarted" to false,
-                                        "error" to "IllegalStateException"
-                                    ))
-                                    return@setMethodCallHandler
-                                    
-                                } catch (e: Exception) {
-                                    Log.e("MainActivity", "❌ Error desconocido iniciando servicio GPS", e)
-                                    com.riogas.appmovil.CriticalLogger.logCritical(
-                                        "MainActivity",
-                                        "ERROR: Fallo desconocido iniciando servicio GPS",
-                                        e,
-                                        mapOf(
-                                            "movil" to movil,
-                                            "android_version" to Build.VERSION.SDK_INT,
-                                            "error_type" to e.javaClass.simpleName,
-                                            "context" to "checkAndRestartLocationService",
-                                            "reason" to restartReason
-                                        ),
-                                        "SERVICE_START_FAILED"
-                                    )
-                                    
-                                    result.success(mapOf<String, Any>(
-                                        "status" to "error",
-                                        "message" to "Error iniciando servicio GPS: ${e.message}",
-                                        "restarted" to false,
-                                        "error" to e.javaClass.simpleName
-                                    ))
-                                    return@setMethodCallHandler
-                                }
-                                
-                                // Log del evento de reinicio con razón específica
-                                LocationLogger.logEvent(this, "SERVICE_AUTO_RESTARTED", mapOf<String, String>(
-                                    "usuario" to (usuario ?: ""),
-                                    "deviceId" to (deviceId ?: ""),
-                                    "movil" to (movil ?: ""),
-                                    "escenario" to (escenario ?: ""),
-                                    "interval" to intervalMinutes.toString(),
-                                    "reason" to restartReason,
-                                    "wasServiceRunning" to isServiceRunning.toString(),
-                                    "hadAlarmScheduled" to hasAlarmScheduled.toString(),
-                                    "hadParamMismatch" to paramsChanged.toString()
-                                ))
-                                
-                                com.riogas.appmovil.DebugLogger.i("MainActivity", "Servicio reiniciado exitosamente", mapOf(
-                                    "movil" to movil,
-                                    "interval" to intervalMinutes,
-                                    "wasServiceRunning" to isServiceRunning,
-                                    "hadAlarmScheduled" to hasAlarmScheduled,
-                                    "paramsChanged" to paramsChanged,
-                                    "restartReason" to restartReason,
-                                    "android_version" to Build.VERSION.SDK_INT
-                                ))
-                                
-                                val restartMessage = when (restartReason) {
-                                    "movil_param_mismatch" -> "Servicio reiniciado: parámetro movil corregido"
-                                    "service_dead" -> "Servicio reiniciado: estaba detenido"
-                                    "alarm_cancelled" -> "Servicio reiniciado: alarma cancelada"
-                                    "both_dead" -> "Servicio reiniciado: completamente detenido"
-                                    else -> "Servicio reiniciado automáticamente"
-                                }
-                                
-                                Log.i("MainActivity", "✅ $restartMessage (movil=$movil)")
-                                result.success(mapOf<String, Any>(
-                                    "status" to "restarted",
-                                    "message" to restartMessage,
-                                    "restarted" to true,
-                                    "movil" to movil,
-                                    "interval" to intervalMinutes,
-                                    "movil_validated" to true,
-                                    "restart_reason" to restartReason
-                                ))
-                            } else {
-                                Log.d("MainActivity", "✅ Servicio activo y funcionando correctamente con movil validado: $movil")
-                                com.riogas.appmovil.DebugLogger.i("MainActivity", "Servicio verificado: activo y funcionando", mapOf(
-                                    "movil" to movil,
-                                    "isServiceRunning" to isServiceRunning,
-                                    "hasAlarmScheduled" to hasAlarmScheduled,
-                                    "movil_validated" to true
-                                ))
-                                result.success(mapOf<String, Any>(
-                                    "status" to "active",
-                                    "message" to "Servicio activo con parámetros validados",
-                                    "restarted" to false,
-                                    "movil" to movil,
-                                    "interval" to intervalMinutes,
-                                    "movil_validated" to true
-                                ))
-                            }
-                            
-                        } catch (e: Exception) {
+                            // Arranque idempotente del tracking nuevo: si ya corre, actualiza params.
+                            // Persistir intervalo (segundos) para el FGS continuo.
+                            prefs.edit().putInt("tracking_interval_seconds", (intervalMinutes * 60).coerceAtLeast(1)).apply()
+
+                            val wasRunning = com.riogas.appmovil.tracking.LocationTrackingService.isRunning
+                            com.riogas.appmovil.tracking.LocationTrackingService.start(this, movil, escenario ?: "0", usuario ?: "", deviceId ?: "")
+
+                            LocationLogger.logEvent(this, "SERVICE_HEALTH_CHECK", mapOf<String, String>(
+                                "usuario" to (usuario ?: ""),
+                                "deviceId" to (deviceId ?: ""),
+                                "movil" to movil,
+                                "escenario" to (escenario ?: ""),
+                                "interval" to intervalMinutes.toString(),
+                                "wasRunning" to wasRunning.toString(),
+                                "paramsChanged" to paramsChanged.toString()
+                            ))
+
+                            Log.i("MainActivity", "✅ Tracking asegurado (wasRunning=$wasRunning, movil=$movil)")
+                            result.success(mapOf<String, Any>(
+                                "status" to if (wasRunning) "active" else "restarted",
+                                "message" to if (wasRunning) "Servicio activo" else "Servicio iniciado",
+                                "restarted" to !wasRunning,
+                                "movil" to movil,
+                                "interval" to intervalMinutes,
+                                "movil_validated" to true
+                            ))
+
+                                                } catch (e: Exception) {
                             Log.e("MainActivity", "❌ Error verificando/reiniciando servicio: ${e.message}", e)
                             result.error("ERROR", "Error al verificar servicio: ${e.message}", null)
                         }
@@ -1080,26 +838,16 @@
             
             Log.d("MainActivity", "🔄 Reiniciando servicio desde foreground: movil=$movil, interval=$intervalMinutes")
             
-            // Iniciar ForegroundService DESDE FOREGROUND (esto es lo que permite Android 12+)
-            val intent = Intent(this, ForegroundLocationService::class.java).apply {
-                putExtra("movil", movil)
-                putExtra("escenario", escenario)
-                putExtra("usuario", usuario)
-                putExtra("deviceId", deviceId)
-                putExtra("intervalMinutes", intervalMinutes)
-                putExtra("EXECUTE_GPS", false) // Modo foreground (programar alarmas)
-            }
-            
+            // Persistir intervalo (segundos) y arrancar el FGS nuevo desde foreground
+            getSharedPreferences("config", Context.MODE_PRIVATE).edit()
+                .putInt("tracking_interval_seconds", (intervalMinutes * 60).toInt().coerceAtLeast(1)).apply()
+
             // 🆕 try-catch para capturar errores al iniciar servicio
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(intent)
-                } else {
-                    startService(intent)
-                }
-                
-                Log.d("MainActivity", "✅ Servicio reiniciado desde foreground - Sistema híbrido activado")
-                
+                com.riogas.appmovil.tracking.LocationTrackingService.start(this, movil, escenario, usuario, deviceId)
+
+                Log.d("MainActivity", "✅ LocationTrackingService reiniciado desde foreground")
+
             } catch (e: SecurityException) {
                 Log.e("MainActivity", "❌ SecurityException reiniciando servicio desde foreground", e)
                 com.riogas.appmovil.CriticalLogger.logCritical(
@@ -1175,9 +923,9 @@
             com.riogas.appmovil.CriticalLogger.init(applicationContext)
             Log.d("MainActivity", "✅ CriticalLogger inicializado (SIEMPRE activo)")
             
-            // 🆕 Programar WATCHDOG con AlarmManager (cada 30 segundos)
-            com.riogas.appmovil.CriticalLogAlarmReceiver.schedule(applicationContext)
-            Log.d("MainActivity", "✅ CriticalLog AlarmManager programado (cada 30 seg)")
+            // Subida periódica de logs críticos (WorkManager, cada 15 min; sin alarmas ni watchdog)
+            com.riogas.appmovil.CriticalLogUploadWorker.schedule(applicationContext)
+            Log.d("MainActivity", "✅ CriticalLogUploadWorker programado (cada 15 min)")
             
             // 🔄 REINICIAR SERVICIO DESDE FOREGROUND (Android 12+ compatible)
             restartLocationServiceFromForeground()

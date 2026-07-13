@@ -33,17 +33,17 @@ class CriticalLogUploadWorker(
         private const val N8N_WEBHOOK_URL = "https://n8n.riogas.com.uy/webhook/debug-delivery"
         
         /**
-         * Programa el trabajo periódico para enviar logs críticos cada 30 segundos
-         * 🆕 WATCHDOG: Se ejecuta cada 30 segundos para verificar servicios mutuamente
+         * Programa el trabajo periódico para enviar logs críticos cada 15 minutos.
+         * (Task 7 / B.1: ya NO hace watchdog; solo sube logs críticos con WorkManager.)
          */
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
-            
+
             val uploadRequest = PeriodicWorkRequestBuilder<CriticalLogUploadWorker>(
-                30, TimeUnit.SECONDS, // 🆕 Cambiado de 5 minutos a 30 segundos
-                15, TimeUnit.SECONDS // Ventana de flexibilidad
+                15, TimeUnit.MINUTES, // 🔧 Task 7: 30s → 15 min (sin watchdog)
+                5, TimeUnit.MINUTES // Ventana de flexibilidad
             )
                 .setConstraints(constraints)
                 .setBackoffCriteria(
@@ -60,7 +60,7 @@ class CriticalLogUploadWorker(
                 uploadRequest
             )
             
-            Log.d(TAG, "✅ CriticalLogUploadWorker programado (cada 30 segundos)")
+            Log.d(TAG, "✅ CriticalLogUploadWorker programado (cada 15 minutos)")
         }
         
         /**
@@ -73,117 +73,8 @@ class CriticalLogUploadWorker(
     }
 
     override fun doWork(): Result {
-        Log.d(TAG, "🚀 [WATCHDOG] CriticalLogWorker ejecutándose...")
-        
-        // 🆕 PASO 1: WATCHDOG - Verificar que GPS service esté activo
-        val isGPSRunning = com.riogas.appmovil.ServiceWatchdog.isGPSServiceRunning(applicationContext)
-        val isAlarmScheduled = com.riogas.appmovil.ServiceWatchdog.isAlarmScheduled(applicationContext)
-        
-        Log.d(TAG, "📊 [WATCHDOG] Estado GPS: ServiceRunning=$isGPSRunning, AlarmScheduled=$isAlarmScheduled")
-        
-        if (!isGPSRunning || !isAlarmScheduled) {
-            Log.w(TAG, "⚠️ [WATCHDOG] GPS service MUERTO detectado - Intentando reiniciar...")
-            
-            // Usar runBlocking porque estamos en un Worker (no en coroutine)
-            val restarted = runBlocking {
-                com.riogas.appmovil.ServiceWatchdog.restartGPSService(applicationContext)
-            }
-            
-            if (restarted) {
-                Log.i(TAG, "✅ [WATCHDOG] GPS service reiniciado exitosamente")
-            } else {
-                Log.e(TAG, "❌ [WATCHDOG] No se pudo reiniciar GPS service localmente")
-                
-                // 🆕 NUEVO: Si reinicio local falla, enviar comando FCM remoto
-                try {
-                    val prefs = applicationContext.getSharedPreferences("config", Context.MODE_PRIVATE)
-                    val movil = prefs.getString("last_movil", "") ?: ""
-                    val escenario = prefs.getString("last_escenario", "0") ?: "0"
-                    val escenarioId = escenario.toIntOrNull() ?: 0
-                    
-                    if (movil.isNotEmpty() && escenarioId > 0) {
-                        Log.i(TAG, "🚨 [WATCHDOG] Reinicio local falló, enviando comando FCM remoto...")
-                        
-                        CriticalLogger.logCritical(
-                            TAG,
-                            "WATCHDOG: Reinicio local falló - Solicitando reinicio remoto via FCM",
-                            mapOf(
-                                "movil" to movil,
-                                "escenario" to escenario,
-                                "action" to "restart_gps_service",
-                                "trigger" to "local_restart_failed",
-                                "context" to "CriticalLogUploadWorker"
-                            ),
-                            "WATCHDOG_LOCAL_RESTART_FAILED"
-                        )
-                        
-                        FcmApiHelper.restartGpsService(
-                            applicationContext,
-                            escenarioId,
-                            movil,
-                            onSuccess = { response ->
-                                Log.i(TAG, "✅ [WATCHDOG] Comando FCM enviado exitosamente: $response")
-                                CriticalLogger.logCritical(
-                                    TAG,
-                                    "WATCHDOG: Comando FCM restart_gps_service enviado - esperando respuesta remota",
-                                    mapOf(
-                                        "movil" to movil,
-                                        "escenario" to escenario,
-                                        "action" to "restart_gps_service",
-                                        "trigger" to "local_restart_failed",
-                                        "response" to response
-                                    ),
-                                    "WATCHDOG_FCM_RESTART_SENT"
-                                )
-                            },
-                            onError = { error ->
-                                Log.e(TAG, "❌ [WATCHDOG] Error enviando comando FCM restart: $error")
-                                CriticalLogger.logCritical(
-                                    TAG,
-                                    "WATCHDOG ERROR: Fallo enviando comando FCM restart remoto",
-                                    mapOf(
-                                        "movil" to movil,
-                                        "escenario" to escenario,
-                                        "error" to error,
-                                        "action" to "restart_gps_service",
-                                        "trigger" to "local_restart_failed"
-                                    ),
-                                    "WATCHDOG_FCM_RESTART_ERROR"
-                                )
-                            }
-                        )
-                    } else {
-                        Log.w(TAG, "⚠️ [WATCHDOG] No se puede enviar comando FCM: movil o escenario inválidos")
-                        CriticalLogger.logCritical(
-                            TAG,
-                            "WATCHDOG ERROR: No se pudo enviar comando FCM - datos insuficientes",
-                            mapOf(
-                                "movil" to movil,
-                                "escenario" to escenario,
-                                "escenarioId" to escenarioId.toString(),
-                                "reason" to "invalid_movil_or_escenario"
-                            ),
-                            "WATCHDOG_FCM_INVALID_DATA"
-                        )
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ [WATCHDOG] Excepción al invocar FCM API: ${e.message}", e)
-                    CriticalLogger.logCritical(
-                        TAG,
-                        "WATCHDOG EXCEPTION: Error crítico invocando FCM API desde CriticalLogWorker",
-                        e,
-                        mapOf(
-                            "error_type" to e.javaClass.simpleName,
-                            "error_message" to (e.message ?: "Sin mensaje")
-                        ),
-                        "WATCHDOG_FCM_EXCEPTION"
-                    )
-                }
-            }
-        } else {
-            Log.d(TAG, "✅ [WATCHDOG] GPS service activo y saludable")
-        }
-        
+        Log.d(TAG, "🚀 CriticalLogUploadWorker ejecutándose (subida de logs)...")
+
         // 🆕 PASO 2: Verificar si hay logs críticos para enviar
         val logCount = CriticalLogger.getLogCount()
         

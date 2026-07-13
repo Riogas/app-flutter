@@ -88,24 +88,9 @@
         </activity>
 
         <service
-            android:name=".ForegroundLocationService"
-            android:foregroundServiceType="location"
-            android:exported="false" />
-
-        <service
             android:name="com.riogas.appmovil.tracking.LocationTrackingService"
             android:foregroundServiceType="location"
             android:exported="false" />
-
-        <receiver
-            android:name=".LocationReceiver"
-            android:exported="true" />
-
-        <!-- 🆕 WATCHDOG CON ALARMMANAGER: Verificación cada 30 segundos -->
-        <receiver
-            android:name="com.riogas.appmovil.CriticalLogAlarmReceiver"
-            android:exported="false"
-            android:enabled="true" />
 
         <!-- 🆕 Receiver para reiniciar servicio después de reboot o cierre de app -->
         <receiver

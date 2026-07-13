@@ -90,16 +90,12 @@ class BootReceiver : BroadcastReceiver() {
         ))
         
         try {
-            // Reprogramar el AlarmManager
-            LocationHelper.scheduleLocationAlarm(
-                context = context,
-                intervalMinutes = intervalMinutes,
-                movil = movil,
-                escenario = escenario,
-                usuario = usuario,
-                deviceId = deviceId
-            )
-            
+            // Persistir intervalo (segundos) y arrancar el tracking continuo nuevo.
+            // El arranque de FGS location está permitido desde el broadcast BOOT_COMPLETED.
+            context.getSharedPreferences("config", Context.MODE_PRIVATE).edit()
+                .putInt("tracking_interval_seconds", (intervalMinutes * 60).toInt().coerceAtLeast(1)).apply()
+            com.riogas.appmovil.tracking.LocationTrackingService.start(context, movil, escenario, usuario, deviceId)
+
             Log.i(TAG, "✅ Servicio reprogramado exitosamente después de $action")
             
             LocationLogger.logEvent(context, "SERVICE_RESTART_SUCCESS", mapOf(
