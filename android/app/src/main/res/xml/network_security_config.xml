@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- ✅ Configuración para PRODUCCIÓN (SSL validado) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">www.riogas.uy</domain>
+        <domain includeSubdomains="true">riogas.uy</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- 🔧 Configuración para DESARROLLO (aceptar certificados) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">sgm.riogas.com.uy</domain>
+        <trust-anchors>
+            <!-- Confiar en certificados del sistema -->
+            <certificates src="system" />
+            <!-- Confiar en certificados personalizados/autofirmados -->
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- ⚠️ Configuración base (más restrictiva) -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

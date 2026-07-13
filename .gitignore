@@ -40,21 +40,23 @@ windows/
 macos/
 linux/
 ios/
-android/
-.dart_tool/flutter_build/
 
-# Android bundle
+# Android: se versiona el código fuente; NO los artefactos de build
+android/.gradle/
+android/.kotlin/
+android/app/build/
+android/build/
+android/local.properties
+android/key.properties
+android/app/.cxx/
+android/captures/
+
+.dart_tool/
+
+# Build
 /build/
 /captures/
-/android/key.properties
-/app/build/
-/app/
 
 # Web
 /web/
 /lib/generated_plugin_registrant.dart
-```
-
-### 3.2.2. Configuración de Firebase
-
-

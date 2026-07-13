@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "581291310412",
+    "firebase_url": "https://riogas-pedidos-default-rtdb.firebaseio.com",
+    "project_id": "riogas-pedidos",
+    "storage_bucket": "riogas-pedidos.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:581291310412:android:9ab960ac4b55a1f71023e9",
+        "android_client_info": {
+          "package_name": "com.example.moveit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBM0Hn6fXIrD2r42q0avKD2gZ5kzqaxaUM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
