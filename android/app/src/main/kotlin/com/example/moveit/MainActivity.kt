@@ -653,7 +653,6 @@
                                 putString("last_escenario", escenario)
                                 putString("last_usuario", usuario)
                                 putString("last_deviceId", deviceId)
-                                putFloat("last_interval", intervalMinutes.toFloat())
                                 apply()
                             }
                             
@@ -832,20 +831,16 @@
             val escenario = prefs.getString("last_escenario", "") ?: ""
             var usuario = prefs.getString("last_usuario", "") ?: ""
             val deviceId = prefs.getString("last_deviceId", "") ?: ""
-            val intervalMinutes = prefs.getFloat("last_interval", 0.5f).toDouble()
-            
+            val intervalSeconds = prefs.getInt("tracking_interval_seconds", 12)
+
             // 👤 Si usuario está vacío, intentar recuperarlo desde FlutterSharedPreferences
             if (usuario.isEmpty()) {
                 val flutterPrefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
                 usuario = flutterPrefs.getString("flutter.username", "") ?: ""
                 Log.d("MainActivity", "👤 Usuario recuperado desde FlutterSharedPreferences: $usuario")
             }
-            
-            Log.d("MainActivity", "🔄 Reiniciando servicio desde foreground: movil=$movil, interval=$intervalMinutes")
-            
-            // Persistir intervalo (segundos) y arrancar el FGS nuevo desde foreground
-            getSharedPreferences("config", Context.MODE_PRIVATE).edit()
-                .putInt("tracking_interval_seconds", (intervalMinutes * 60).toInt().coerceAtLeast(1)).apply()
+
+            Log.d("MainActivity", "🔄 Reiniciando servicio desde foreground: movil=$movil, interval=${intervalSeconds}s")
 
             // 🆕 try-catch para capturar errores al iniciar servicio
             try {
@@ -906,7 +901,7 @@
                 "escenario" to escenario,
                 "usuario" to usuario,
                 "deviceId" to deviceId,
-                "interval" to intervalMinutes.toString()
+                "interval" to "${intervalSeconds}s"
             ))
         }
 

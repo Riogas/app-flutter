@@ -216,7 +216,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
         val usuario = prefs.getString("last_usuario", "") ?: ""
         val isDisabled = ServiceStatusFlags.isServiceDisabled(this)
         val isPaused = ServiceStatusFlags.isServicePaused(this)
-        val intervalMinutes = prefs.getInt("last_intervalMinutes", 5)
+        val intervalSeconds = prefs.getInt("tracking_interval_seconds", 12)
 
         CriticalLogger.logCritical(
             TAG,
@@ -227,7 +227,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
                 "usuario" to usuario,
                 "service_disabled_flag" to isDisabled.toString(),
                 "service_paused_flag" to isPaused.toString(),
-                "interval_minutes" to intervalMinutes,
+                "interval_seconds" to intervalSeconds,
                 "android_version" to Build.VERSION.SDK_INT,
                 "manufacturer" to Build.MANUFACTURER,
                 "model" to Build.MODEL,
