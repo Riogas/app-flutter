@@ -1,6 +1,7 @@
 plugins {
     id "com.android.application"
     id "kotlin-android"
+    id "kotlin-kapt"
     id "dev.flutter.flutter-gradle-plugin"
     id "com.google.gms.google-services"
 }
@@ -95,5 +96,15 @@ dependencies {
     // � Firebase Auth y Firestore para validación de sesión desde Kotlin
     implementation 'com.google.firebase:firebase-auth:22.3.0'
     implementation 'com.google.firebase:firebase-firestore:24.9.1'
+
+    // 🆕 Room (cola durable de fixes GPS) + coroutines explícitas
+    // Nota: 2.6.1 (versión pedida en el plan) falla en kapt porque su kotlinx-metadata-jvm
+    // embebido solo soporta metadata Kotlin <= 2.0.0, y el proyecto aplica Kotlin 2.1.0
+    // (settings.gradle). Se sube a 2.7.1 (misma API @Entity/@Dao/@Database) que sí soporta
+    // metadata 2.1. Ver Deviations en el reporte.
+    implementation "androidx.room:room-runtime:2.7.1"
+    implementation "androidx.room:room-ktx:2.7.1"
+    kapt "androidx.room:room-compiler:2.7.1"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
 }
 
