@@ -432,33 +432,67 @@ class PersistentStreamManager {
   /// Carga los catálogos SubEstado (get() único + cache Hive con TTL 24h).
   /// Sirve el cache al instante y refresca en background si venció el TTL
   /// o no había cache. Si Firestore falla, se sigue sirviendo el cache.
+  /// Nunca lanza: un fallo de Hive o de Firestore se loguea y como mucho
+  /// deja el notifier con su valor previo (la app siempre arranca/loguea).
   Future<void> _loadCatalog({
     required String cacheKey,
     required Future<List<Map<String, dynamic>>> Function() fetch,
+    required List<Map<String, dynamic>> Function() current,
     required void Function(List<Map<String, dynamic>>) apply,
   }) async {
-    final box = await Hive.openBox('catalogCacheBox');
-    final sessionBox = Hive.box('sessionBox');
-    final escenario = sessionBox.get('escenario', defaultValue: '0');
-    final key = '$cacheKey-$escenario';
+    dynamic box;
+    dynamic cached;
+    var key = cacheKey;
 
-    // 1) servir cache al instante si existe
-    final cached = box.get(key);
-    if (cached != null) {
-      apply(List<Map<String, dynamic>>.from(
-          (cached['data'] as List).map((e) => Map<String, dynamic>.from(e))));
+    // 0) abrir Hive de forma defensiva; si falla, seguimos sin cache
+    try {
+      box = await Hive.openBox('catalogCacheBox');
+      final sessionBox = Hive.box('sessionBox');
+      final escenario = sessionBox.get('escenario', defaultValue: '0');
+      key = '$cacheKey-$escenario';
+
+      // 1) servir cache al instante si existe (nunca pisar datos ya
+      // presentes con un cache vacío)
+      cached = box.get(key);
+      if (cached != null) {
+        final cachedData = List<Map<String, dynamic>>.from(
+            (cached['data'] as List)
+                .map((e) => Map<String, dynamic>.from(e)));
+        if (cachedData.isNotEmpty || current().isEmpty) {
+          apply(cachedData);
+        }
+      }
+    } catch (e) {
+      print(
+          '⚠️ [CatalogCache] error accediendo a Hive para $cacheKey (se intenta fetch directo sin cache): $e');
     }
 
     // 2) refrescar desde server solo si venció el TTL o no había cache
-    final ts = cached?['ts'] as int?;
+    final ts = cached is Map ? cached['ts'] as int? : null;
     final expired = ts == null ||
         DateTime.now().millisecondsSinceEpoch - ts > _catalogTtlHours * 3600000;
     if (expired) {
       try {
         final fresh = await fetch();
-        apply(fresh);
-        await box
-            .put(key, {'data': fresh, 'ts': DateTime.now().millisecondsSinceEpoch});
+        // No pisar datos ya presentes (cache o notifier) con un fetch vacío;
+        // [] solo es un estado válido si no había nada previo.
+        if (fresh.isNotEmpty || current().isEmpty) {
+          apply(fresh);
+          if (box != null) {
+            try {
+              await box.put(key, {
+                'data': fresh,
+                'ts': DateTime.now().millisecondsSinceEpoch,
+              });
+            } catch (e) {
+              print(
+                  '⚠️ [CatalogCache] no se pudo persistir $key en cache (se sigue sirviendo el dato en memoria): $e');
+            }
+          }
+        } else {
+          print(
+              '⚠️ [CatalogCache] fetch $key devolvió vacío con datos previos existentes, se conserva el dato actual');
+        }
       } catch (e) {
         print('⚠️ [CatalogCache] refresh $key falló (sirviendo cache): $e');
       }
@@ -467,21 +501,34 @@ class PersistentStreamManager {
 
   /// Carga los catálogos SubEstados/SubEstadoMoviles/SubEstadoFinalizacionPedidos
   /// (reemplaza los 3 listeners persistentes por get() + cache Hive TTL 24h).
+  /// Nunca lanza: nunca debe impedir que `initialize()` (y por lo tanto el
+  /// login) termine.
   Future<void> _loadSubEstadosCatalogos() async {
-    await _loadCatalog(
-      cacheKey: 'subEstadoMoviles',
-      fetch: _firebaseService.getSubEstadoMovilesOnce,
-      apply: (list) {
-        // Mismo origen de datos para ambos notifiers (elimina la doble lectura)
-        _subEstadosNotifier.value = list;
-        _subEstadoMovilesNotifier.value = list;
-      },
-    );
-    await _loadCatalog(
-      cacheKey: 'subEstadoFinalizacionPedidos',
-      fetch: _firebaseService.getSubEstadoFinalizacionPedidosOnce,
-      apply: (list) => _subEstadoFinalizacionPedidosNotifier.value = list,
-    );
+    try {
+      await _loadCatalog(
+        cacheKey: 'subEstadoMoviles',
+        fetch: _firebaseService.getSubEstadoMovilesOnce,
+        current: () => _subEstadoMovilesNotifier.value,
+        apply: (list) {
+          // Mismo origen de datos para ambos notifiers (elimina la doble lectura)
+          _subEstadosNotifier.value = list;
+          _subEstadoMovilesNotifier.value = list;
+        },
+      );
+    } catch (e) {
+      print('❌ [PersistentStreamManager] Error cargando catálogo subEstadoMoviles: $e');
+    }
+
+    try {
+      await _loadCatalog(
+        cacheKey: 'subEstadoFinalizacionPedidos',
+        fetch: _firebaseService.getSubEstadoFinalizacionPedidosOnce,
+        current: () => _subEstadoFinalizacionPedidosNotifier.value,
+        apply: (list) => _subEstadoFinalizacionPedidosNotifier.value = list,
+      );
+    } catch (e) {
+      print('❌ [PersistentStreamManager] Error cargando catálogo subEstadoFinalizacionPedidos: $e');
+    }
   }
 
   // --- Gestión manual de listeners por widget ---
