@@ -190,7 +190,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
             }
             
             val intervalMinutes = prefs.getInt("last_intervalMinutes", 5)
-            val isDisabled = prefs.getBoolean("service_disabled", false)
+            val isDisabled = ServiceStatusFlags.isServiceDisabled(this)
             
             // 🆕 RESPETAR AMBIENTE: Leer isDevelopment y calcular URL correcta
             val isDevelopment = flutterPrefs.getBoolean("flutter.isDevelopment", false)
@@ -214,7 +214,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
                     "usuario" to usuario,
                     "deviceId" to deviceId,
                     "interval" to intervalMinutes,
-                    "service_disabled" to isDisabled.toString(),
+                    "service_disabled_flag" to isDisabled.toString(),
                     "ambiente" to if (isDevelopment) "DESARROLLO" else "PRODUCCIÓN",
                     "url" to correctUrl,
                     "step" to "1_validating_data",
@@ -243,15 +243,15 @@ class FcmPushReceiver : FirebaseMessagingService() {
             }
 
             // 1️⃣ Limpiar estados Y re-habilitar watchdog
+            ServiceStatusFlags.setServiceDisabled(this, false, "FCM restart_gps_service")
+            ServiceStatusFlags.setWatchdogDisabled(this, false, "FCM restart_gps_service")  // ✅ Re-habilitar watchdog
+            ServiceStatusFlags.setServicePaused(this, false, "FCM restart_gps_service")
             prefs.edit().apply {
-                putBoolean("service_disabled", false)
-                putBoolean("watchdog_disabled", false)  // ✅ Re-habilitar watchdog
                 remove("stop_reason")
                 remove("stop_timestamp")
                 remove("auto_stopped")
                 remove("stopped_by_user")
                 remove("stopped_from_device")
-                putBoolean("service_paused", false)
                 remove("resume_time")
                 remove("pause_minutes")
             }.apply()
@@ -264,8 +264,8 @@ class FcmPushReceiver : FirebaseMessagingService() {
                     "movil" to movil,
                     "step" to "2_states_cleared",
                     "trigger" to "fcm_remote_command",
-                    "service_disabled" to "false",
-                    "watchdog_disabled" to "false",
+                    "service_disabled_flag" to "false",
+                    "watchdog_disabled_flag" to "false",
                     "note" to "Watchdog ahora protegerá el servicio automáticamente"
                 ),
                 "FCM_RESTART_GPS_STATES_CLEARED"
@@ -438,10 +438,8 @@ class FcmPushReceiver : FirebaseMessagingService() {
             stopService(serviceIntent)
 
             // Marcar servicio como deshabilitado Y deshabilitar watchdog
-            prefs.edit().apply {
-                putBoolean("service_disabled", true)
-                putBoolean("watchdog_disabled", true)  // 🚫 Watchdog no reiniciará
-            }.apply()
+            ServiceStatusFlags.setServiceDisabled(this, true, "FCM stop_gps_service")
+            ServiceStatusFlags.setWatchdogDisabled(this, true, "FCM stop_gps_service")  // 🚫 Watchdog no reiniciará
 
             Log.i(TAG, "✅ [FCM] GPS service detenido exitosamente + Watchdog deshabilitado")
             CriticalLogger.logCritical(
@@ -451,8 +449,8 @@ class FcmPushReceiver : FirebaseMessagingService() {
                     "movil" to movil,
                     "trigger" to "fcm_remote_command",
                     "action" to "stop_gps_service",
-                    "service_disabled" to "true",
-                    "watchdog_disabled" to "true",
+                    "service_disabled_flag" to "true",
+                    "watchdog_disabled_flag" to "true",
                     "note" to "Solo restart_gps_service puede volver a iniciarlo"
                 ),
                 "FCM_STOP_GPS_SUCCESS"
@@ -546,21 +544,21 @@ class FcmPushReceiver : FirebaseMessagingService() {
 
         // 🚨 PASO 1: LIMPIAR FLAGS DE BLOQUEO (service_disabled, watchdog_disabled)
         Log.i(TAG, "🧹 [FORCE_GPS] Limpiando flags de bloqueo...")
+        ServiceStatusFlags.setServiceDisabled(this, false, "FCM force_gps_execution")
+        ServiceStatusFlags.setWatchdogDisabled(this, false, "FCM force_gps_execution")
         prefs.edit().apply {
-            putBoolean("service_disabled", false)
-            putBoolean("watchdog_disabled", false)
             remove("stop_reason")
             remove("stop_timestamp")
             remove("auto_stopped")
         }.apply()
         Log.i(TAG, "✅ [FORCE_GPS] Flags limpiados: service_disabled=false, watchdog_disabled=false")
-        
+
         CriticalLogger.logCritical(
             TAG,
             "FORCE_GPS: Flags de bloqueo limpiados",
             mapOf(
-                "service_disabled" to "false",
-                "watchdog_disabled" to "false",
+                "service_disabled_flag" to "false",
+                "watchdog_disabled_flag" to "false",
                 "movil" to movil,
                 "trigger" to "fcm_force_gps_execution"
             ),
@@ -810,8 +808,8 @@ class FcmPushReceiver : FirebaseMessagingService() {
         val movil = prefs.getString("last_movil", "unknown") ?: "unknown"
         val escenario = prefs.getString("last_escenario", "") ?: ""
         val usuario = prefs.getString("last_usuario", "") ?: ""
-        val isDisabled = prefs.getBoolean("service_disabled", false)
-        val isPaused = prefs.getBoolean("service_paused", false)
+        val isDisabled = ServiceStatusFlags.isServiceDisabled(this)
+        val isPaused = ServiceStatusFlags.isServicePaused(this)
         val intervalMinutes = prefs.getInt("last_intervalMinutes", 5)
 
         CriticalLogger.logCritical(
@@ -821,8 +819,8 @@ class FcmPushReceiver : FirebaseMessagingService() {
                 "movil" to movil,
                 "escenario" to escenario,
                 "usuario" to usuario,
-                "service_disabled" to isDisabled.toString(),
-                "service_paused" to isPaused.toString(),
+                "service_disabled_flag" to isDisabled.toString(),
+                "service_paused_flag" to isPaused.toString(),
                 "interval_minutes" to intervalMinutes,
                 "android_version" to Build.VERSION.SDK_INT,
                 "manufacturer" to Build.MANUFACTURER,
@@ -928,26 +926,26 @@ class FcmPushReceiver : FirebaseMessagingService() {
             }
             
             // 4️⃣ Marcar servicio como deshabilitado Y deshabilitar watchdog
+            ServiceStatusFlags.setServiceDisabled(this, true, "FCM remote logout")
+            ServiceStatusFlags.setWatchdogDisabled(this, true, "FCM remote logout")  // 🚫 Watchdog no reiniciará
             prefs.edit().apply {
-                putBoolean("service_disabled", true)
-                putBoolean("watchdog_disabled", true)  // 🚫 Watchdog no reiniciará
                 putString("stop_reason", "FCM remote logout")
                 putLong("stop_timestamp", System.currentTimeMillis())
                 putBoolean("auto_stopped", false)
                 putBoolean("stopped_by_user", true)
                 putBoolean("stopped_from_device", false)
             }.apply()
-            
+
             Log.i(TAG, "🚫 [FCM] Servicios deshabilitados + Watchdog deshabilitado")
-            
+
             CriticalLogger.logCritical(
                 TAG,
                 "FCM: Servicios deshabilitados por logout remoto",
                 mapOf(
                     "movil" to movil,
                     "step" to "3_disable_services",
-                    "service_disabled" to "true",
-                    "watchdog_disabled" to "true"
+                    "service_disabled_flag" to "true",
+                    "watchdog_disabled_flag" to "true"
                 ),
                 "FCM_LOGOUT_SERVICES_DISABLED"
             )

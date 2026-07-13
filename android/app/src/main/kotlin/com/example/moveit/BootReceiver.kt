@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.riogas.appmovil.ServiceStatusFlags
 
 /**
  * BootReceiver - Se activa cuando el dispositivo reinicia
@@ -43,7 +44,7 @@ class BootReceiver : BroadcastReceiver() {
         
         // Verificar si el servicio está deshabilitado
         val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
-        val isDisabled = prefs.getBoolean("service_disabled", false)
+        val isDisabled = ServiceStatusFlags.isServiceDisabled(context)
         
         if (isDisabled) {
             val stopReason = prefs.getString("stop_reason", "Unknown")

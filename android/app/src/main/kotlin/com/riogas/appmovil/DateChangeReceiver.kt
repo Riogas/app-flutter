@@ -137,9 +137,9 @@ class DateChangeReceiver : BroadcastReceiver() {
             }
             
             // Limpiar config nativo
+            ServiceStatusFlags.setServiceDisabled(context, true, "AutoLogoutCambioDia")
+            ServiceStatusFlags.setWatchdogDisabled(context, true, "AutoLogoutCambioDia") // 🔥 CRÍTICO: Detener watchdog también
             prefs.edit().apply {
-                putBoolean("service_disabled", true)
-                putBoolean("watchdog_disabled", true) // 🔥 CRÍTICO: Detener watchdog también
                 putString("stop_reason", "AutoLogoutCambioDia")
                 putLong("stop_timestamp", System.currentTimeMillis())
                 apply()

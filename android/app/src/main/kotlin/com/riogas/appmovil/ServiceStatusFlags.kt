@@ -27,7 +27,80 @@ object ServiceStatusFlags {
     private const val KEY_LAST_CHECK_TIMESTAMP = "services_last_check_timestamp"
     private const val KEY_GPS_STATUS = "gps_service_status"
     private const val KEY_CRITICAL_LOG_STATUS = "critical_log_service_status"
-    
+    private const val KEY_SERVICE_DISABLED = "service_disabled"
+    private const val KEY_SERVICE_PAUSED = "service_paused"
+    private const val KEY_WATCHDOG_DISABLED = "watchdog_disabled"
+
+    /**
+     * Dueño único del flag de deshabilitación del servicio GPS.
+     * @return true si el servicio está deshabilitado (no debe ejecutar GPS)
+     */
+    @Synchronized
+    fun isServiceDisabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SERVICE_DISABLED, false)
+
+    /**
+     * Marca (o desmarca) el servicio GPS como deshabilitado de forma atómica.
+     * @param reason motivo descriptivo del cambio, para diagnóstico
+     */
+    @Synchronized
+    fun setServiceDisabled(context: Context, disabled: Boolean, reason: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_SERVICE_DISABLED, disabled)
+            .putString("service_disabled_reason", reason)
+            .putLong("service_disabled_ts", System.currentTimeMillis())
+            .commit() // commit síncrono a propósito: transición atómica visible entre procesos/hilos
+        Log.i(TAG, "service_disabled=$disabled reason=$reason")
+    }
+
+    /**
+     * Dueño único del flag de pausa temporal del servicio GPS.
+     * @return true si el servicio está pausado temporalmente
+     */
+    @Synchronized
+    fun isServicePaused(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SERVICE_PAUSED, false)
+
+    /**
+     * Marca (o desmarca) el servicio GPS como pausado de forma atómica.
+     * @param reason motivo descriptivo del cambio, para diagnóstico
+     */
+    @Synchronized
+    fun setServicePaused(context: Context, paused: Boolean, reason: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_SERVICE_PAUSED, paused)
+            .putString("service_paused_reason", reason)
+            .putLong("service_paused_ts", System.currentTimeMillis())
+            .commit() // commit síncrono a propósito: transición atómica visible entre procesos/hilos
+        Log.i(TAG, "service_paused=$paused reason=$reason")
+    }
+
+    /**
+     * Dueño único del flag de deshabilitación del watchdog (cierre de sesión FCM).
+     * @return true si el watchdog está deshabilitado
+     */
+    @Synchronized
+    fun isWatchdogDisabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_WATCHDOG_DISABLED, false)
+
+    /**
+     * Marca (o desmarca) el watchdog como deshabilitado de forma atómica.
+     * @param reason motivo descriptivo del cambio, para diagnóstico
+     */
+    @Synchronized
+    fun setWatchdogDisabled(context: Context, disabled: Boolean, reason: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_WATCHDOG_DISABLED, disabled)
+            .putString("watchdog_disabled_reason", reason)
+            .putLong("watchdog_disabled_ts", System.currentTimeMillis())
+            .commit() // commit síncrono a propósito: transición atómica visible entre procesos/hilos
+        Log.i(TAG, "watchdog_disabled=$disabled reason=$reason")
+    }
+
+
     /**
      * Marca que los servicios necesitan reiniciarse
      * @param needRestart true si algún servicio está apagado, false si todos están activos

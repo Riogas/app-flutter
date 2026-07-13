@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.riogas.appmovil.ServiceStatusFlags
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -120,8 +121,8 @@ class ForegroundLocationService : Service() {
         
         // Verificar si el servicio está deshabilitado
         val prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
-        val isDisabled = prefs.getBoolean("service_disabled", false)
-        
+        val isDisabled = ServiceStatusFlags.isServiceDisabled(this)
+
         if (isDisabled) {
             val stopReason = prefs.getString("stop_reason", "Unknown reason")
             val stopTimestamp = prefs.getLong("stop_timestamp", 0)
@@ -142,7 +143,7 @@ class ForegroundLocationService : Service() {
         }
         
         // Verificar si el servicio está pausado temporalmente
-        val isPaused = prefs.getBoolean("service_paused", false)
+        val isPaused = ServiceStatusFlags.isServicePaused(this)
         val resumeTime = prefs.getLong("resume_time", 0)
         val currentTime = System.currentTimeMillis()
         
@@ -157,8 +158,8 @@ class ForegroundLocationService : Service() {
             return START_NOT_STICKY
         } else if (isPaused && currentTime >= resumeTime) {
             // La pausa ha expirado, remover flag
+            ServiceStatusFlags.setServicePaused(this, false, "pausa expirada")
             prefs.edit().apply {
-                putBoolean("service_paused", false)
                 remove("resume_time")
                 remove("pause_minutes")
             }.apply()
@@ -484,9 +485,8 @@ class ForegroundLocationService : Service() {
         Log.w("LocationService-Foreground", "⚠️ Servicio destruido - Android lo mató o el usuario lo detuvo")
 
         // 🆕 Solo cancelar notificación si el servicio fue deshabilitado manualmente
-        val prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
-        val isDisabled = prefs.getBoolean("service_disabled", false)
-        
+        val isDisabled = ServiceStatusFlags.isServiceDisabled(this)
+
         if (isDisabled) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.cancel(1710)

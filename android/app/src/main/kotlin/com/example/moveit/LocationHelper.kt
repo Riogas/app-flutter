@@ -40,6 +40,7 @@ import com.google.android.gms.tasks.Task
 
 // 🆕 Sistema de logging condicional para diagnóstico
 import com.riogas.appmovil.DebugLogger
+import com.riogas.appmovil.ServiceStatusFlags
 
 // 🆕 FirebaseAuth y Firestore para validación de sesión robusta
 import com.google.firebase.auth.FirebaseAuth
@@ -624,15 +625,15 @@ object LocationHelper {
         val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
         
         // Verificar si el servicio estaba deshabilitado
-        val wasDisabled = prefs.getBoolean("service_disabled", false)
+        val wasDisabled = ServiceStatusFlags.isServiceDisabled(context)
         if (wasDisabled) {
             Log.w(TAG, "⚠️ [SCHEDULE] Servicio estaba deshabilitado, HABILITANDO automáticamente en login")
+            ServiceStatusFlags.setServiceDisabled(context, false, "login: habilitar servicio automáticamente")
+            ServiceStatusFlags.setWatchdogDisabled(context, false, "login: habilitar servicio automáticamente")
             prefs.edit().apply {
-                putBoolean("service_disabled", false)
                 remove("stop_reason")
                 remove("stop_timestamp")
                 remove("auto_stopped")
-                remove("watchdog_disabled")
             }.apply()
             Log.i(TAG, "✅ [SCHEDULE] Flags de deshabilitación limpiados exitosamente")
         }
@@ -2138,9 +2139,9 @@ object LocationHelper {
         try {
             val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
             val resumeTime = System.currentTimeMillis() + (pauseMinutes * 60 * 1000)
-            
+
+            ServiceStatusFlags.setServicePaused(context, true, "pauseLocationServiceTemporarily ${pauseMinutes}min")
             prefs.edit().apply {
-                putBoolean("service_paused", true)
                 putLong("resume_time", resumeTime)
                 putInt("pause_minutes", pauseMinutes)
             }.apply()

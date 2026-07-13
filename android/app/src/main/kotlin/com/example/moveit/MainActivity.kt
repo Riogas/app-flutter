@@ -382,15 +382,15 @@
                         val deviceId = call.argument<String>("deviceId") ?: "0"
 
                         // Limpiar estados de deshabilitación/pausa previos
+                        com.riogas.appmovil.ServiceStatusFlags.setServiceDisabled(this, false, "startLocationService desde Flutter UI")
+                        com.riogas.appmovil.ServiceStatusFlags.setServicePaused(this, false, "startLocationService desde Flutter UI")
                         val prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
                         prefs.edit().apply {
-                            putBoolean("service_disabled", false)
                             remove("stop_reason")
                             remove("stop_timestamp")
                             remove("auto_stopped")
                             remove("stopped_by_user")
                             remove("stopped_from_device")
-                            putBoolean("service_paused", false)
                             remove("resume_time")
                             remove("pause_minutes")
                         }.apply()
@@ -453,10 +453,10 @@
                         }
 
                         // 2. Guardar flag para bloquear futuros disparos con razón específica
+                        com.riogas.appmovil.ServiceStatusFlags.setServiceDisabled(this, true, "Manual stop from Flutter UI")
+                        com.riogas.appmovil.ServiceStatusFlags.setWatchdogDisabled(this, true, "Manual stop from Flutter UI") // 🔥 CRÍTICO: Detener watchdog también
                         val prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
                         prefs.edit().apply {
-                            putBoolean("service_disabled", true)
-                            putBoolean("watchdog_disabled", true) // 🔥 CRÍTICO: Detener watchdog también
                             putString("stop_reason", "Manual stop from Flutter UI")
                             putLong("stop_timestamp", System.currentTimeMillis())
                             putBoolean("auto_stopped", false) // Parada manual
@@ -634,11 +634,11 @@
                             val prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
                             
                             // 1️⃣ Verificar si el servicio está deshabilitado manualmente
-                            val isDisabled = prefs.getBoolean("service_disabled", false)
+                            val isDisabled = com.riogas.appmovil.ServiceStatusFlags.isServiceDisabled(this)
                             if (isDisabled) {
                                 Log.w("MainActivity", "⚠️ Servicio deshabilitado manualmente, no se reiniciará automáticamente")
                                 com.riogas.appmovil.DebugLogger.w("MainActivity", "Servicio deshabilitado manualmente", mapOf(
-                                    "service_disabled" to true
+                                    "service_disabled_flag" to true
                                 ))
                                 result.success(mapOf<String, Any>(
                                     "status" to "disabled",
@@ -1053,7 +1053,7 @@
         private fun restartLocationServiceFromForeground() {
             val prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
             val movil = prefs.getString("last_movil", "")
-            val isDisabled = prefs.getBoolean("service_disabled", false)
+            val isDisabled = com.riogas.appmovil.ServiceStatusFlags.isServiceDisabled(this)
             
             if (movil.isNullOrEmpty()) {
                 Log.d("MainActivity", "ℹ️ No hay parámetros guardados, servicio no iniciado")

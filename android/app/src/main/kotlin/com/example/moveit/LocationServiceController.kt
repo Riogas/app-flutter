@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.PowerManager
 import android.util.Log
+import com.riogas.appmovil.ServiceStatusFlags
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -95,9 +96,9 @@ object LocationServiceController {
      */
     private fun markServiceAsDisabled(context: Context, reason: String) {
         try {
+            ServiceStatusFlags.setServiceDisabled(context, true, reason)
             val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
             prefs.edit().apply {
-                putBoolean("service_disabled", true)
                 putString("stop_reason", reason)
                 putLong("stop_timestamp", System.currentTimeMillis())
                 putBoolean("auto_stopped", true) // Flag para distinguir paradas automáticas
@@ -152,8 +153,7 @@ object LocationServiceController {
      */
     fun isServiceDisabled(context: Context): Boolean {
         return try {
-            val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
-            prefs.getBoolean("service_disabled", false)
+            ServiceStatusFlags.isServiceDisabled(context)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error verificando estado del servicio", e)
             false
@@ -165,9 +165,9 @@ object LocationServiceController {
      */
     fun reactivateService(context: Context, reason: String = "Manual reactivation") {
         try {
+            ServiceStatusFlags.setServiceDisabled(context, false, reason)
             val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
             prefs.edit().apply {
-                putBoolean("service_disabled", false)
                 putString("reactivation_reason", reason)
                 putLong("reactivation_timestamp", System.currentTimeMillis())
                 remove("stop_reason")
@@ -194,7 +194,7 @@ object LocationServiceController {
         return try {
             val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
             mapOf<String, Any>(
-                "disabled" to prefs.getBoolean("service_disabled", false),
+                "disabled" to ServiceStatusFlags.isServiceDisabled(context),
                 "stopReason" to (prefs.getString("stop_reason", "") ?: ""),
                 "stopTimestamp" to prefs.getLong("stop_timestamp", 0),
                 "autoStopped" to prefs.getBoolean("auto_stopped", false),

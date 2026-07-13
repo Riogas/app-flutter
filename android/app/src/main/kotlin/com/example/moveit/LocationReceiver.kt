@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.riogas.appmovil.ServiceStatusFlags
 
 class LocationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -20,8 +21,8 @@ class LocationReceiver : BroadcastReceiver() {
             ))
             
             // 🧹 LIMPIAR: Marcar servicio como deshabilitado y cancelar futuras alarmas
+            ServiceStatusFlags.setServiceDisabled(context, true, "No deviceId available")
             prefs.edit().apply {
-                putBoolean("service_disabled", true)
                 putString("stop_reason", "No deviceId available")
                 putLong("stop_timestamp", System.currentTimeMillis())
                 putBoolean("auto_stopped", true)
@@ -45,7 +46,7 @@ class LocationReceiver : BroadcastReceiver() {
         }
         
         // Verificar si el servicio está deshabilitado (reusar prefs ya declarado)
-        val isDisabled = prefs.getBoolean("service_disabled", false)
+        val isDisabled = ServiceStatusFlags.isServiceDisabled(context)
         
         if (isDisabled) {
             val stopReason = prefs.getString("stop_reason", "Unknown reason")
@@ -66,7 +67,7 @@ class LocationReceiver : BroadcastReceiver() {
         }
         
         // Verificar si el servicio está pausado temporalmente
-        val isPaused = prefs.getBoolean("service_paused", false)
+        val isPaused = ServiceStatusFlags.isServicePaused(context)
         val resumeTime = prefs.getLong("resume_time", 0)
         val currentTime = System.currentTimeMillis()
         
@@ -79,8 +80,8 @@ class LocationReceiver : BroadcastReceiver() {
             return
         } else if (isPaused && currentTime >= resumeTime) {
             // La pausa ha expirado, remover flag y continuar
+            ServiceStatusFlags.setServicePaused(context, false, "pausa expirada")
             prefs.edit().apply {
-                putBoolean("service_paused", false)
                 remove("resume_time")
                 remove("pause_minutes")
             }.apply()

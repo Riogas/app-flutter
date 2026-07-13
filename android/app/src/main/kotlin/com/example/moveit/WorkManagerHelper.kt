@@ -3,6 +3,7 @@ package com.example.moveit
 import android.content.Context
 import android.util.Log
 import androidx.work.*
+import com.riogas.appmovil.ServiceStatusFlags
 import java.util.concurrent.TimeUnit
 
 /**
@@ -154,8 +155,7 @@ object WorkManagerHelper {
         Log.d(TAG, "🛑 Work cancelado")
         
         // Marcar como deshabilitado en SharedPreferences
-        val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
-        prefs.edit().putBoolean("service_disabled", true).apply()
+        ServiceStatusFlags.setServiceDisabled(context, true, "WorkManagerHelper.cancelPeriodicWork")
     }
     
     /**

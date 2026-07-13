@@ -108,8 +108,8 @@ object ServiceWatchdog {
             val usuario = prefs.getString("last_usuario", "") ?: ""
             var deviceId = prefs.getString("last_deviceId", "") ?: ""
             val intervalMinutes = prefs.getFloat("last_interval", 0.5f).toDouble()
-            val isDisabled = prefs.getBoolean("service_disabled", false)
-            val watchdogDisabled = prefs.getBoolean("watchdog_disabled", false)
+            val isDisabled = ServiceStatusFlags.isServiceDisabled(context)
+            val watchdogDisabled = ServiceStatusFlags.isWatchdogDisabled(context)
 
             // 🚩 MARCAR FLAG: GPS service está apagado
             ServiceStatusFlags.setServicesNeedRestart(
@@ -270,7 +270,7 @@ object ServiceWatchdog {
                         "android_version" to Build.VERSION.SDK_INT,
                         "context" to "CriticalLogWorker_watchdog",
                         "reason" to "watchdog_disabled_by_fcm_stop",
-                        "service_disabled" to isDisabled.toString(),
+                        "service_disabled_flag" to isDisabled.toString(),
                         "action" to "calling_fcm_api_for_remote_restart"
                     ),
                     "WATCHDOG_RESTART_BLOCKED"
@@ -293,7 +293,7 @@ object ServiceWatchdog {
                                     "movil" to movil,
                                     "escenario" to escenario,
                                     "action" to "force_gps_execution",
-                                    "trigger" to "watchdog_disabled",
+                                    "trigger" to "watchdog_disabled_flag",
                                     "response" to response
                                 ),
                                 "WATCHDOG_FCM_COMMAND_SENT"
@@ -309,7 +309,7 @@ object ServiceWatchdog {
                                     "escenario" to escenario,
                                     "error" to error,
                                     "action" to "force_gps_execution",
-                                    "trigger" to "watchdog_disabled"
+                                    "trigger" to "watchdog_disabled_flag"
                                 ),
                                 "WATCHDOG_FCM_COMMAND_ERROR"
                             )
@@ -362,14 +362,14 @@ object ServiceWatchdog {
             )
 
             // 1️⃣ Limpiar estados de deshabilitación/pausa (igual que en MainActivity)
+            ServiceStatusFlags.setServiceDisabled(context, false, "WATCHDOG_RESTART: reinicio completo del GPS service")
+            ServiceStatusFlags.setServicePaused(context, false, "WATCHDOG_RESTART: reinicio completo del GPS service")
             prefs.edit().apply {
-                putBoolean("service_disabled", false)
                 remove("stop_reason")
                 remove("stop_timestamp")
                 remove("auto_stopped")
                 remove("stopped_by_user")
                 remove("stopped_from_device")
-                putBoolean("service_paused", false)
                 remove("resume_time")
                 remove("pause_minutes")
             }.apply()
