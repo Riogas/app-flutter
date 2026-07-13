@@ -165,6 +165,9 @@ class FcmPushReceiver : FirebaseMessagingService() {
 
             LocationTrackingService.start(this, movil, escenario, usuario, deviceId)
 
+            // B.4: re-armar la red de seguridad del health-check (por si un stop/logout previo la canceló)
+            HealthCheckWorker.schedule(this)
+
             Log.i(TAG, "✅ [FCM] restart_tracking OK (movil=$movil)")
             DeviceEventReporter.report(this, "restart_result", "OK",
                 mapOf(
