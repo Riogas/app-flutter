@@ -1,11 +1,17 @@
 package com.example.moveit.receivers
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import com.riogas.appmovil.DebugLogger
+import com.riogas.appmovil.DeviceEventReporter
 
 /**
  * 🛰️ BroadcastReceiver para detectar cambios en el estado del GPS
@@ -17,7 +23,32 @@ class GPSStatusReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "GPSStatusReceiver"
-        
+        private const val GPS_ALERT_NOTIF_ID = 4210
+
+        private fun showGpsOffNotification(context: Context) {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel("gps_alert", "Alertas de GPS", NotificationManager.IMPORTANCE_HIGH)
+                nm.createNotificationChannel(channel)
+            }
+            val intent = Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            val pi = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+            val notif = NotificationCompat.Builder(context, "gps_alert")
+                .setSmallIcon(context.applicationInfo.icon)
+                .setContentTitle("Ubicación desactivada")
+                .setContentText("Activá la ubicación para que MoveIT funcione correctamente.")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .setOngoing(true)
+                .build()
+            nm.notify(GPS_ALERT_NOTIF_ID, notif)
+        }
+
+        private fun cancelGpsOffNotification(context: Context) {
+            (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(GPS_ALERT_NOTIF_ID)
+        }
+
         /**
          * Verifica el estado actual del GPS
          */
@@ -92,12 +123,16 @@ class GPSStatusReceiver : BroadcastReceiver() {
                         "impact" to "Location accuracy will be reduced - using NETWORK provider",
                         "timestamp" to System.currentTimeMillis()
                     ))
+                    DeviceEventReporter.report(context, "gps_off", "PROVIDERS_CHANGED")
+                    showGpsOffNotification(context)
                 } else {
                     Log.i(TAG, "✅ GPS encendido - Precisión de ubicación mejorada")
                     DebugLogger.i(TAG, "GPS habilitado por usuario", mapOf(
                         "impact" to "Location accuracy improved - using GPS provider",
                         "timestamp" to System.currentTimeMillis()
                     ))
+                    DeviceEventReporter.report(context, "gps_on", "PROVIDERS_CHANGED")
+                    cancelGpsOffNotification(context)
                 }
             }
             

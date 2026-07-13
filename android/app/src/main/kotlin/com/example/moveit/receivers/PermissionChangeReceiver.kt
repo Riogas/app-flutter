@@ -8,6 +8,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.riogas.appmovil.DebugLogger
+import com.riogas.appmovil.DeviceEventReporter
 
 /**
  * 🔔 BroadcastReceiver para detectar cambios en permisos de ubicación
@@ -65,13 +66,14 @@ class PermissionChangeReceiver : BroadcastReceiver() {
                     prefs.edit().putBoolean(permission, currentlyGranted).apply()
                     
                     // 🚨 Si se revocó permiso de ubicación, loguear alerta
-                    if (!currentlyGranted && (permission == android.Manifest.permission.ACCESS_FINE_LOCATION || 
+                    if (!currentlyGranted && (permission == android.Manifest.permission.ACCESS_FINE_LOCATION ||
                         permission == android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
                         Log.e(TAG, "⚠️ CRÍTICO: Permiso de ubicación revocado - Servicio GPS NO funcionará")
                         DebugLogger.e(TAG, "Servicio GPS bloqueado por permisos", null, mapOf(
                             "reason" to "User revoked location permission",
                             "permission" to permission
                         ))
+                        DeviceEventReporter.report(context, "permission_revoked", getPermissionName(permission))
                     }
                 }
             }
