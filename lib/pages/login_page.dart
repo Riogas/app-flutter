@@ -745,9 +745,18 @@ class _LoginPageState extends State<LoginPage> {
       if (permission == LocationPermission.whileInUse) {
         print(
             '[PERMISOS] whileInUse aceptado para login; tracking background requiere always');
-        // Aviso no bloqueante (no se espera) recordando que el tracking
-        // continuo en background requiere "Permitir siempre".
-        _showLocationPermissionDialog();
+        // Aviso no bloqueante (SnackBar, NO showDialog): un showDialog fire-and-forget
+        // pushea sobre el Navigator raíz y queda "colgado" cuando el login hace
+        // pushReplacement, dejando LoginPage viva debajo de HomePage.
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Con permiso "mientras se usa" la app funciona, pero el rastreo continuo requiere "Permitir todo el tiempo".'),
+              duration: Duration(seconds: 6),
+            ),
+          );
+        }
       } else if (permission == LocationPermission.always) {
         print('✅ [PERMISOS] GPS: Configurado correctamente (Permitir Siempre)');
       } else {
