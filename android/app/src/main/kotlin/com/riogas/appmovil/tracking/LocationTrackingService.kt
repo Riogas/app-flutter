@@ -58,11 +58,25 @@ class LocationTrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         fusedClient = LocationServices.getFusedLocationProviderClient(this)
-        startInForeground()
-        isRunning = true
+        try {
+            startInForeground()
+            isRunning = true
+        } catch (e: Exception) {
+            // A14+: startForeground(type=location) puede ser denegado (ForegroundServiceStartNotAllowedException,
+            // SecurityException, InvalidForegroundServiceTypeException) si el proceso arranca sin elegibilidad
+            // (p.ej. desde BootReceiver con permiso "solo mientras se usa"). No propagar: mata el proceso.
+            DeviceEventReporter.report(this, "health_fgs_dead", "FGS_START_DENIED",
+                mapOf("error" to (e.javaClass.simpleName)))
+            isRunning = false
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!isRunning) {
+            // onCreate falló en pasar a foreground (ver catch arriba); no continuar el arranque.
+            return START_NOT_STICKY
+        }
         intent?.let {
             it.getStringExtra("movil")?.takeIf { s -> s.isNotBlank() }?.let { s -> movil = s }
             it.getStringExtra("escenario")?.takeIf { s -> s.isNotBlank() }?.let { s -> escenario = s }
