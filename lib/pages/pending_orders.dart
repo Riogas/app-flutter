@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/firebase_service.dart';
 import '../services/persistent_stream_manager.dart';
-import '../services/pending_orders_diagnostic.dart'; // Add diagnostic import
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hive/hive.dart';

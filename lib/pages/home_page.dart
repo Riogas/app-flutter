@@ -1,8 +1,6 @@
 ﻿import 'package:MoveIT/main.dart';
 import 'package:flutter/material.dart';
 import 'pending_orders.dart';
-// import 'pending_orders_debug.dart'; // Commented out - not currently used
-import 'completed_orders.dart';
 import 'map_page.dart';
 import 'settings_page.dart';
 import 'message_page.dart';
@@ -98,7 +96,6 @@ class _HomePageState extends State<HomePage>
 
   static final List<Widget> _widgetOptions = [
     PendingOrdersPage(), // Back to normal page for testing
-    /*CompletedOrdersPage(),*/
     MapPage(),
     MessagePage(),
     SettingsPage(),
