@@ -382,6 +382,7 @@
                         // Limpiar estados de deshabilitación/pausa previos
                         com.riogas.appmovil.ServiceStatusFlags.setServiceDisabled(this, false, "startLocationService desde Flutter UI")
                         com.riogas.appmovil.ServiceStatusFlags.setServicePaused(this, false, "startLocationService desde Flutter UI")
+                        com.riogas.appmovil.ServiceStatusFlags.setWatchdogDisabled(this, false, "startLocationService")
                         val prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
                         prefs.edit().apply {
                             remove("stop_reason")
@@ -404,8 +405,8 @@
                             "source" to "Flutter_UI"
                         ))
 
-                        // Persistir intervalo (segundos) para el tracking continuo
-                        prefs.edit().putInt("tracking_interval_seconds", (interval * 60).coerceAtLeast(1)).apply()
+                        // No persistir tracking_interval_seconds: "interval" es legacy en minutos
+                        // (típicamente 3 → 180s). Se deja que rija el default de 12s del service.
 
                         // Arranque único del FGS nuevo (idempotente: si ya corre, actualiza extras)
                         com.riogas.appmovil.tracking.LocationTrackingService.start(this, movil, escenario, usuario, deviceId)
@@ -598,8 +599,9 @@
                             val isDisabled = com.riogas.appmovil.ServiceStatusFlags.isServiceDisabled(this)
                             if (isDisabled) {
                                 Log.w("MainActivity", "⚠️ Servicio deshabilitado manualmente, no se reiniciará automáticamente")
+                                // keys de log: nombres estables para n8n (no son accesos a prefs)
                                 com.riogas.appmovil.DebugLogger.w("MainActivity", "Servicio deshabilitado manualmente", mapOf(
-                                    "service_disabled_flag" to true
+                                    "service_disabled" to true
                                 ))
                                 result.success(mapOf<String, Any>(
                                     "status" to "disabled",
@@ -671,11 +673,12 @@
                             Log.i("MainActivity", "✅ Parámetros sincronizados: Hive → SharedPreferences (movil=$movil, usuario=$usuario, escenario=$escenario)")
                             
                             // Arranque idempotente del tracking nuevo: si ya corre, actualiza params.
-                            // Persistir intervalo (segundos) para el FGS continuo.
-                            prefs.edit().putInt("tracking_interval_seconds", (intervalMinutes * 60).coerceAtLeast(1)).apply()
+                            // No persistir tracking_interval_seconds: intervalMinutes es legacy en
+                            // minutos, se deja que rija el default de 12s del service.
 
                             val wasRunning = com.riogas.appmovil.tracking.LocationTrackingService.isRunning
                             com.riogas.appmovil.tracking.LocationTrackingService.start(this, movil, escenario ?: "0", usuario ?: "", deviceId ?: "")
+                            com.riogas.appmovil.tracking.HealthCheckWorker.schedule(this)
 
                             LocationLogger.logEvent(this, "SERVICE_HEALTH_CHECK", mapOf<String, String>(
                                 "usuario" to (usuario ?: ""),

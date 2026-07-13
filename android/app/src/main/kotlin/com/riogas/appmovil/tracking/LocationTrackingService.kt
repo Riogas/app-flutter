@@ -217,7 +217,9 @@ class LocationTrackingService : Service() {
         watchJob = scope.launch {
             while (isActive) { delay(WATCH_TICK_MS)
                 val silence = android.os.SystemClock.elapsedRealtime() - lastFixElapsed
-                if (silence > SILENCE_THRESHOLD_MS) {
+                // Defensivo: un intervalo configurado grande nunca debe generar falsos silencios.
+                val silenceThreshold = maxOf(SILENCE_THRESHOLD_MS, intervalSeconds() * 1000L * 3)
+                if (silence > silenceThreshold) {
                     val motivo = when {
                         !hasLocationPermission() -> "NO_PERMISSION"
                         !isGpsProviderEnabled() -> "GPS_DISABLED_IN_SETTINGS"

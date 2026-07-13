@@ -218,6 +218,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
         val isPaused = ServiceStatusFlags.isServicePaused(this)
         val intervalSeconds = prefs.getInt("tracking_interval_seconds", 12)
 
+        // keys de log: nombres estables para n8n (no son accesos a prefs)
         CriticalLogger.logCritical(
             TAG,
             "FCM: Reporte de estado del GPS service",
@@ -225,8 +226,9 @@ class FcmPushReceiver : FirebaseMessagingService() {
                 "movil" to movil,
                 "escenario" to escenario,
                 "usuario" to usuario,
-                "service_disabled_flag" to isDisabled.toString(),
-                "service_paused_flag" to isPaused.toString(),
+                "service_disabled" to isDisabled.toString(),
+                "service_paused" to isPaused.toString(),
+                "service_running" to com.riogas.appmovil.tracking.LocationTrackingService.isRunning.toString(),
                 "interval_seconds" to intervalSeconds,
                 "android_version" to Build.VERSION.SDK_INT,
                 "manufacturer" to Build.MANUFACTURER,
@@ -328,14 +330,15 @@ class FcmPushReceiver : FirebaseMessagingService() {
 
             Log.i(TAG, "🚫 [FCM] Servicios deshabilitados + Watchdog deshabilitado")
 
+            // keys de log: nombres estables para n8n (no son accesos a prefs)
             CriticalLogger.logCritical(
                 TAG,
                 "FCM: Servicios deshabilitados por logout remoto",
                 mapOf(
                     "movil" to movil,
                     "step" to "3_disable_services",
-                    "service_disabled_flag" to "true",
-                    "watchdog_disabled_flag" to "true"
+                    "service_disabled" to "true",
+                    "watchdog_disabled" to "true"
                 ),
                 "FCM_LOGOUT_SERVICES_DISABLED"
             )

@@ -25,7 +25,7 @@ class HealthCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
         // permission_revoked check (B.2)
         if (ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
-            DeviceEventReporter.report(ctx, "permission_revoked", "HEALTH_CHECK")
+            DeviceEventReporter.reportAndWait(ctx, "permission_revoked", "HEALTH_CHECK")
             return Result.success()
         }
 
@@ -39,16 +39,16 @@ class HealthCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
                 LocationTrackingService.start(ctx,
                     p.getString("last_movil", "") ?: "", p.getString("last_escenario", "0") ?: "0",
                     p.getString("last_usuario", "") ?: "", p.getString("last_deviceId", "") ?: "")
-                DeviceEventReporter.report(ctx, "health_fgs_dead", "RESTARTED_BY_HEALTH_CHECK")
+                DeviceEventReporter.reportAndWait(ctx, "health_fgs_dead", "RESTARTED_BY_HEALTH_CHECK")
             } else {
-                DeviceEventReporter.report(ctx, "health_fgs_dead", "NO_BATTERY_EXEMPTION")
+                DeviceEventReporter.reportAndWait(ctx, "health_fgs_dead", "NO_BATTERY_EXEMPTION")
             }
             Result.success()
         } catch (e: Exception) {
             val motivo = if (Build.VERSION.SDK_INT >= 31 && e is ForegroundServiceStartNotAllowedException)
                 "FGS_START_NOT_ALLOWED" else e.javaClass.simpleName
             // aviso HTTP simple, legal desde background → el server puede disparar B.3
-            DeviceEventReporter.report(ctx, "health_fgs_dead", motivo)
+            DeviceEventReporter.reportAndWait(ctx, "health_fgs_dead", motivo)
             Result.success()
         }
     }

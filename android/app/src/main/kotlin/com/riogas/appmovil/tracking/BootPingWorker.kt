@@ -15,7 +15,7 @@ class BootPingWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
     override suspend fun doWork(): Result {
         val motivo = inputData.getString(KEY_BOOT_REASON) ?: "BOOT_COMPLETED"
-        DeviceEventReporter.report(applicationContext, "booted", motivo)
+        DeviceEventReporter.reportAndWait(applicationContext, "booted", motivo)
         HealthCheckWorker.schedule(applicationContext) // re-asegurar el health-check tras reboot
         return Result.success()
     }
