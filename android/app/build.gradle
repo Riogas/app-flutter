@@ -1,0 +1,99 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+    id "com.google.gms.google-services"
+}
+
+// ✅ MOVER ESTO AQUÍ, ANTES DEL BLOQUE android { }
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = file("../../keystore/key.properties") // ✅ correcto
+
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace "com.example.moveit" // 👈 aquí sí va el package
+    compileSdk = 35
+    ndkVersion = "25.1.8937393"
+    //namespace = "com.example.MoveIT"  // 🛠️ Cambiado a tu namespace
+    //namespace "com.alexyu.flutter_windowmanager" // 👈 ESTE valor lo sacás del manifest del plugin
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_21 // ✅ Java 21
+        targetCompatibility = JavaVersion.VERSION_21
+        coreLibraryDesugaringEnabled true  // ✅ Mantenerlo activado
+    }
+
+    kotlinOptions {
+        jvmTarget = "21"  // 🛠️ Cambiado a JVM 17
+    }
+
+    defaultConfig {
+        applicationId = "com.example.moveit" // 👈 aquí sí va el package
+        minSdk = 25
+        targetSdk = 35
+        versionCode project.hasProperty('flutterVersionCode') ? flutterVersionCode.toInteger() : 2069
+        versionName project.hasProperty('flutterVersionName') ? flutterVersionName : "1.1"
+    }
+
+    println "📦 Keystore loaded from: ${keystorePropertiesFile}"
+    println "🔑 storeFile: ${keystoreProperties['storeFile']}"
+    println "🛡️ keyAlias: ${keystoreProperties['keyAlias']}"
+
+
+    signingConfigs {
+        release {
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile file(keystoreProperties['storeFile'])
+            storePassword keystoreProperties['storePassword']
+        }
+    }
+
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // ⚠️ Conflicto preexistente (no relacionado a LogRocket) entre
+    // org.bouncycastle:bcprov-jdk18on y androidx.exifinterface (org.jspecify)
+    // por el mismo recurso META-INF/versions/9/OSGI-INF/MANIFEST.MF
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/versions/9/OSGI-INF/MANIFEST.MF']
+        }
+    }
+}
+
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.0.0" // ✅ Compatible con AGP 8.2.1 y Java 21
+    implementation 'com.google.firebase:firebase-analytics:21.4.0'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1' // ✅ Compatible con Java 21
+    implementation 'org.locationtech.proj4j:proj4j:1.1.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.9.3'
+    implementation 'com.google.firebase:firebase-messaging:23.3.1'
+    
+    // 🆕 Google Play Services Location API (lo que usa Flutter internamente)
+    implementation 'com.google.android.gms:play-services-location:21.0.1'
+    
+    // 🆕 WorkManager para tareas periódicas en background (Android 12+ compatible)
+    implementation 'androidx.work:work-runtime-ktx:2.9.0'
+    
+    // � Firebase Auth y Firestore para validación de sesión desde Kotlin
+    implementation 'com.google.firebase:firebase-auth:22.3.0'
+    implementation 'com.google.firebase:firebase-firestore:24.9.1'
+}
+

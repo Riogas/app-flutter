@@ -1,0 +1,36 @@
+buildscript {
+    ext.kotlin_version = '1.9.22'  // 🆕 Última versión de Kotlin
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.2' // ✅ Requiere Java 17+
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath 'com.google.gms:google-services:4.4.0'  // 🆕 Firebase actualizado
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    configurations.all {
+        resolutionStrategy {
+            // Forzar el uso de bcprov-jdk15on (versión compatible con JDK 17)
+            force 'org.bouncycastle:bcprov-jdk18on:1.78.1' // Compilado para Java 21
+
+        }
+    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.layout.buildDirectory
+}

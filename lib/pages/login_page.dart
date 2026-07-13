@@ -5,7 +5,6 @@ import '../services/firebase_constants_service.dart';
 import '../services/session_service.dart';
 import '../services/session_sync_service.dart'; // 🔄 Sincronización de sesión
 import '../services/debug_config_manager.dart'; // 🆕 Sistema de logging remoto
-import '../services/screen_recording_manager.dart'; // 🎥 Sistema de grabación de pantalla
 import 'home_page.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hive/hive.dart';
@@ -3162,24 +3161,6 @@ class _LoginPageState extends State<LoginPage> {
     });
     print(
         "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
-
-    // 🎥 Iniciar grabación de pantalla si está habilitada
-    print(
-        '🎥 [LOGIN] >>> ANTES de llamar ScreenRecordingManager.startRecording()');
-    print(
-        '🎥 [LOGIN] >>> movil=$movil, usuario=$usuario, deviceId=${idTerminal ?? ""}');
-    try {
-      print('🎥 [LOGIN] >>> DENTRO del try, llamando startRecording...');
-      await ScreenRecordingManager.startRecording(
-        movil: movil,
-        usuario: usuario,
-        deviceId: idTerminal ?? '',
-      );
-      print('🎥 [LOGIN] >>> DESPUÉS de startRecording (sin error)');
-    } catch (e, stackTrace) {
-      print('❌ [LOGIN] Error iniciando grabación de pantalla: $e');
-      print('❌ [LOGIN] StackTrace: $stackTrace');
-    }
 
     // 🔹 Cerrar el diálogo de carga y navegar a HomePage
     if (mounted) {

@@ -57,7 +57,6 @@ dependencies:
   flutter_map_tile_caching: ^10.1.1
   screen_protector: ^1.4.2+1
   shared_preferences: ^2.2.2
-  logrocket_flutter: ^1.57.5
   audioplayers: ^6.0.0
   cached_network_image: ^3.3.1
 

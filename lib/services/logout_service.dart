@@ -5,7 +5,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/riogas_service.dart';
 import '../services/session_service.dart';
-import '../services/screen_recording_manager.dart'; // 🎥 Sistema de grabación
 import '../utils/constantes.dart'; // 🆕 Para resetear ambiente
 
 /// 🚪 LogoutService - Servicio centralizado para manejar el cierre de sesión
@@ -70,14 +69,6 @@ class LogoutService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('sessionActive', false);
       print("$TAG ✅ Flag sessionActive seteado a false");
-
-      // 🎥 Detener grabación de pantalla si está activa
-      try {
-        await ScreenRecordingManager.stopRecording();
-        print("$TAG 🛑 Grabación de pantalla detenida");
-      } catch (e) {
-        print('$TAG ⚠️ Error deteniendo grabación: $e');
-      }
 
       // 1️⃣ Detener servicio de ubicación (solo si no es remote, porque FCM ya lo detuvo)
       if (!isRemoteLogout) {

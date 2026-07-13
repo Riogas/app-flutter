@@ -39,9 +39,7 @@ import '../services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogS
 import 'package:screen_protector/screen_protector.dart';
 import 'services/remote_logout_listener.dart'; // 🚨 Importar listener de logout remoto
 import 'services/fcm_token_manager.dart'; // 🔑 Importar FCM Token Manager
-import 'services/screen_recording_manager.dart'; // 🎥 Sistema de grabación de pantalla
 import 'services/gps_service_manager.dart'; // 🛑 GPS Service Manager para Force GPS
-import 'package:logrocket_flutter/logrocket_flutter.dart'; // 🎥 LogRocket SDK
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -238,13 +236,6 @@ void _listenToLocationPermission() {
 void main() async {
   // 🛡️ PROTECCIÓN GLOBAL: Captura TODOS los errores no manejados
   runZonedGuarded(() async {
-    // ❌ 🎥 LogRocket DESACTIVADO para evitar consumo innecesario de recursos
-    // Solo se activará mediante FCM cuando grabarPantalla = true en Firestore
-    // LogRocket.wrapAndInitialize(
-    //   LogRocketWrapConfiguration(),
-    //   LogRocketInitConfiguration(appID: 'w2ree2/delivery-ammr6'),
-    //   () async {
-
     WidgetsFlutterBinding.ensureInitialized();
 
     // 🛡️ Captura errores de Flutter Framework
@@ -363,10 +354,6 @@ void main() async {
           error: e, context: 'INIT');
     }
 
-    // 🎥 LogRocket se inicializa automáticamente desde AndroidManifest.xml
-    // App ID: w2ree2/delivery-ammr6
-    print('🎥 LogRocket configurado con App ID desde AndroidManifest');
-
     bool isLoggedIn = false;
     try {
       isLoggedIn = await AuthService.checkIsLoggedIn();
@@ -473,8 +460,6 @@ void main() async {
     } catch (e) {
       print('⚠️ Error iniciando listener de permisos: $e');
     }
-    // }, // 🎥 Cierre de la función lambda de LogRocket.wrapAndInitialize (COMENTADO)
-    // ); // 🎥 Cierre de LogRocket.wrapAndInitialize (COMENTADO)
   }, (error, stack) {
     // 🛡️ MANEJADOR DE ERRORES GLOBAL: Captura errores asincrónicos no manejados
     print('🔴 [GLOBAL ERROR] Error no manejado capturado: $error');
@@ -566,26 +551,6 @@ Future<void> _initializeFirebaseMessaging() async {
       } catch (e, stackTrace) {
         print('❌ [FCM] Error ejecutando Force GPS: $e');
         MainLogger.logError('Force GPS error crítico',
-            error: e, stackTrace: stackTrace, context: 'FCM');
-      }
-      return; // No mostrar notificación para comandos de sistema
-    }
-
-    // 🎥 Manejar comando de grabación de pantalla
-    if (action == 'toggle_screen_recording') {
-      final enable = message.data['enable'] == 'true';
-      MainLogger.log('🎥 Comando grabación: ${enable ? "ON" : "OFF"}',
-          context: 'FCM');
-
-      try {
-        await ScreenRecordingManager.toggleRecording(enable);
-        print(
-            '📹 [FCM] Grabación ${enable ? "activada" : "desactivada"} remotamente');
-        MainLogger.log('✅ Grabación ${enable ? "activada" : "desactivada"}',
-            context: 'FCM');
-      } catch (e, stackTrace) {
-        print('❌ [FCM] Error toggle grabación: $e');
-        MainLogger.logError('Error toggle grabación',
             error: e, stackTrace: stackTrace, context: 'FCM');
       }
       return; // No mostrar notificación para comandos de sistema
@@ -1967,47 +1932,45 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return LogRocketWidget(
-      child: MaterialApp(
-        title: 'MoveIT',
-        theme: ThemeData(primarySwatch: Colors.blue),
-        navigatorKey: navigatorKey,
-        // 🌍 Banner visual si está en modo desarrollo
-        builder: (context, child) {
-          if (AppEnvironment.isDevelopment) {
-            return Banner(
-              message: 'DESARROLLO 🧪',
-              location: BannerLocation.topEnd,
-              color: Colors.orange,
-              textStyle: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-              child: child!,
-            );
-          }
-          return child!;
-        },
-        home: widget.isLoggedIn ? HomePage() : LoginPage(),
-        onGenerateRoute: (RouteSettings settings) {
-          if (settings.name == '/login') {
-            final args = settings.arguments as Map<String, dynamic>?;
+    return MaterialApp(
+      title: 'MoveIT',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      navigatorKey: navigatorKey,
+      // 🌍 Banner visual si está en modo desarrollo
+      builder: (context, child) {
+        if (AppEnvironment.isDevelopment) {
+          return Banner(
+            message: 'DESARROLLO 🧪',
+            location: BannerLocation.topEnd,
+            color: Colors.orange,
+            textStyle: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+            child: child!,
+          );
+        }
+        return child!;
+      },
+      home: widget.isLoggedIn ? HomePage() : LoginPage(),
+      onGenerateRoute: (RouteSettings settings) {
+        if (settings.name == '/login') {
+          final args = settings.arguments as Map<String, dynamic>?;
 
-            return MaterialPageRoute(
-              builder: (context) => LoginPage(
-                forcedLogout: args?['forcedLogout'] ?? false,
-                forcedLogoutMessage: args?['mensaje'] ?? '',
-              ),
-            );
-          }
+          return MaterialPageRoute(
+            builder: (context) => LoginPage(
+              forcedLogout: args?['forcedLogout'] ?? false,
+              forcedLogoutMessage: args?['mensaje'] ?? '',
+            ),
+          );
+        }
 
-          if (settings.name == '/home') {
-            return MaterialPageRoute(builder: (context) => HomePage());
-          }
+        if (settings.name == '/home') {
+          return MaterialPageRoute(builder: (context) => HomePage());
+        }
 
-          return null;
-        },
-      ),
+        return null;
+      },
     );
   }
 }

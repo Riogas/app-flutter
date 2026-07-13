@@ -114,11 +114,6 @@ class DebugConfigManager {
       final gpsN8nRaw = data['gpsN8n'];
       final bool gpsN8nEnabled = gpsN8nRaw is bool ? gpsN8nRaw : false;
 
-      // 🎥 Leer flag grabarPantalla (por defecto false) - controla grabación con LogRocket
-      final grabarPantallaRaw = data['grabarPantalla'];
-      final bool grabarPantallaEnabled =
-          grabarPantallaRaw is bool ? grabarPantallaRaw : false;
-
       debugPrint('[$TAG] 🔍 Campos detectados:');
       debugPrint(
           '[$TAG]    - debugMode (raw): $debugModeRaw (tipo: ${debugModeRaw.runtimeType})');
@@ -127,9 +122,6 @@ class DebugConfigManager {
       debugPrint(
           '[$TAG]    - gpsN8n (raw): $gpsN8nRaw (tipo: ${gpsN8nRaw.runtimeType})');
       debugPrint('[$TAG]    - gpsN8n (parsed): $gpsN8nEnabled');
-      debugPrint(
-          '[$TAG]    - grabarPantalla (raw): $grabarPantallaRaw (tipo: ${grabarPantallaRaw.runtimeType})');
-      debugPrint('[$TAG]    - grabarPantalla (parsed): $grabarPantallaEnabled');
 
       if (debugModeRaw != null && debugModeRaw is! bool) {
         debugPrint('[$TAG] ⚠️ ADVERTENCIA: debugMode NO es boolean!');
@@ -145,26 +137,14 @@ class DebugConfigManager {
         debugPrint('[$TAG]    - Debe ser boolean true/false en Firestore');
       }
 
-      if (grabarPantallaRaw != null && grabarPantallaRaw is! bool) {
-        debugPrint('[$TAG] ⚠️ ADVERTENCIA: grabarPantalla NO es boolean!');
-        debugPrint('[$TAG]    - Tipo actual: ${grabarPantallaRaw.runtimeType}');
-        debugPrint('[$TAG]    - Valor: $grabarPantallaRaw');
-        debugPrint('[$TAG]    - Debe ser boolean true/false en Firestore');
-      }
-
       debugPrint('[$TAG] ✅ Configuración válida detectada');
       debugPrint(
-          '[$TAG]    - debugMode=$debugMode, level=$debugLevel, gpsN8n=$gpsN8nEnabled, grabarPantalla=$grabarPantallaEnabled');
+          '[$TAG]    - debugMode=$debugMode, level=$debugLevel, gpsN8n=$gpsN8nEnabled');
 
       // Guardar gpsN8n en sessionBox para acceso rápido
       final sessionBox = await Hive.openBox('sessionBox');
       await sessionBox.put('gpsN8nEnabled', gpsN8nEnabled);
       debugPrint('[$TAG] 💾 gpsN8n guardado en sessionBox: $gpsN8nEnabled');
-
-      // 🎥 Guardar grabarPantalla en sessionBox
-      await sessionBox.put('grabarPantallaEnabled', grabarPantallaEnabled);
-      debugPrint(
-          '[$TAG] 💾 grabarPantalla guardado en sessionBox: $grabarPantallaEnabled');
 
       // Comunicar cambio a la capa nativa (Kotlin)
       _notifyNativeLayer(debugMode, debugLevel, gpsN8nEnabled);
