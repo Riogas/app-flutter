@@ -1831,7 +1831,7 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<bool> _showGpsPermissionDialog() async {
-    await showDialog<void>(
+    final bool? granted = await showDialog<bool>(
       context: context,
       barrierDismissible: false, // ❌ No se puede cerrar tocando fuera
       builder: (BuildContext context) {
@@ -1953,7 +1953,17 @@ class _HomePageState extends State<HomePage>
                         await Geolocator.checkPermission();
                     if (permission == LocationPermission.always) {
                       // ✅ Permiso concedido - cerrar diálogo
-                      Navigator.of(context).pop();
+                      if (!context.mounted) break;
+                      Navigator.of(context).pop(true);
+                      break;
+                    }
+                    if (permission == LocationPermission.whileInUse) {
+                      // ✅ Suficiente para el reporte puntual - cerrar diálogo;
+                      // solo el tracking background sigue exigiendo "always"
+                      print(
+                          '[PERMISOS] whileInUse aceptado para reporte puntual; tracking background requiere always');
+                      if (!context.mounted) break;
+                      Navigator.of(context).pop(true);
                       break;
                     }
                     // ⏳ Esperar 2 segundos y volver a verificar
@@ -1961,12 +1971,32 @@ class _HomePageState extends State<HomePage>
                   }
                 },
               ),
+              TextButton(
+                onPressed: () async {
+                  final LocationPermission current =
+                      await Geolocator.checkPermission();
+                  if (current == LocationPermission.always ||
+                      current == LocationPermission.whileInUse) {
+                    if (!context.mounted) return;
+                    Navigator.of(context).pop(true);
+                  } else {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Necesitás dar al menos el permiso "mientras se usa" para continuar.'),
+                      ),
+                    );
+                  }
+                },
+                child: const Text('Continuar con permiso limitado'),
+              ),
             ],
           ),
         );
       },
     );
-    return true; // Retornar true cuando se cierra (significa que se concedió el permiso)
+    return granted ?? false;
   }
 
   /// 🎯 DIÁLOGO DE UBICACIÓN PRECISA (Android 12+)

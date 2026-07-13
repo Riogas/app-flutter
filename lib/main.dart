@@ -1048,6 +1048,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _dialogShown = false;
   DateTime? _lastDialogDismissed;
   bool _batteryCheckCompleted = false; // 🔋 Flag para evitar spam de batería
+  bool _whileInUseWarned =
+      false; // 📍 Recordatorio no bloqueante de whileInUse (máx 1 vez por sesión)
 
   // 🎯 Flags para verificación de UBICACIÓN PRECISA
   bool _isCheckingLocationPrecision = false;
@@ -1262,29 +1264,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         permission = newPermission;
       }
 
-      // ⚠️ Si tiene "Mientras se usa", solicitar "Permitir Siempre"
+      // ✅ "Mientras se usa" es suficiente para operaciones puntuales en foreground.
+      // Solo el tracking continuo en background exige "Permitir siempre"; no
+      // bloquear con el diálogo modal, solo avisar una vez por sesión.
       if (permission == LocationPermission.whileInUse) {
-        // Esperar 1 segundo para que el diálogo de batería se cierre completamente
-        await Future.delayed(Duration(seconds: 1));
-
-        // Resetear la flag para poder mostrar este diálogo
-        _dialogShown = false;
-
-        // Si el diálogo fue cerrado hace menos de 3 segundos, esperar
-        if (_lastDialogDismissed != null) {
-          final timeSinceDismissed =
-              DateTime.now().difference(_lastDialogDismissed!);
-          if (timeSinceDismissed.inSeconds < 3) {
-            await Future.delayed(Duration(seconds: 3));
+        print(
+            '[PERMISOS] whileInUse aceptado en foreground; tracking background requiere always');
+        if (!_whileInUseWarned) {
+          _whileInUseWarned = true;
+          if (navigatorKey.currentContext != null) {
+            ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    'Para el rastreo continuo en segundo plano activá el permiso de ubicación "Permitir siempre" en Ajustes.'),
+                duration: Duration(seconds: 5),
+              ),
+            );
           }
-        }
-
-        // Mostrar diálogo solo si no está ya visible
-        if (!_dialogShown && navigatorKey.currentContext != null) {
-          _dialogShown = true;
-          print(
-              '📍 Mostrando diálogo para cambiar a "Permitir todo el tiempo"');
-          await _showLocationPermissionDialog();
         }
       }
 
@@ -1618,6 +1614,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       // ✅ Permiso concedido - cerrar diálogo y resetear flags
                       _lastDialogDismissed = DateTime.now();
                       _dialogShown = false;
+                      if (!context.mounted) break;
+                      Navigator.of(context).pop();
+                      break;
+                    }
+                    if (permission == LocationPermission.whileInUse) {
+                      // ✅ Suficiente para foreground - cerrar diálogo sin
+                      // seguir bloqueando; solo el tracking background
+                      // sigue exigiendo "always"
+                      print(
+                          '[PERMISOS] whileInUse aceptado en foreground; tracking background requiere always');
+                      _lastDialogDismissed = DateTime.now();
+                      _dialogShown = false;
+                      if (!context.mounted) break;
                       Navigator.of(context).pop();
                       break;
                     }

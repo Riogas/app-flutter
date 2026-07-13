@@ -715,7 +715,9 @@ class _LoginPageState extends State<LoginPage> {
       return false;
     }
 
-    // 2️⃣ VALIDAR PERMISO DE UBICACIÓN "PERMITIR SIEMPRE"
+    // 2️⃣ VALIDAR PERMISO DE UBICACIÓN (mínimo "Mientras se usa" para operaciones puntuales)
+    // Solo el tracking continuo en background exige "Permitir siempre"; su ausencia
+    // ya la reporta el health-check nativo (permission_revoked / NO_PERMISSION).
     try {
       LocationPermission permission = await Geolocator.checkPermission();
       print('📍 [PERMISOS] Estado GPS: $permission');
@@ -726,39 +728,32 @@ class _LoginPageState extends State<LoginPage> {
 
         // Solicitar permiso (mostrará diálogo nativo)
         LocationPermission newPermission = await Geolocator.requestPermission();
-
-        if (newPermission == LocationPermission.deniedForever) {
-          print('❌ [PERMISOS] GPS denegado permanentemente');
-          await _showLocationPermissionDialog();
-          return false; // ❌ Bloquear login
-        }
-
         permission = newPermission;
       }
 
-      // Si tiene "Mientras se usa", solicitar "Permitir Siempre"
+      // Bloquear login SOLO si sigue sin al menos "Mientras se usa"
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        print('❌ [PERMISOS] GPS sin permiso suficiente: $permission');
+        final bool granted = await _showLocationPermissionDialog();
+        if (!granted) {
+          return false; // ❌ Bloquear login
+        }
+        permission = await Geolocator.checkPermission();
+      }
+
       if (permission == LocationPermission.whileInUse) {
         print(
-            '⚠️ [PERMISOS] GPS en "Mientras se usa", necesita "Permitir Siempre"');
-        await _showLocationPermissionDialog();
+            '[PERMISOS] whileInUse aceptado para login; tracking background requiere always');
+        // Aviso no bloqueante (no se espera) recordando que el tracking
+        // continuo en background requiere "Permitir siempre".
+        _showLocationPermissionDialog();
+      } else if (permission == LocationPermission.always) {
+        print('✅ [PERMISOS] GPS: Configurado correctamente (Permitir Siempre)');
+      } else {
+        print('❌ [PERMISOS] GPS no tiene permiso suficiente: $permission');
         return false; // ❌ Bloquear login
       }
-
-      // Si está denegado permanentemente
-      if (permission == LocationPermission.deniedForever) {
-        print('❌ [PERMISOS] GPS denegado permanentemente');
-        await _showLocationPermissionDialog();
-        return false; // ❌ Bloquear login
-      }
-
-      // Solo permitir login si tiene "always"
-      if (permission != LocationPermission.always) {
-        print('❌ [PERMISOS] GPS no tiene "Permitir Siempre": $permission');
-        await _showLocationPermissionDialog();
-        return false; // ❌ Bloquear login
-      }
-
-      print('✅ [PERMISOS] GPS: Configurado correctamente (Permitir Siempre)');
 
       // 🎯 NUEVA VALIDACIÓN: Verificar UBICACIÓN PRECISA (Android 12+)
       try {
@@ -899,8 +894,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   /// 📍 DIÁLOGO DE PERMISO GPS (mismo que main.dart)
-  Future<void> _showLocationPermissionDialog() async {
-    return showDialog<void>(
+  /// Retorna `true` si al cerrarse el permiso es al menos "whileInUse"
+  /// (el flujo puede continuar); `false` si no hay permiso suficiente.
+  Future<bool> _showLocationPermissionDialog() async {
+    final bool? granted = await showDialog<bool>(
       context: context,
       barrierDismissible: false, // No se puede cerrar tocando fuera
       builder: (BuildContext context) {
@@ -1022,7 +1019,17 @@ class _LoginPageState extends State<LoginPage> {
                         await Geolocator.checkPermission();
                     if (permission == LocationPermission.always) {
                       // ✅ Permiso concedido - cerrar diálogo
-                      Navigator.of(context).pop();
+                      if (!context.mounted) break;
+                      Navigator.of(context).pop(true);
+                      break;
+                    }
+                    if (permission == LocationPermission.whileInUse) {
+                      // ✅ Suficiente para continuar (foreground); solo el
+                      // tracking background sigue exigiendo "always"
+                      print(
+                          '[PERMISOS] whileInUse aceptado para login; tracking background requiere always');
+                      if (!context.mounted) break;
+                      Navigator.of(context).pop(true);
                       break;
                     }
                     // ⏳ Esperar 2 segundos y volver a verificar
@@ -1030,11 +1037,32 @@ class _LoginPageState extends State<LoginPage> {
                   }
                 },
               ),
+              TextButton(
+                onPressed: () async {
+                  final LocationPermission current =
+                      await Geolocator.checkPermission();
+                  if (current == LocationPermission.always ||
+                      current == LocationPermission.whileInUse) {
+                    if (!context.mounted) return;
+                    Navigator.of(context).pop(true);
+                  } else {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Necesitás dar al menos el permiso "mientras se usa" para continuar.'),
+                      ),
+                    );
+                  }
+                },
+                child: const Text('Continuar igual'),
+              ),
             ],
           ),
         );
       },
     );
+    return granted ?? false;
   }
 
   /// 🎯 DIÁLOGO DE UBICACIÓN PRECISA (Android 12+)
