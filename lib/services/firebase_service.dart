@@ -1111,149 +1111,60 @@ class FirebaseService {
     });
   }
 
-  Stream<List<Map<String, dynamic>>> getSubEstadoMovilesStream() async* {
+  /// Lectura única del catálogo SubEstadoMoviles (reemplaza el listener 24h; cache en Hive).
+  Future<List<Map<String, dynamic>>> getSubEstadoMovilesOnce() async {
     var box = await openBoxSafe('sessionBox');
-    if (box == null) return;
+    if (box == null) return [];
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
-    print('Escenario ID: $escenarioId');
-    print('Movil ID: ${box.get('movil')}');
     String collectionName = 'SubEstadoMoviles-$escenarioId';
 
-    Stream<List<Map<String, dynamic>>> subEstadoMovilesStream = _firestore
-        .collection(collectionName)
-        .snapshots()
-        .handleError((error) async {
+    try {
+      final snapshot = await _firestore.collection(collectionName).get();
+      return snapshot.docs.map((doc) {
+        var data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    } catch (error) {
       if (error is FirebaseException && error.code == 'permission-denied') {
         await _logFirestorePermissionError(
           error.message ?? 'Permission denied',
         );
       } else {
-        // print('Error fetching subestado moviles: $error');
         await _logError('Firestore Error', error.toString());
       }
-      /*bool isConnected = await checkFirestoreConnectivity();
-      if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
-      }*/
-    }).map((snapshot) {
-      // print('Fetched ${snapshot.docs.length} subestado moviles');
-      return snapshot.docs.map((doc) {
-        var data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id; // Add document ID to the data
-        // print('SubEstadoMovil: $data');
-        return data;
-      }).toList();
-    });
-
-    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
-    // monitorStream(
-    //   subEstadoMovilesStream,
-    //   'SubEstadoMovilesStream',
-    // ); // Monitorea el stream
-    monitorStreamWithUsage(subEstadoMovilesStream, 'SubEstadoMovilesStream');
-    // print('SubEstadoMovilesStream: $subEstadoMovilesStream');
-    yield* subEstadoMovilesStream;
+      rethrow;
+    }
   }
 
-  Stream<List<Map<String, dynamic>>>
-      getSubEstadoFinalizacionPedidosStream() async* {
+  /// Lectura única del catálogo SubEstadoFinalizacionPedidos (reemplaza el listener 24h; cache en Hive).
+  Future<List<Map<String, dynamic>>>
+      getSubEstadoFinalizacionPedidosOnce() async {
     var box = await openBoxSafe('sessionBox');
-    if (box == null) return;
+    if (box == null) return [];
     String escenarioId = box.get('escenario', defaultValue: '0').toString();
     String collectionName = 'SubEstadoFinalizacionPedidos-$escenarioId';
 
-    Stream<List<Map<String, dynamic>>> subEstadoFinalizacionPedidosStream =
-        _firestore
-            .collection(collectionName)
-            .orderBy('Orden')
-            .snapshots()
-            .handleError((error) async {
+    try {
+      final snapshot = await _firestore
+          .collection(collectionName)
+          .orderBy('Orden')
+          .get();
+      return snapshot.docs.map((doc) {
+        var data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    } catch (error) {
       if (error is FirebaseException && error.code == 'permission-denied') {
         await _logFirestorePermissionError(
           error.message ?? 'Permission denied',
         );
       } else {
-        // print('Error fetching subestado finalizacion pedidos: $error');
         await _logError('Firestore Error', error.toString());
       }
-      /*bool isConnected = await checkFirestoreConnectivity();
-      if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
-      }*/
-    }).map((snapshot) {
-      // print(
-      //   'Fetched ${snapshot.docs.length} subestado finalizacion pedidos',
-      // );
-      return snapshot.docs.map((doc) {
-        var data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id; // Add document ID to the data
-        // print('SubEstadoFinalizacionPedido: $data');
-        return data;
-      }).toList();
-    });
-
-    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
-    // monitorStream(
-    //   subEstadoFinalizacionPedidosStream,
-    //   'SubEstadoFinalizacionPedidosStream',
-    // ); // Monitorea el stream
-    monitorStreamWithUsage(
-      subEstadoFinalizacionPedidosStream,
-      'SubEstadoFinalizacionPedidosStream',
-    );
-    yield* subEstadoFinalizacionPedidosStream;
-  }
-
-  Stream<List<Map<String, dynamic>>>
-      getSubEstadoFinalizacionServicesStream() async* {
-    var box = await openBoxSafe('sessionBox');
-    if (box == null) return;
-    String escenarioId = box.get('escenario', defaultValue: '0').toString();
-    String collectionName = 'SubEstadoFinalizacionServices-$escenarioId';
-
-    Stream<List<Map<String, dynamic>>> SubEstadoFinalizacionServicesStream =
-        _firestore
-            .collection(collectionName)
-            .orderBy('Orden')
-            .snapshots()
-            .handleError((error) async {
-      if (error is FirebaseException && error.code == 'permission-denied') {
-        await _logFirestorePermissionError(
-          error.message ?? 'Permission denied',
-        );
-      } else {
-        // print('Error fetching subestado finalizacion pedidos: $error');
-        await _logError('Firestore Error', error.toString());
-      }
-      /*bool isConnected = await checkFirestoreConnectivity();
-      if (!isConnected) {
-        // Notificar al usuario sobre la pérdida de conectividad
-        // print('⚠ Pérdida de conectividad con Firestore.');
-      }*/
-    }).map((snapshot) {
-      // print(
-      //   'Fetched ${snapshot.docs.length} subestado finalizacion pedidos',
-      // );
-      return snapshot.docs.map((doc) {
-        var data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id; // Add document ID to the data
-        // print('SubEstadoFinalizacionPedido: $data');
-        return data;
-      }).toList();
-    });
-
-    // ⚠️ ELIMINAR DUPLICACIÓN: Solo usar monitorStreamWithUsage
-    // monitorStream(
-    //   SubEstadoFinalizacionServicesStream,
-    //   'SubEstadoFinalizacionServicesStream',
-    // ); // Monitorea el stream
-    monitorStreamWithUsage(
-      SubEstadoFinalizacionServicesStream,
-      'SubEstadoFinalizacionServicesStream',
-    );
-    yield* SubEstadoFinalizacionServicesStream;
+      rethrow;
+    }
   }
 
   // Agrega más métodos para otras consultas según sea necesario

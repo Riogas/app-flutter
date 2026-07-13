@@ -12,7 +12,6 @@ class PersistentStreamManager {
   // ValueNotifier for SubEstadoFinalizacionPedidos
   final ValueNotifier<List<Map<String, dynamic>>>
       _subEstadoFinalizacionPedidosNotifier = ValueNotifier([]);
-  StreamSubscription? _subEstadoFinalizacionPedidosSubscription;
   // --- Real listener tracking ---
   final Map<String, int> _activeListeners = {
     'pedidos': 0,
@@ -146,8 +145,6 @@ class PersistentStreamManager {
   StreamSubscription? _mensajesSubscription;
   StreamSubscription? _movilSubscription;
   StreamSubscription? _sesionesSubscription;
-  StreamSubscription? _subEstadosSubscription;
-  StreamSubscription? _subEstadoMovilesSubscription;
 
   // Listener counters for debugging
   int _pedidosListeners = 0;
@@ -162,6 +159,8 @@ class PersistentStreamManager {
   int _mensajesReads = 0;
   int _movilReads = 0;
   int _sesionesReads = 0;
+  // SubEstados/SubEstadoMoviles ya no son streams (get() + cache Hive TTL 24h,
+  // ver _loadCatalog); se mantienen en 0 para no romper printDiagnostics/resetCounters.
   int _subEstadosReads = 0;
   int _subEstadoMovilesReads = 0;
 
@@ -233,10 +232,7 @@ class PersistentStreamManager {
     await _initializeMensajesListener();
     await _initializeMovilListener();
     await _initializeSesionesListener();
-    await _initializeSubEstadosListener();
-    await _initializeSubEstadoMovilesListener();
-
-    await _initializeSubEstadoFinalizacionPedidosListener();
+    await _loadSubEstadosCatalogos();
 
     _initialized = true;
     print('✅ [PersistentStreamManager] All persistent listeners initialized');
@@ -340,8 +336,8 @@ class PersistentStreamManager {
     _mensajesSubscription?.cancel();
     _movilSubscription?.cancel();
     _sesionesSubscription?.cancel();
-    _subEstadosSubscription?.cancel();
-    _subEstadoMovilesSubscription?.cancel();
+    // SubEstados/SubEstadoMoviles/SubEstadoFinalizacionPedidos ya no tienen
+    // subscription que cancelar (get() + cache Hive, ver _loadCatalog).
 
     // NO uses .dispose() en notifiers si pensás reusarlos, mejor:
     _pedidosNotifier.value = [];
@@ -431,85 +427,61 @@ class PersistentStreamManager {
     }
   }
 
-  /// Initialize persistent SubEstados listener
-  Future<void> _initializeSubEstadosListener() async {
-    try {
-      _subEstadosSubscription =
-          _firebaseService.getSubEstadoMovilesStream().listen(
-        (List<Map<String, dynamic>> subEstados) {
-          // Increment by the number of documents received (real Firestore reads)
-          _subEstadosReads += subEstados.length;
-          print(
-              '📊 [PersistentStreamManager] SubEstados updated: ${subEstados.length} items (reads: $_subEstadosReads)');
-          _subEstadosNotifier.value = subEstados;
-          // Log to Hive every time the read counter changes
-          _logToMonitoreo('SubEstadosReads', _subEstadosReads);
-          _logToMonitoreo('TotalReads', totalReads);
-        },
-        onError: (error) {
-          print('❌ [PersistentStreamManager] SubEstados stream error: $error');
-        },
-      );
+  static const _catalogTtlHours = 24;
 
-      print(
-          '🔄 [PersistentStreamManager] SubEstados persistent listener started');
-    } catch (e) {
-      print(
-          '❌ [PersistentStreamManager] Error initializing subEstados listener: $e');
+  /// Carga los catálogos SubEstado (get() único + cache Hive con TTL 24h).
+  /// Sirve el cache al instante y refresca en background si venció el TTL
+  /// o no había cache. Si Firestore falla, se sigue sirviendo el cache.
+  Future<void> _loadCatalog({
+    required String cacheKey,
+    required Future<List<Map<String, dynamic>>> Function() fetch,
+    required void Function(List<Map<String, dynamic>>) apply,
+  }) async {
+    final box = await Hive.openBox('catalogCacheBox');
+    final sessionBox = Hive.box('sessionBox');
+    final escenario = sessionBox.get('escenario', defaultValue: '0');
+    final key = '$cacheKey-$escenario';
+
+    // 1) servir cache al instante si existe
+    final cached = box.get(key);
+    if (cached != null) {
+      apply(List<Map<String, dynamic>>.from(
+          (cached['data'] as List).map((e) => Map<String, dynamic>.from(e))));
+    }
+
+    // 2) refrescar desde server solo si venció el TTL o no había cache
+    final ts = cached?['ts'] as int?;
+    final expired = ts == null ||
+        DateTime.now().millisecondsSinceEpoch - ts > _catalogTtlHours * 3600000;
+    if (expired) {
+      try {
+        final fresh = await fetch();
+        apply(fresh);
+        await box
+            .put(key, {'data': fresh, 'ts': DateTime.now().millisecondsSinceEpoch});
+      } catch (e) {
+        print('⚠️ [CatalogCache] refresh $key falló (sirviendo cache): $e');
+      }
     }
   }
 
-  /// Initialize persistent SubEstadoMoviles listener
-  Future<void> _initializeSubEstadoMovilesListener() async {
-    try {
-      _subEstadoMovilesSubscription =
-          _firebaseService.getSubEstadoMovilesStream().listen(
-        (List<Map<String, dynamic>> subEstadoMoviles) {
-          // Increment by the number of documents received (real Firestore reads)
-          _subEstadoMovilesReads += subEstadoMoviles.length;
-          print(
-              '🚗📊 [PersistentStreamManager] SubEstadoMoviles updated: ${subEstadoMoviles.length} items (reads: $_subEstadoMovilesReads)');
-          _subEstadoMovilesNotifier.value = subEstadoMoviles;
-          // Log to Hive every time the read counter changes
-          _logToMonitoreo('SubEstadoMovilesReads', _subEstadoMovilesReads);
-          _logToMonitoreo('TotalReads', totalReads);
-        },
-        onError: (error) {
-          print(
-              '❌ [PersistentStreamManager] SubEstadoMoviles stream error: $error');
-        },
-      );
-
-      print(
-          '🔄 [PersistentStreamManager] SubEstadoMoviles persistent listener started');
-    } catch (e) {
-      print(
-          '❌ [PersistentStreamManager] Error initializing subEstadoMoviles listener: $e');
-    }
-  }
-
-  /// Initialize persistent SubEstadoFinalizacionPedidos listener
-  Future<void> _initializeSubEstadoFinalizacionPedidosListener() async {
-    try {
-      _subEstadoFinalizacionPedidosSubscription =
-          _firebaseService.getSubEstadoFinalizacionPedidosStream().listen(
-        (List<Map<String, dynamic>> subEstadosFinalizacionPedidos) {
-          print(
-              '✅ [PersistentStreamManager] SubEstadoFinalizacionPedidos updated: ${subEstadosFinalizacionPedidos.length} items');
-          _subEstadoFinalizacionPedidosNotifier.value =
-              subEstadosFinalizacionPedidos;
-        },
-        onError: (error) {
-          print(
-              '❌ [PersistentStreamManager] SubEstadoFinalizacionPedidos stream error: $error');
-        },
-      );
-      print(
-          '🔄 [PersistentStreamManager] SubEstadoFinalizacionPedidos persistent listener started');
-    } catch (e) {
-      print(
-          '❌ [PersistentStreamManager] Error initializing SubEstadoFinalizacionPedidos listener: $e');
-    }
+  /// Carga los catálogos SubEstados/SubEstadoMoviles/SubEstadoFinalizacionPedidos
+  /// (reemplaza los 3 listeners persistentes por get() + cache Hive TTL 24h).
+  Future<void> _loadSubEstadosCatalogos() async {
+    await _loadCatalog(
+      cacheKey: 'subEstadoMoviles',
+      fetch: _firebaseService.getSubEstadoMovilesOnce,
+      apply: (list) {
+        // Mismo origen de datos para ambos notifiers (elimina la doble lectura)
+        _subEstadosNotifier.value = list;
+        _subEstadoMovilesNotifier.value = list;
+      },
+    );
+    await _loadCatalog(
+      cacheKey: 'subEstadoFinalizacionPedidos',
+      fetch: _firebaseService.getSubEstadoFinalizacionPedidosOnce,
+      apply: (list) => _subEstadoFinalizacionPedidosNotifier.value = list,
+    );
   }
 
   // --- Gestión manual de listeners por widget ---
@@ -639,13 +611,13 @@ class PersistentStreamManager {
   }
 
   bool get isProperlyInitialized {
+    // SubEstados/SubEstadoMoviles/SubEstadoFinalizacionPedidos ya no son
+    // streams persistentes (get() + cache Hive), no aportan a este check.
     return _initialized &&
         _pedidosSubscription != null &&
         _mensajesSubscription != null &&
         _movilSubscription != null &&
-        _sesionesSubscription != null &&
-        _subEstadosSubscription != null &&
-        _subEstadoMovilesSubscription != null;
+        _sesionesSubscription != null;
   }
 
   // Getters for ValueNotifiers (widgets subscribe to these)
@@ -1057,8 +1029,8 @@ class PersistentStreamManager {
     _mensajesSubscription?.cancel();
     _movilSubscription?.cancel();
     _sesionesSubscription?.cancel();
-    _subEstadosSubscription?.cancel();
-    _subEstadoMovilesSubscription?.cancel();
+    // SubEstados/SubEstadoMoviles/SubEstadoFinalizacionPedidos ya no tienen
+    // subscription que cancelar (get() + cache Hive, ver _loadCatalog).
 
     // ❌ NO hacer esto:
     // _pedidosNotifier.dispose();  👈❌
