@@ -33,6 +33,7 @@ object LocationServiceController {
         try {
             // 1. Cancelar WorkManager (health-check) — ya no hay alarmas que cancelar
             WorkManagerHelper.cancelPeriodicWork(context)
+            com.riogas.appmovil.tracking.HealthCheckWorker.cancel(context)
 
             // 2. Marcar como deshabilitado vía ServiceStatusFlags
             markServiceAsDisabled(context, reason)

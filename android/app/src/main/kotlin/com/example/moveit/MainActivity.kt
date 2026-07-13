@@ -410,6 +410,9 @@
                         // Arranque único del FGS nuevo (idempotente: si ya corre, actualiza extras)
                         com.riogas.appmovil.tracking.LocationTrackingService.start(this, movil, escenario, usuario, deviceId)
 
+                        // B.4: programar health-check (15 min, NO fuente de GPS)
+                        com.riogas.appmovil.tracking.HealthCheckWorker.schedule(this)
+
                         Log.d("MainActivity", "✅ LocationTrackingService iniciado desde Flutter")
                         result.success("✅ Servicio de ubicación iniciado con intervalo $interval minutos")
                     }
@@ -422,6 +425,7 @@
                         // 1. Cancelar WorkManager (ya no hay AlarmManager que cancelar)
                         try {
                             WorkManagerHelper.cancelPeriodicWork(this)
+                            com.riogas.appmovil.tracking.HealthCheckWorker.cancel(this)
                             Log.i("MainActivity", "🛑 WorkManager cancelado desde Flutter")
                         } catch (e: Exception) {
                             Log.e("MainActivity", "❌ Error cancelando WorkManager: ${e.message}")
@@ -476,6 +480,7 @@
                         Log.d("MainActivity", "🛑 forceStopGpsService - Deteniendo tracking GPS")
                         try {
                             com.riogas.appmovil.tracking.LocationTrackingService.stop(this)
+                            com.riogas.appmovil.tracking.HealthCheckWorker.cancel(this)
                             com.riogas.appmovil.ServiceStatusFlags.setServiceDisabled(this, true, "forceStopGpsService desde Flutter UI")
                             val stopped = !com.riogas.appmovil.tracking.LocationTrackingService.isRunning
                             Log.d("MainActivity", "✅ forceStopGpsService completado - detenido: $stopped")
@@ -926,7 +931,10 @@
             // Subida periódica de logs críticos (WorkManager, cada 15 min; sin alarmas ni watchdog)
             com.riogas.appmovil.CriticalLogUploadWorker.schedule(applicationContext)
             Log.d("MainActivity", "✅ CriticalLogUploadWorker programado (cada 15 min)")
-            
+
+            // 🧹 Task 10 / B.4: limpieza one-shot del work periódico viejo (pre-refactor) en teléfonos actualizados
+            androidx.work.WorkManager.getInstance(this).cancelUniqueWork("LocationPeriodicWork")
+
             // 🔄 REINICIAR SERVICIO DESDE FOREGROUND (Android 12+ compatible)
             restartLocationServiceFromForeground()
 

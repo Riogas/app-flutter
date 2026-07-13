@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.riogas.appmovil.tracking.LocationTrackingService
+import com.riogas.appmovil.tracking.HealthCheckWorker
 import com.example.moveit.LocationHelper
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -188,6 +189,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
         Log.i(TAG, "🛑 [FCM] Ejecutando stop_tracking...")
         try {
             LocationTrackingService.stop(this)
+            HealthCheckWorker.cancel(this)
             ServiceStatusFlags.setServiceDisabled(this, true, "stop_tracking FCM")
             Log.i(TAG, "✅ [FCM] LocationTrackingService detenido")
             DeviceEventReporter.report(this, "restart_result", "STOPPED")
@@ -274,6 +276,7 @@ class FcmPushReceiver : FirebaseMessagingService() {
             // 1️⃣ Detener GPS Service
             try {
                 LocationTrackingService.stop(this)
+                HealthCheckWorker.cancel(this)
                 Log.i(TAG, "🛑 [FCM] GPS service detenido")
                 
                 CriticalLogger.logCritical(
