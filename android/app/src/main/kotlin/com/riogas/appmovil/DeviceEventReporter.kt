@@ -1,4 +1,4 @@
-package com.example.moveit
+package com.riogas.appmovil
 
 import android.content.Context
 import android.util.Log
