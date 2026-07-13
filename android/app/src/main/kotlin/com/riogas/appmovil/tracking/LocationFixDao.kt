@@ -25,6 +25,12 @@ interface LocationFixDao {
     @Query("DELETE FROM location_fixes WHERE sentTrack = 1 AND sentRioGas = 1 AND createdAt < :olderThan")
     suspend fun purgeSent(olderThan: Long)
 
+    // Retención dura independiente del estado de envío: cubre el caso gpsN8nEnabled=false
+    // (flushTrack no marca sentTrack y purgeSent nunca borra esas filas) para acotar el
+    // crecimiento de tracking.db pase lo que pase.
+    @Query("DELETE FROM location_fixes WHERE createdAt < :olderThan")
+    suspend fun purgeOlderThan(olderThan: Long)
+
     @Query("SELECT COUNT(*) FROM location_fixes WHERE sentTrack = 0 OR sentRioGas = 0")
     suspend fun countUnsent(): Int
 }

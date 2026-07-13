@@ -83,8 +83,10 @@ class LocationTrackingService : Service() {
     }
 
     private fun startInForeground() {
-        val channel = NotificationChannel(CHANNEL_ID, "Ubicación", NotificationManager.IMPORTANCE_DEFAULT)
-        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(CHANNEL_ID, "Ubicación", NotificationManager.IMPORTANCE_DEFAULT)
+            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
+        }
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("MoveIT")
             .setContentText("Rastreo de ubicación activo")
@@ -101,12 +103,21 @@ class LocationTrackingService : Service() {
         return if (v > 0) v else DEFAULT_INTERVAL_S   // constante validada >0
     }
 
-    private fun registerLocationUpdates() {
+    /**
+     * @param reportIfNoPermission si false, no reporta heartbeat_no_gps por falta de permiso
+     * en el early-return (el llamador ya reportó, ej. el watchdog) — máximo 1 evento
+     * heartbeat_no_gps por tick.
+     * @return true solo si el registro con FusedLocationProviderClient se realizó efectivamente.
+     */
+    private fun registerLocationUpdates(reportIfNoPermission: Boolean = true): Boolean {
         if (!hasLocationPermission()) {
-            DeviceEventReporter.report(this, "heartbeat_no_gps", "NO_PERMISSION")
-            return
+            if (reportIfNoPermission) {
+                DeviceEventReporter.report(this, "heartbeat_no_gps", "NO_PERMISSION")
+            }
+            return false
         }
         locationCallback?.let { fusedClient.removeLocationUpdates(it) }
+        locationCallback = null
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalSeconds() * 1000L)
             .setMinUpdateIntervalMillis(MIN_UPDATE_MS)
             .build()
@@ -117,6 +128,8 @@ class LocationTrackingService : Service() {
                 val fechaHora = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date())
                 scope.launch {
                     try {
+                        // UTM real (mismo cálculo que LocationHelper.convertToUTM, EPSG:4326 → UTM21S)
+                        val utm = com.example.moveit.LocationHelper.convertToUTM(loc.latitude, loc.longitude)
                         TrackingDatabase.get(this@LocationTrackingService).locationFixDao().insert(
                             LocationFixEntity(
                                 movil = movil.toIntOrNull() ?: 0,
@@ -125,12 +138,13 @@ class LocationTrackingService : Service() {
                                 latitud = loc.latitude, longitud = loc.longitude,
                                 accuracy = loc.accuracy, fechaHora = fechaHora,
                                 createdAt = System.currentTimeMillis(),
+                                utmX = utm.first, utmY = utm.second,
                                 // Columnas que salen directo del objeto Location (Task 5 las agregó
                                 // a la entity con default; acá se pueblan igual que
                                 // LocationHelper.kt:2438-2450). Las de contexto vivo cross-fix
-                                // (utmX/utmY/distanciaRecorrida/movementType/executionCounter) las
-                                // deja con default: no son atributos de Location, requieren estado
-                                // acumulado que no vive en este callback.
+                                // (distanciaRecorrida/movementType/executionCounter) las deja con
+                                // default: no son atributos de Location, requieren estado acumulado
+                                // que no vive en este callback.
                                 altitude = if (loc.hasAltitude()) loc.altitude else null,
                                 bearing = if (loc.hasBearing()) loc.bearing else null,
                                 provider = loc.provider ?: "",
@@ -150,13 +164,15 @@ class LocationTrackingService : Service() {
                 }
             }
         }
-        try {
+        return try {
             fusedClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
             locationCallback = callback
             lastFixElapsed = android.os.SystemClock.elapsedRealtime()
             Log.i(TAG, "requestLocationUpdates registrado (intervalo ${intervalSeconds()}s)")
+            true
         } catch (e: SecurityException) {
             DeviceEventReporter.report(this, "heartbeat_no_gps", "NO_PERMISSION", mapOf("error" to (e.message ?: "")))
+            false
         }
     }
 
@@ -175,8 +191,12 @@ class LocationTrackingService : Service() {
             while (isActive) { delay(RIOGAS_FLUSH_MS)
                 try {
                     LocationBatchUploader.flushRioGas(this@LocationTrackingService)
-                    TrackingDatabase.get(this@LocationTrackingService).locationFixDao()
-                        .purgeSent(System.currentTimeMillis() - 24 * 3600_000L)
+                    val dao = TrackingDatabase.get(this@LocationTrackingService).locationFixDao()
+                    dao.purgeSent(System.currentTimeMillis() - 24 * 3600_000L)
+                    // Retención dura de 7 días pase lo que pase: cubre el caso
+                    // gpsN8nEnabled=false, donde flushTrack nunca marca sentTrack y purgeSent
+                    // nunca borra esas filas (crecimiento sin límite de tracking.db).
+                    dao.purgeOlderThan(System.currentTimeMillis() - 7 * 24 * 3600_000L)
                 } catch (e: Exception) { Log.e(TAG, "flushRioGas: ${e.message}") } }
         }
         // Auto-monitoreo interno: ¿recibí un fix en los últimos 90 s?
@@ -192,8 +212,12 @@ class LocationTrackingService : Service() {
                     Log.w(TAG, "silencio ${silence}ms → re-registrando callback ($motivo)")
                     DeviceEventReporter.report(this@LocationTrackingService, "heartbeat_no_gps", motivo,
                         mapOf("silence_ms" to silence.toString()))
-                    withContext(Dispatchers.Main) { registerLocationUpdates() }
-                    DeviceEventReporter.report(this@LocationTrackingService, "tracking_reregistered", motivo)
+                    val reregistered = withContext(Dispatchers.Main) {
+                        registerLocationUpdates(reportIfNoPermission = false)
+                    }
+                    if (reregistered) {
+                        DeviceEventReporter.report(this@LocationTrackingService, "tracking_reregistered", motivo)
+                    }
                 }
             }
         }
