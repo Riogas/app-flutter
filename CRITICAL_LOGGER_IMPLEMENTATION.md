@@ -147,7 +147,7 @@ try {
 }
 ```
 
-#### **invokeRegistrarCoordenadasApiWithRetry() - línea 1220:**
+#### **invokeRegistrarCoordenadasV2ApiWithRetry() - línea 1220:**
 Agregado **CriticalLogger** para errores de API:
 
 **Errores HTTP (response.code != 200):**

@@ -5,15 +5,31 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="d8c59f45-3504-4d43-b22c-6c6189d85e97" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.dart_tool/flutter_build/dart_plugin_registrant.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.dart_tool/package_config.json" beforeDir="false" afterPath="$PROJECT_DIR$/.dart_tool/package_config.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.flutter-plugins-dependencies" beforeDir="false" afterPath="$PROJECT_DIR$/.flutter-plugins-dependencies" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appmovil.iml" beforeDir="false" afterPath="$PROJECT_DIR$/appmovil.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AI_LOG_ANALYZER_PROMPT.md" beforeDir="false" afterPath="$PROJECT_DIR$/AI_LOG_ANALYZER_PROMPT.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ANALISIS_DUPLICADOS_FINALIZARPEDIDO.md" beforeDir="false" afterPath="$PROJECT_DIR$/ANALISIS_DUPLICADOS_FINALIZARPEDIDO.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CAMBIO_URL_DESARROLLO.md" beforeDir="false" afterPath="$PROJECT_DIR$/CAMBIO_URL_DESARROLLO.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CORRECCION_REINTENTOS_SECUENCIALES.md" beforeDir="false" afterPath="$PROJECT_DIR$/CORRECCION_REINTENTOS_SECUENCIALES.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CRITICAL_LOGGER_IMPLEMENTATION.md" beforeDir="false" afterPath="$PROJECT_DIR$/CRITICAL_LOGGER_IMPLEMENTATION.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CRITICAL_LOGS_ANALYSIS.md" beforeDir="false" afterPath="$PROJECT_DIR$/CRITICAL_LOGS_ANALYSIS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DETECCION_CAMBIO_DIA_GPS.md" beforeDir="false" afterPath="$PROJECT_DIR$/DETECCION_CAMBIO_DIA_GPS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/EJEMPLOS_USO_FLAGS_SERVICIOS.md" beforeDir="false" afterPath="$PROJECT_DIR$/EJEMPLOS_USO_FLAGS_SERVICIOS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/FIX_GPS_SERVICE_URL_DINAMICA.md" beforeDir="false" afterPath="$PROJECT_DIR$/FIX_GPS_SERVICE_URL_DINAMICA.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/GPSMAPA_FEATURE.md" beforeDir="false" afterPath="$PROJECT_DIR$/GPSMAPA_FEATURE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/GUIA_LOGS_GPS.md" beforeDir="false" afterPath="$PROJECT_DIR$/GUIA_LOGS_GPS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/OPTIMIZACIONES_ADICIONALES.md" beforeDir="false" afterPath="$PROJECT_DIR$/OPTIMIZACIONES_ADICIONALES.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/QUE_PASA_SI_FALLA_ENVIO.md" beforeDir="false" afterPath="$PROJECT_DIR$/QUE_PASA_SI_FALLA_ENVIO.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RESUMEN_DETECCION_CAMBIO_DIA.md" beforeDir="false" afterPath="$PROJECT_DIR$/RESUMEN_DETECCION_CAMBIO_DIA.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/SERVICIOS_V3_DESPERTAR.md" beforeDir="false" afterPath="$PROJECT_DIR$/SERVICIOS_V3_DESPERTAR.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/SISTEMA_RECUPERACION_MOVIL.md" beforeDir="false" afterPath="$PROJECT_DIR$/SISTEMA_RECUPERACION_MOVIL.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/main.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/pages/home_page.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/pages/home_page.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/services/firebase_constants_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/services/firebase_constants_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/pages/login_page.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/pages/login_page.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/services/location_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/services/location_service.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pubspec.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/services/logout_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/services/logout_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/services/persistent_stream_manager.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/services/persistent_stream_manager.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/services/riogas_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/services/riogas_service.dart" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -65,7 +81,7 @@
     "dart.analysis.tool.window.visible": "false",
     "git-widget-placeholder": "dev",
     "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "C:/Users/jgomez/Documents/Projects/AppTFlutter/appmovil",
+    "last_opened_file_path": "C:/Users/jgomez/Downloads/FuentesAppMovilVersion31APK",
     "project.structure.last.edited": "SDKs",
     "project.structure.proportion": "0.0",
     "project.structure.side.proportion": "0.2",

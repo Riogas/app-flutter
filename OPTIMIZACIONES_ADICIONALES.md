@@ -78,7 +78,7 @@ fun scheduleLocationAlarm(context: Context, intervalMinutes: Int, movil: String,
         val totalDistance = currentLocation["totalDistance"] as Float
         val speed = currentLocation["speed"] as Float
 
-        invokeRegistrarCoordenadasApi(context, lat, lon, utmX, utmY, totalDistance, speed, movil, escenario, usuario, deviceId, "initial")
+        invokeRegistrarCoordenadasV2Api(context, lat, lon, utmX, utmY, totalDistance, speed, movil, escenario, usuario, deviceId, "initial")
     }
 }
 

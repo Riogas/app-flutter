@@ -120,10 +120,10 @@ private fun checkForDayChange(context: Context) {
 
 #### Punto de Invocación
 
-La función se llama al **inicio** de `invokeRegistrarCoordenadasApi()`:
+La función se llama al **inicio** de `invokeRegistrarCoordenadasV2Api()`:
 
 ```kotlin
-private fun invokeRegistrarCoordenadasApi(...) {
+private fun invokeRegistrarCoordenadasV2Api(...) {
     // 🌅 CHEQUEO DE CAMBIO DE DÍA: Verificar ANTES de enviar coordenadas
     checkForDayChange(context)
     
@@ -407,7 +407,7 @@ static Future<void> syncToSharedPrefs() async {
 ## 🚀 Estado de Implementación
 
 - [x] Función `checkForDayChange()` implementada en `LocationHelper.kt`
-- [x] Integración con `invokeRegistrarCoordenadasApi()`
+- [x] Integración con `invokeRegistrarCoordenadasV2Api()`
 - [x] Logs críticos con `CriticalLogger`
 - [x] Logs de eventos con `LocationLogger`
 - [x] Función `stopLocationService()` para detener GPS

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
@@ -114,63 +113,7 @@ class LogoutService {
         print('$TAG ❌ Error en RegistrarCierre: $e');
       }
 
-      // 3️⃣ Manejar documentos de Firestore (sesiones)
-      try {
-        String escenarioId = sessionBox.get('escenario', defaultValue: '0');
-        String movilId = sessionBox.get('movil', defaultValue: '0');
-        String fechaActualStr = DateTime.now()
-            .toUtc()
-            .subtract(Duration(hours: 3))
-            .toIso8601String()
-            .split('T')[0]
-            .replaceAll('-', '');
-
-        DocumentReference fechaDocRef = FirebaseFirestore.instance
-            .collection('Sesiones-$escenarioId')
-            .doc(fechaActualStr);
-
-        // Manejar documento del móvil
-        DocumentReference movilActivoDocRef =
-            fechaDocRef.collection('Movil-$movilId').doc('activo');
-
-        DocumentSnapshot activeDocSnapshot = await movilActivoDocRef.get();
-        if (activeDocSnapshot.exists) {
-          var activeData = activeDocSnapshot.data() as Map<String, dynamic>;
-          activeData['logout'] = isRemoteLogout ? 'Remoto' : 'Controlado';
-
-          String horaActual =
-              DateTime.now().toIso8601String().split('T')[1].split('.')[0];
-          DocumentReference backupDocRef =
-              fechaDocRef.collection('Movil-$movilId').doc(horaActual);
-          await backupDocRef.set(activeData);
-          await movilActivoDocRef.delete();
-
-          print('$TAG ✅ Documento móvil actualizado en Firestore');
-        }
-
-        // Manejar documento del usuario
-        DocumentReference usuarioActivoDocRef =
-            fechaDocRef.collection('Usuario-$usuarioId').doc('activo');
-
-        DocumentSnapshot usuarioDocSnapshot = await usuarioActivoDocRef.get();
-        if (usuarioDocSnapshot.exists) {
-          var usuarioData = usuarioDocSnapshot.data() as Map<String, dynamic>;
-          usuarioData['logout'] = isRemoteLogout ? 'Remoto' : 'Controlado';
-
-          String horaActual =
-              DateTime.now().toIso8601String().split('T')[1].split('.')[0];
-          DocumentReference usuarioBackupDocRef =
-              fechaDocRef.collection('Usuario-$usuarioId').doc(horaActual);
-          await usuarioBackupDocRef.set(usuarioData);
-          await usuarioActivoDocRef.delete();
-
-          print('$TAG ✅ Documento usuario actualizado en Firestore');
-        }
-      } catch (e) {
-        print('$TAG ❌ Error manejando documentos Firestore: $e');
-      }
-
-      // 4️⃣ Llamar a SessionService
+      // 3️⃣ Llamar a SessionService (Firestore "Sesiones-" eliminado - ya no se usa)
       try {
         SessionService sessionService = SessionService();
 

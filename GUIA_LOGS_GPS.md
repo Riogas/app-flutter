@@ -40,7 +40,7 @@ o
 
 ### ✅ **6. Envío al Servidor**
 ```
-🌐 Request (intento 1/3): URL=https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas
+🌐 Request (intento 1/3): URL=https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadasV2
 📤 Body: {"token":"IcA.FwL.1710.!","movil":123,...}
 ✅ API invocada exitosamente (intento 1): {...}
 ```

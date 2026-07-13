@@ -577,7 +577,7 @@ class LocationService {
         // );
         print(
             '🗺️ [GPSMapa] Enviando coordenadas (GPSMapa=true): Lat ${position['latitude']}, Lng ${position['longitude']}');
-        await RioGasService.registrarCoordenadas(
+        await RioGasService.RegistrarCoordenadasV2(
             movilInt, // Usar movilInt en lugar de int.parse(movil)
             position['latitude'].toString(),
             position['longitude'].toString(),

@@ -23,7 +23,7 @@ http://190.64.89.170:8888/ICA_Geos_/appservices/
 
 ### ✅ URL Nueva (Actual)
 ```
-https://sgm-dev.glp.riogas.com.uy/appservices/
+https://sgm.riogas.com.uy/appservices/
 ```
 
 **Características:**
@@ -54,7 +54,7 @@ https://sgm-dev.glp.riogas.com.uy/appservices/
 
 ### 4. **Consistencia con Producción** 🏭
 ```
-Desarrollo:  https://sgm-dev.glp.riogas.com.uy/appservices/
+Desarrollo:  https://sgm.riogas.com.uy/appservices/
 Producción:  https://www.riogas.uy/ica_geos_/appservices/
 ```
 Ambos usan HTTPS y dominios corporativos.
@@ -76,7 +76,7 @@ static const String _devUrlFallback =
 
 // DESPUÉS:
 static const String _devUrlFallback =
-    'https://sgm-dev.glp.riogas.com.uy/appservices/';
+    'https://sgm.riogas.com.uy/appservices/';
 ```
 
 ---
@@ -100,7 +100,7 @@ La URL de desarrollo puede ser configurada de dos formas:
 Si no existe la constante 611 en Firestore, se usa el valor hardcoded:
 ```dart
 static const String _devUrlFallback = 
-    'https://sgm-dev.glp.riogas.com.uy/appservices/';
+    'https://sgm.riogas.com.uy/appservices/';
 ```
 
 ### 2. **Constante 611 en Firestore** (Prioritaria)
@@ -125,25 +125,25 @@ adb logcat | Select-String "AMBIENTE|devUrl|BaseUrl"
 **2. Abrir la app y observar logs de inicialización:**
 ```
 🌍 [AMBIENTE] Aplicación iniciada en modo DESARROLLO
-🔧 [CONSTANTE 611] URL Desarrollo cargada: "https://sgm-dev.glp.riogas.com.uy/appservices/"
+🔧 [CONSTANTE 611] URL Desarrollo cargada: "https://sgm.riogas.com.uy/appservices/"
 ```
 
 **3. Hacer login en modo DESARROLLO y verificar URL guardada:**
 ```
-✅ BaseUrl guardada en SharedPreferences nativo: https://sgm-dev.glp.riogas.com.uy/appservices/
+✅ BaseUrl guardada en SharedPreferences nativo: https://sgm.riogas.com.uy/appservices/
 🔧 [LOGIN] Ambiente: DESARROLLO
 ```
 
 **4. Verificar requests del GPS:**
 ```powershell
-adb logcat | Select-String "sgm-dev.glp.riogas.com.uy|RegistrarCoordenadas"
+adb logcat | Select-String "sgm.riogas.com.uy|RegistrarCoordenadasV2"
 ```
 
 **Logs esperados:**
 ```
-🌍 [URL_AMBIENTE] BaseUrl obtenida: https://sgm-dev.glp.riogas.com.uy/appservices/
-🌍 [URL_AMBIENTE] URL completa: https://sgm-dev.glp.riogas.com.uy/appservices/RegistrarCoordenadas
-🌐 Request (intento 1/3): URL=https://sgm-dev.glp.riogas.com.uy/appservices/RegistrarCoordenadas
+🌍 [URL_AMBIENTE] BaseUrl obtenida: https://sgm.riogas.com.uy/appservices/
+🌍 [URL_AMBIENTE] URL completa: https://sgm.riogas.com.uy/appservices/RegistrarCoordenadasV2
+🌐 Request (intento 1/3): URL=https://sgm.riogas.com.uy/appservices/RegistrarCoordenadasV2
 📤 Body: {"Movil":693,"IdTerminal":"ed90b721e7b3444d",...}
 ✅ Coordenada enviada exitosamente
 ```
@@ -216,7 +216,7 @@ static const String _devUrlFallback =
 
 ### Certificado SSL Verificado
 ```
-Dominio: sgm-dev.glp.riogas.com.uy
+Dominio: sgm.riogas.com.uy
 Emisor: Let's Encrypt / DigiCert / Otro CA
 Validez: ✅ Válido
 Protocolo: TLS 1.2+ ✅
@@ -237,7 +237,7 @@ Cifrado: AES-256-GCM ✅
 
 **Verificar conectividad:**
 ```bash
-curl -v https://sgm-dev.glp.riogas.com.uy/appservices/
+curl -v https://sgm.riogas.com.uy/appservices/
 ```
 
 **Esperado:**
@@ -248,7 +248,7 @@ curl -v https://sgm-dev.glp.riogas.com.uy/appservices/
 ```
 
 **Si falla:**
-1. Verificar DNS: `nslookup sgm-dev.glp.riogas.com.uy`
+1. Verificar DNS: `nslookup sgm.riogas.com.uy`
 2. Verificar firewall/proxy corporativo
 3. Verificar certificado SSL válido
 4. Contactar a equipo de infraestructura
@@ -288,7 +288,7 @@ curl -v https://sgm-dev.glp.riogas.com.uy/appservices/
 ### Múltiples Ambientes de Desarrollo (Futuro)
 La estructura de la nueva URL permite fácilmente crear múltiples ambientes:
 ```
-https://sgm-dev.glp.riogas.com.uy/    # Desarrollo principal
+https://sgm.riogas.com.uy/    # Desarrollo principal
 https://sgm-qa.glp.riogas.com.uy/     # Quality Assurance
 https://sgm-staging.glp.riogas.com.uy/ # Pre-producción
 https://www.riogas.uy/ica_geos_/      # Producción

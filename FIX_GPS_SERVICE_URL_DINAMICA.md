@@ -5,7 +5,7 @@
 El **servicio GPS en foreground** (código nativo Android - Kotlin) siempre enviaba coordenadas a la URL de **PRODUCCIÓN hardcodeada**:
 
 ```kotlin
-val url = "https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas"
+val url = "https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadasV2"
 ```
 
 ❌ **Problema:** No respetaba la configuración de ambiente (Producción vs Desarrollo) establecida en Flutter.
@@ -21,10 +21,10 @@ val url = "https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas"
 
 **Antes (hardcodeada):**
 ```kotlin
-private fun invokeRegistrarCoordenadasApiWithRetry(...) {
+private fun invokeRegistrarCoordenadasV2ApiWithRetry(...) {
     val maxRetries = 3
     val retryDelayMs = 5000L
-    val url = "https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas"  // ❌ Siempre producción
+    val url = "https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadasV2"  // ❌ Siempre producción
     
     // ... resto del código
 }
@@ -32,7 +32,7 @@ private fun invokeRegistrarCoordenadasApiWithRetry(...) {
 
 **Después (dinámica):**
 ```kotlin
-private fun invokeRegistrarCoordenadasApiWithRetry(...) {
+private fun invokeRegistrarCoordenadasV2ApiWithRetry(...) {
     val maxRetries = 3
     val retryDelayMs = 5000L
     
@@ -40,7 +40,7 @@ private fun invokeRegistrarCoordenadasApiWithRetry(...) {
     val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
     val baseUrl = prefs.getString("flutter.baseUrl", "https://www.riogas.uy/ica_geos_/appservices/") 
         ?: "https://www.riogas.uy/ica_geos_/appservices/"
-    val url = "${baseUrl}RegistrarCoordenadas"
+    val url = "${baseUrl}RegistrarCoordenadasV2"
     
     Log.d(TAG, "🌍 [URL_AMBIENTE] BaseUrl obtenida: $baseUrl")
     Log.d(TAG, "🌍 [URL_AMBIENTE] URL completa: $url")
@@ -58,7 +58,7 @@ private fun invokeRegistrarCoordenadasApiWithRetry(...) {
 1. **Usuario hace login** en `login_page.dart`
 2. **Se construye baseUrl** según constantes:
    - **Producción:** Constante 600 + 601 → `https://www.riogas.uy/ica_geos_/appservices/`
-   - **Desarrollo:** Constante 611 → `https://sgm-dev.glp.riogas.com.uy/appservices/`
+   - **Desarrollo:** Constante 611 → `https://sgm.riogas.com.uy/appservices/`
 
 3. **Se guarda en SharedPreferences nativo** (línea 1501):
    ```dart
@@ -78,8 +78,8 @@ private fun invokeRegistrarCoordenadasApiWithRetry(...) {
 
 | Ambiente | BaseUrl Guardada | URL Final GPS |
 |----------|------------------|---------------|
-| **🏭 Producción** | `https://www.riogas.uy/ica_geos_/appservices/` | `https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas` |
-| **🔧 Desarrollo** | `https://sgm-dev.glp.riogas.com.uy/appservices/` | `https://sgm-dev.glp.riogas.com.uy/appservices/RegistrarCoordenadas` |
+| **🏭 Producción** | `https://www.riogas.uy/ica_geos_/appservices/` | `https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadasV2` |
+| **🔧 Desarrollo** | `https://sgm.riogas.com.uy/appservices/` | `https://sgm.riogas.com.uy/appservices/RegistrarCoordenadasV2` |
 
 ---
 
@@ -104,11 +104,11 @@ adb logcat | Select-String "URL_AMBIENTE|LocationHelper.*URL|SETTINGS.*baseUrl"
 ```
 🔄 [SETTINGS] Actualizando baseUrl del servicio GPS...
 🔄 [SETTINGS] Nuevo ambiente: DESARROLLO
-🔄 [SETTINGS] Nueva URL: https://sgm-dev.glp.riogas.com.uy/appservices/
+🔄 [SETTINGS] Nueva URL: https://sgm.riogas.com.uy/appservices/
 ✅ [SETTINGS] BaseUrl del servicio GPS actualizada exitosamente
-🌍 [URL_AMBIENTE] BaseUrl obtenida: https://sgm-dev.glp.riogas.com.uy/appservices/
-🌍 [URL_AMBIENTE] URL completa: https://sgm-dev.glp.riogas.com.uy/appservices/RegistrarCoordenadas
-🌐 Request (intento 1/3): URL=https://sgm-dev.glp.riogas.com.uy/appservices/RegistrarCoordenadas
+🌍 [URL_AMBIENTE] BaseUrl obtenida: https://sgm.riogas.com.uy/appservices/
+🌍 [URL_AMBIENTE] URL completa: https://sgm.riogas.com.uy/appservices/RegistrarCoordenadasV2
+🌐 Request (intento 1/3): URL=https://sgm.riogas.com.uy/appservices/RegistrarCoordenadasV2
 ```
 
 ### 4. Cambiar a producción y verificar
@@ -122,8 +122,8 @@ En **Settings → Modo Desarrollo → OFF** (sin cerrar sesión)
 🔄 [SETTINGS] Nueva URL: https://www.riogas.uy/ica_geos_/appservices/
 ✅ [SETTINGS] BaseUrl del servicio GPS actualizada exitosamente
 🌍 [URL_AMBIENTE] BaseUrl obtenida: https://www.riogas.uy/ica_geos_/appservices/
-🌍 [URL_AMBIENTE] URL completa: https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas
-🌐 Request (intento 1/3): URL=https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas
+🌍 [URL_AMBIENTE] URL completa: https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadasV2
+🌐 Request (intento 1/3): URL=https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadasV2
 ```
 
 ---
@@ -132,7 +132,7 @@ En **Settings → Modo Desarrollo → OFF** (sin cerrar sesión)
 
 ### Ver a qué URL está pegando el GPS en tiempo real:
 ```powershell
-adb logcat | Select-String "sgm-dev.glp.riogas.com.uy|www.riogas.uy|URL_AMBIENTE"
+adb logcat | Select-String "sgm.riogas.com.uy|www.riogas.uy|URL_AMBIENTE"
 ```
 
 ### Ver cambios de ambiente en Settings:
@@ -186,7 +186,7 @@ El valor de `baseUrl` persiste en SharedPreferences hasta:
 | `LocationHelper.kt` | 1124-1138 | URL dinámica desde SharedPreferences |
 | `login_page.dart` | 1501-1503 | Guarda baseUrl al hacer login |
 | `settings_page.dart` | 1448-1477 | 🆕 Actualiza baseUrl al cambiar ambiente |
-| `constantes.dart` | 16-17 | URL de desarrollo actualizada a `sgm-dev.glp.riogas.com.uy` |
+| `constantes.dart` | 16-17 | URL de desarrollo actualizada a `sgm.riogas.com.uy` |
 
 ---
 
@@ -201,7 +201,7 @@ Después de instalar la app actualizada:
 - [ ] Verificar request se envía a URL de producción
 - [ ] **Cambiar a modo DESARROLLO en Settings** (sin cerrar sesión)
 - [ ] Ver logs nuevamente en tiempo real
-- [ ] Verificar URL contiene: `https://sgm-dev.glp.riogas.com.uy`
+- [ ] Verificar URL contiene: `https://sgm.riogas.com.uy`
 - [ ] Esperar 3 minutos
 - [ ] Verificar request se envía a URL de desarrollo
 - [ ] **Cambiar a modo PRODUCCIÓN** (sin cerrar sesión)
@@ -219,7 +219,7 @@ Después de instalar la app actualizada:
 
 ✅ **Después del fix (versión actual):**
 - GPS respeta configuración de ambiente
-- En desarrollo → `https://sgm-dev.glp.riogas.com.uy`
+- En desarrollo → `https://sgm.riogas.com.uy`
 - En producción → `https://www.riogas.uy`
 - **Se actualiza inmediatamente** al cambiar ambiente en Settings
 - **No requiere logout/login** para aplicar cambios

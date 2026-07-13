@@ -6,7 +6,7 @@
 
 ```dart
 // En location_service.dart o similar
-static Future<void> registrarCoordenadas(...) async {
+static Future<void> RegistrarCoordenadasV2(...) async {
   // Obtener flag de servicios
   bool? servicesNeedRestart = await RioGasService.getServicesNeedRestart();
   
@@ -21,7 +21,7 @@ static Future<void> registrarCoordenadas(...) async {
   };
   
   // Enviar al servidor
-  await RioGasService.registrarCoordenadas(...);
+  await RioGasService.RegistrarCoordenadasV2(...);
 }
 ```
 

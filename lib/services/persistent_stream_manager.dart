@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'firebase_service.dart';
 import 'package:hive/hive.dart';
+import 'logout_service.dart';
+import 'navigation_service.dart';
 
 /// Optimized stream manager with persistent listeners and ValueNotifiers
 /// This eliminates the constant creation/removal of listeners
@@ -162,6 +164,27 @@ class PersistentStreamManager {
   int _sesionesReads = 0;
   int _subEstadosReads = 0;
   int _subEstadoMovilesReads = 0;
+
+  // 🛡️ SISTEMA DE VALIDACIÓN ROBUSTA DE SESIÓN
+  // ============================================
+
+  /// Control de logout en progreso para evitar loops
+  bool _isLoggingOut = false;
+
+  /// Timestamp de la última vez que se detectó sesión válida
+  DateTime? _lastValidSessionTimestamp;
+
+  /// Timestamp de la última vez que se detectó sesión NULA
+  DateTime? _lastNullSessionTimestamp;
+
+  /// Contador de detecciones consecutivas de sesión nula
+  int _consecutiveNullDetections = 0;
+
+  /// Umbral de tiempo (en segundos) antes de confirmar invalidación
+  static const int _gracePeriodSeconds = 5;
+
+  /// Máximo de detecciones nulas consecutivas antes de actuar
+  static const int _maxConsecutiveNulls = 2;
 
   // Initialization flag
   bool _initialized = false;
@@ -380,6 +403,9 @@ class PersistentStreamManager {
           print(
               '🔐 [PersistentStreamManager] Sesiones updated (reads: $_sesionesReads)');
 
+          // 🛡️ VALIDACIÓN ROBUSTA DE SESIÓN
+          _handleSessionValidation(sesiones);
+
           if (_sesionesNotifier.value != sesiones) {
             _sesionesNotifier.value = sesiones;
           } else {
@@ -391,6 +417,9 @@ class PersistentStreamManager {
         },
         onError: (error) {
           print('❌ [PersistentStreamManager] Sesiones stream error: $error');
+          // 🛡️ En caso de error de stream, asumir sesión válida (conservador)
+          print(
+              '🛡️ [PersistentStreamManager] Error en stream - asumiendo sesión válida (conservador)');
         },
       );
 
@@ -771,6 +800,206 @@ class PersistentStreamManager {
       _sesionesReads +
       _subEstadosReads +
       _subEstadoMovilesReads;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🛡️ SISTEMA DE VALIDACIÓN ROBUSTA DE SESIÓN
+  // ═══════════════════════════════════════════════════════════════════
+
+  /// Handler principal que valida cada snapshot de sesión
+  void _handleSessionValidation(Map<String, dynamic>? sesiones) {
+    print('🛡️ [SessionValidator] Iniciando validación de sesión...');
+    print(
+        '🛡️ [SessionValidator] Datos recibidos: ${sesiones != null ? "DATOS PRESENTES" : "NULL"}');
+
+    // 🔒 PROTECCIÓN 1: Si ya estamos en proceso de logout, ignorar
+    if (_isLoggingOut) {
+      print(
+          '🛡️ [SessionValidator] ⏸️ Logout en progreso - ignorando validación');
+      return;
+    }
+
+    // 🔒 PROTECCIÓN 2: Si recibimos datos válidos, resetear contadores
+    if (sesiones != null && sesiones.isNotEmpty) {
+      print('🛡️ [SessionValidator] ✅ Sesión VÁLIDA detectada');
+      _lastValidSessionTimestamp = DateTime.now();
+      _consecutiveNullDetections = 0;
+      _lastNullSessionTimestamp = null;
+      return;
+    }
+
+    // 🚨 Sesión nula o vacía detectada
+    print('🛡️ [SessionValidator] ⚠️ Sesión NULA/VACÍA detectada');
+    _consecutiveNullDetections++;
+    _lastNullSessionTimestamp = DateTime.now();
+
+    print(
+        '🛡️ [SessionValidator] Detecciones nulas consecutivas: $_consecutiveNullDetections/$_maxConsecutiveNulls');
+
+    // 🔒 PROTECCIÓN 3: Periodo de gracia - dar tiempo para que se estabilice
+    if (_lastValidSessionTimestamp != null) {
+      final secondsSinceLastValid =
+          DateTime.now().difference(_lastValidSessionTimestamp!).inSeconds;
+      print(
+          '🛡️ [SessionValidator] Tiempo desde última sesión válida: ${secondsSinceLastValid}s / ${_gracePeriodSeconds}s');
+
+      if (secondsSinceLastValid < _gracePeriodSeconds) {
+        print(
+            '🛡️ [SessionValidator] ⏸️ Dentro del periodo de gracia - esperando...');
+        return;
+      }
+    }
+
+    // 🔒 PROTECCIÓN 4: Requerir múltiples detecciones consecutivas
+    if (_consecutiveNullDetections < _maxConsecutiveNulls) {
+      print(
+          '🛡️ [SessionValidator] ⏸️ Esperando más detecciones consecutivas...');
+      return;
+    }
+
+    // 🚨 CONFIRMACIÓN TRIPLE: Antes de actuar, verificar directamente en Firestore
+    print(
+        '🛡️ [SessionValidator] 🔍 Iniciando VERIFICACIÓN TRIPLE en Firestore...');
+    _verifySessionExistsInFirestore();
+  }
+
+  /// Verificación directa en Firestore (bypass de cache)
+  Future<void> _verifySessionExistsInFirestore() async {
+    try {
+      print('🔍 [SessionValidator] ══════════════════════════════════════');
+      print('🔍 [SessionValidator] INICIANDO VERIFICACIÓN TRIPLE');
+      print('🔍 [SessionValidator] ══════════════════════════════════════');
+
+      final sessionBox = Hive.box('sessionBox');
+      final usuario = sessionBox.get('username');
+      final escenario = sessionBox.get('escenario');
+
+      if (usuario == null || escenario == null) {
+        print(
+            '🔍 [SessionValidator] ⚠️ No hay datos de sesión en Hive - sesión ya cerrada');
+        return;
+      }
+
+      // Construir path del documento
+      final fecha = DateTime.now();
+      final fechaStr =
+          '${fecha.year}${fecha.month.toString().padLeft(2, '0')}${fecha.day.toString().padLeft(2, '0')}';
+      final docId = 'Usuario-$usuario';
+      final docPath = 'sessions-$escenario/$fechaStr/activeSessions/$docId';
+
+      print('🔍 [SessionValidator] Verificando documento:');
+      print('🔍 [SessionValidator]   - Path: $docPath');
+      print('🔍 [SessionValidator]   - Usuario: $usuario');
+      print('🔍 [SessionValidator]   - Escenario: $escenario');
+
+      // 🔥 VERIFICACIÓN CON FIRESTORE DIRECTO (sin cache)
+      final docSnapshot = await FirebaseFirestore.instance
+          .doc(docPath)
+          .get(const GetOptions(source: Source.server));
+
+      print('🔍 [SessionValidator] ──────────────────────────────────────');
+      print('🔍 [SessionValidator] RESULTADO DE VERIFICACIÓN DIRECTA:');
+      print('🔍 [SessionValidator]   - Existe: ${docSnapshot.exists}');
+      print(
+          '🔍 [SessionValidator]   - Metadata.isFromCache: ${docSnapshot.metadata.isFromCache}');
+      print(
+          '🔍 [SessionValidator]   - Metadata.hasPendingWrites: ${docSnapshot.metadata.hasPendingWrites}');
+
+      if (docSnapshot.exists) {
+        final data = docSnapshot.data();
+        print('🔍 [SessionValidator]   - Data presente: ${data != null}');
+        if (data != null) {
+          print('🔍 [SessionValidator]   - idSesion: ${data['idSesion']}');
+          print('🔍 [SessionValidator]   - Keys: ${data.keys.toList()}');
+        }
+      }
+      print('🔍 [SessionValidator] ──────────────────────────────────────');
+
+      // 🎯 DECISIÓN FINAL
+      if (docSnapshot.exists) {
+        print(
+            '🔍 [SessionValidator] ✅ SESIÓN CONFIRMADA - documento existe en servidor');
+        print(
+            '🔍 [SessionValidator] 🔄 Falsa alarma detectada - resetando contadores');
+
+        // Resetear contadores - fue falsa alarma
+        _consecutiveNullDetections = 0;
+        _lastNullSessionTimestamp = null;
+        _lastValidSessionTimestamp = DateTime.now();
+
+        print('🔍 [SessionValidator] ══════════════════════════════════════');
+        print('🔍 [SessionValidator] VERIFICACIÓN COMPLETADA - SESIÓN VÁLIDA');
+        print('🔍 [SessionValidator] ══════════════════════════════════════');
+      } else {
+        print('🔍 [SessionValidator] 🚨 SESIÓN INVÁLIDA CONFIRMADA');
+        print('🔍 [SessionValidator] 🚨 Documento NO existe en servidor');
+        print('🔍 [SessionValidator] 🚨 Procediendo con logout forzado...');
+        print('🔍 [SessionValidator] ══════════════════════════════════════');
+
+        // 🚨 SESIÓN REALMENTE INVÁLIDA - ejecutar logout
+        await _executeForceLogout('Sesión cerrada en otro dispositivo');
+      }
+    } catch (e, stackTrace) {
+      print('❌ [SessionValidator] Error verificando sesión en Firestore: $e');
+      print('❌ [SessionValidator] StackTrace: $stackTrace');
+
+      // 🛡️ En caso de error de red, asumir sesión válida (conservador)
+      print(
+          '🛡️ [SessionValidator] Asumiendo sesión VÁLIDA por error de red (conservador)');
+      _consecutiveNullDetections = 0;
+    }
+  }
+
+  /// Ejecuta logout forzado limpio
+  Future<void> _executeForceLogout(String reason) async {
+    // 🔒 Evitar ejecuciones múltiples
+    if (_isLoggingOut) {
+      print('🚨 [SessionValidator] Logout ya en progreso - ignorando');
+      return;
+    }
+
+    _isLoggingOut = true;
+    print('🚨 [SessionValidator] ══════════════════════════════════════');
+    print('🚨 [SessionValidator] EJECUTANDO LOGOUT FORZADO');
+    print('🚨 [SessionValidator] Razón: $reason');
+    print('🚨 [SessionValidator] ══════════════════════════════════════');
+
+    try {
+      // 1. Detener todos los listeners de Firestore
+      print('🚨 [SessionValidator] 1/4 - Deteniendo listeners...');
+      dispose();
+
+      // 2. Llamar al LogoutService centralizado
+      print('🚨 [SessionValidator] 2/4 - Ejecutando LogoutService...');
+      await LogoutService.executeLogout(isRemoteLogout: true);
+
+      // 3. Mostrar dialog explicativo al usuario
+      print('🚨 [SessionValidator] 3/4 - Mostrando dialog...');
+      await NavigationService.showSessionInvalidDialog(
+        title: 'Sesión Finalizada',
+        message: reason,
+      );
+
+      // 4. Navegar al login
+      print('🚨 [SessionValidator] 4/4 - Navegando al login...');
+      await NavigationService.navigateToLogin(reason: reason);
+
+      print('🚨 [SessionValidator] ══════════════════════════════════════');
+      print('🚨 [SessionValidator] LOGOUT FORZADO COMPLETADO');
+      print('🚨 [SessionValidator] ══════════════════════════════════════');
+    } catch (e, stackTrace) {
+      print('❌ [SessionValidator] Error ejecutando logout forzado: $e');
+      print('❌ [SessionValidator] StackTrace: $stackTrace');
+
+      // Intentar navegar al login de todas formas
+      await NavigationService.navigateToLogin(reason: 'Error: $e');
+    } finally {
+      _isLoggingOut = false;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FIN DEL SISTEMA DE VALIDACIÓN ROBUSTA
+  // ═══════════════════════════════════════════════════════════════════
 
   /// Print diagnostic information
   void printDiagnostics() {

@@ -73,7 +73,7 @@ Timer.periodic(Duration(seconds: rioGasInterval), (rioGasTimer) async {
   
   // GPSMapa habilitado - enviar coordenadas
   print('🗺️ [GPSMapa] Enviando coordenadas (GPSMapa=true): ...');
-  await RioGasService.registrarCoordenadas(...);
+  await RioGasService.RegistrarCoordenadasV2(...);
 });
 ```
 

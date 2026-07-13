@@ -30,10 +30,10 @@ Se implementó un sistema **eficiente y automático** de detección de cambio de
 
 #### Punto de Invocación:
 
-La función se llama al **inicio** de `invokeRegistrarCoordenadasApi()`:
+La función se llama al **inicio** de `invokeRegistrarCoordenadasV2Api()`:
 
 ```kotlin
-private fun invokeRegistrarCoordenadasApi(...) {
+private fun invokeRegistrarCoordenadasV2Api(...) {
     // 🌅 CHEQUEO DE CAMBIO DE DÍA: Verificar ANTES de enviar coordenadas
     checkForDayChange(context)
     
@@ -54,7 +54,7 @@ private fun invokeRegistrarCoordenadasApi(...) {
               ↓
 ┌─────────────────────────────────────────┐
 │ 2. GPS activo enviando cada 30s         │
-│    └─> invokeRegistrarCoordenadasApi()  │
+│    └─> invokeRegistrarCoordenadasV2Api()  │
 │        └─> checkForDayChange() PRIMERO  │
 └─────────────────────────────────────────┘
               ↓
@@ -137,7 +137,7 @@ Timer.periodic(Duration(seconds: 60), (timer) {
 
 ```kotlin
 // Se ejecuta solo cuando GPS ya está activo
-private fun invokeRegistrarCoordenadasApi(...) {
+private fun invokeRegistrarCoordenadasV2Api(...) {
     checkForDayChange(context) // Aprovecha ciclo existente
     // ...
 }
@@ -208,7 +208,7 @@ adb logcat -s LocationHelper,CriticalLogger,ForegroundLocationService | Select-S
 
 1. **LocationHelper.kt**
    - Agregadas 3 funciones nuevas (~120 líneas)
-   - Modificada 1 función existente (invokeRegistrarCoordenadasApi)
+   - Modificada 1 función existente (invokeRegistrarCoordenadasV2Api)
 
 ### Creados
 
@@ -227,7 +227,7 @@ adb logcat -s LocationHelper,CriticalLogger,ForegroundLocationService | Select-S
 ## ✅ Checklist de Implementación
 
 - [x] Función `checkForDayChange()` implementada
-- [x] Integración con `invokeRegistrarCoordenadasApi()`
+- [x] Integración con `invokeRegistrarCoordenadasV2Api()`
 - [x] Logs críticos con `CriticalLogger`
 - [x] Logs de eventos con `LocationLogger`
 - [x] Función `stopLocationService()` para detener GPS

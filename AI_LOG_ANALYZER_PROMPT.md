@@ -47,7 +47,7 @@ Recibirás un objeto JSON con la siguiente estructura:
         "tag": "LocationHelper",
         "message": "API Request preparado",
         "extras": {
-          "url": "https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas",
+          "url": "https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadasV2",
           "movil": "83",
           "lat": -34.123456,
           "lon": -56.789012,
@@ -264,7 +264,7 @@ Recibirás un objeto JSON con la siguiente estructura:
 **Extras:**
 ```json
 {
-  "url": "https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadas",
+  "url": "https://www.riogas.uy/ica_geos_/appservices/RegistrarCoordenadasV2",
   "movil": "83",
   "lat": -34.123456,
   "lon": -56.789012,

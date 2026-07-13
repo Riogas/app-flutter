@@ -139,7 +139,7 @@ POST https://www.riogas.uy/ica_geos_/appservices/GetMovilActivo
 
 O en desarrollo:
 ```
-POST https://sgm-dev.glp.riogas.com.uy/appservices/GetMovilActivo
+POST https://sgm.riogas.com.uy/appservices/GetMovilActivo
 ```
 
 ### Request

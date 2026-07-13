@@ -49,7 +49,7 @@ El usuario pregunta: **"¿Se está logueando cuando el servicio GPS no puede ini
 ---
 
 #### 3. **En llamadas al API de Riogas**
-📍 Archivo: `LocationHelper.kt` - `invokeRegistrarCoordenadasApiWithRetry()` (línea 1055+)
+📍 Archivo: `LocationHelper.kt` - `invokeRegistrarCoordenadasV2ApiWithRetry()` (línea 1055+)
 
 ```kotlin
 ✅ Payload completo del request (lat, lon, movil, escenario, etc.)
@@ -245,7 +245,7 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 ### **4. Mejorar logs de API call failures**
 
 ```kotlin
-// LocationHelper.kt - invokeRegistrarCoordenadasApiWithRetry()
+// LocationHelper.kt - invokeRegistrarCoordenadasV2ApiWithRetry()
 // CAMBIAR de DebugLogger.e() a CriticalLogger.logCritical() para errores HTTP
 
 if (!response.isSuccessful) {
@@ -321,7 +321,7 @@ Según la pregunta del usuario:
 - Log crítico si falla
 
 ### **Paso 4: Cambiar DebugLogger.e() a CriticalLogger en API calls**
-- invokeRegistrarCoordenadasApiWithRetry()
+- invokeRegistrarCoordenadasV2ApiWithRetry()
 - Errores HTTP siempre visibles
 
 ### **Paso 5: Testing**

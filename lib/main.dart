@@ -1030,6 +1030,11 @@ Future<bool> _checkActiveSession(
     return false;
   }
 
+  // ❌ ELIMINADO: Validación contra colección "Sesiones-$escenario" (ya no se usa)
+  // La validación de sesión ahora se hace únicamente en backend via API
+  return true;
+
+  /* CÓDIGO ANTERIOR ELIMINADO:
   String path = 'Sesiones-$escenario / $hoy / Movil-$selectedMovil / activo';
 
   // print('📄 Consultando documento Firestore: $path');
@@ -1083,6 +1088,7 @@ Future<bool> _checkActiveSession(
     }
   }
   return true;
+  */
 }
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -1101,6 +1107,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _dialogShown = false;
   DateTime? _lastDialogDismissed;
   bool _batteryCheckCompleted = false; // 🔋 Flag para evitar spam de batería
+
+  // 🎯 Flags para verificación de UBICACIÓN PRECISA
+  bool _isCheckingLocationPrecision = false;
+  bool _precisionDialogShown = false;
+  DateTime? _lastPrecisionDialogDismissed;
 
   @override
   void initState() {
@@ -1177,10 +1188,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _checkLocationPermissions();
     });
 
-    // Verificación periódica cada 5 segundos (SOLO NOTIFICACIONES)
-    // ⚠️ NO se verifica batería periódicamente para evitar spam
+    // Verificación periódica cada 5 segundos
+    // ✅ NOTIFICACIONES: Se verifica continuamente
+    // ✅ UBICACIÓN PRECISA: Se verifica continuamente (Android 12+)
+    // ⚠️ BATERÍA: NO se verifica periódicamente para evitar spam
     _notificationCheckTimer = Timer.periodic(Duration(seconds: 5), (timer) {
       _checkNotificationPermissions();
+      _checkLocationPrecision(); // 🎯 NUEVA: Verificar ubicación precisa continuamente
     });
   }
 
@@ -1340,8 +1354,96 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           await _showLocationPermissionDialog();
         }
       }
+
+      // 🎯 NUEVA VALIDACIÓN: Verificar UBICACIÓN PRECISA (Android 12+)
+      if (permission == LocationPermission.always) {
+        try {
+          LocationAccuracyStatus accuracyStatus =
+              await Geolocator.getLocationAccuracy();
+          print('🎯 [PRECISIÓN] Estado de ubicación precisa: $accuracyStatus');
+
+          if (accuracyStatus == LocationAccuracyStatus.reduced) {
+            print(
+                '❌ [PRECISIÓN] Ubicación aproximada detectada, se requiere ubicación PRECISA');
+
+            // Resetear flag para poder mostrar el diálogo de precisión
+            _dialogShown = false;
+
+            if (!_dialogShown && navigatorKey.currentContext != null) {
+              _dialogShown = true;
+              await _showLocationPrecisionDialog();
+            }
+          } else {
+            print('✅ [PRECISIÓN] Ubicación precisa activada correctamente');
+          }
+        } catch (e) {
+          print(
+              '⚠️ [PRECISIÓN] No se pudo verificar precisión (posiblemente Android <12): $e');
+          // En Android <12 no existe este concepto, continuar normalmente
+        }
+      }
     } catch (e) {
       print('❌ Error verificando permisos de ubicación: $e');
+    }
+  }
+
+  // 🎯 NUEVA: Verificar UBICACIÓN PRECISA continuamente (Android 12+)
+  Future<void> _checkLocationPrecision() async {
+    if (!Platform.isAndroid) return;
+
+    // 🛡️ Evitar múltiples verificaciones simultáneas
+    if (_isCheckingLocationPrecision) return;
+    _isCheckingLocationPrecision = true;
+
+    try {
+      // 1️⃣ Primero verificar que tenga permiso "Permitir Siempre"
+      LocationPermission permission = await Geolocator.checkPermission();
+
+      // Si NO tiene "always", no verificar precisión (se maneja en otro lugar)
+      if (permission != LocationPermission.always) {
+        _isCheckingLocationPrecision = false;
+        return;
+      }
+
+      // 2️⃣ Verificar precisión de ubicación (solo Android 12+)
+      try {
+        LocationAccuracyStatus accuracyStatus =
+            await Geolocator.getLocationAccuracy();
+
+        print('🎯 [PRECISIÓN-CONTINUA] Estado: $accuracyStatus');
+
+        // Si está en modo REDUCIDO (aproximado), mostrar diálogo
+        if (accuracyStatus == LocationAccuracyStatus.reduced) {
+          print('❌ [PRECISIÓN-CONTINUA] Ubicación aproximada detectada');
+
+          // Si el diálogo fue cerrado hace menos de 3 segundos, esperar
+          if (_lastPrecisionDialogDismissed != null) {
+            final timeSinceDismissed =
+                DateTime.now().difference(_lastPrecisionDialogDismissed!);
+            if (timeSinceDismissed.inSeconds < 3) {
+              _isCheckingLocationPrecision = false;
+              return;
+            }
+          }
+
+          // Mostrar diálogo solo si no está ya visible
+          if (!_precisionDialogShown && navigatorKey.currentContext != null) {
+            _precisionDialogShown = true;
+            await _showLocationPrecisionDialog();
+          }
+        } else {
+          // ✅ Precisión OK - resetear flags
+          _precisionDialogShown = false;
+          print('✅ [PRECISIÓN-CONTINUA] Ubicación precisa activada');
+        }
+      } catch (e) {
+        // Android <12 no soporta LocationAccuracyStatus
+        print('⚠️ [PRECISIÓN-CONTINUA] No soportado en este dispositivo: $e');
+      }
+    } catch (e) {
+      print('❌ [PRECISIÓN-CONTINUA] Error: $e');
+    } finally {
+      _isCheckingLocationPrecision = false;
     }
   }
 
@@ -1452,10 +1554,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       builder: (BuildContext context) {
         return WillPopScope(
           onWillPop: () async {
-            // No permitir cerrar con botón de atrás
-            _lastDialogDismissed = DateTime.now();
-            _dialogShown = false;
-            return true;
+            // ❌ NO permitir cerrar con botón de atrás
+            return false; // CAMBIADO de true a false
           },
           child: AlertDialog(
             title: Row(
@@ -1558,15 +1658,31 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 ),
                 onPressed: () async {
-                  _lastDialogDismissed = DateTime.now();
-                  _dialogShown = false;
-                  Navigator.of(context).pop();
+                  // ❌ NO cerrar el diálogo - mantenerlo abierto
+                  // _lastDialogDismissed = DateTime.now(); // ELIMINADO
+                  // _dialogShown = false; // ELIMINADO
+                  // Navigator.of(context).pop(); // ELIMINADO
 
                   // Abrir configuración de la app para permisos
                   await Geolocator.openAppSettings();
 
-                  // Esperar 3 segundos antes de volver a verificar
-                  await Future.delayed(Duration(seconds: 3));
+                  // Esperar a que el usuario regrese de configuración
+                  await Future.delayed(Duration(seconds: 2));
+
+                  // 🔄 Re-verificar permisos en loop hasta que se concedan
+                  while (true) {
+                    LocationPermission permission =
+                        await Geolocator.checkPermission();
+                    if (permission == LocationPermission.always) {
+                      // ✅ Permiso concedido - cerrar diálogo y resetear flags
+                      _lastDialogDismissed = DateTime.now();
+                      _dialogShown = false;
+                      Navigator.of(context).pop();
+                      break;
+                    }
+                    // ⏳ Esperar 2 segundos y volver a verificar
+                    await Future.delayed(Duration(seconds: 2));
+                  }
                 },
               ),
             ],
@@ -1576,6 +1692,186 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     ).then((_) {
       _dialogShown = false;
       _lastDialogDismissed = DateTime.now();
+    });
+  }
+
+  Future<void> _showLocationPrecisionDialog() async {
+    if (navigatorKey.currentContext == null) {
+      _precisionDialogShown = false; // 🎯 Usar flag específica
+      return;
+    }
+
+    return showDialog<void>(
+      context: navigatorKey.currentContext!,
+      barrierDismissible: false, // ❌ No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async =>
+              false, // ❌ No permitir cerrar con botón de atrás
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.my_location, color: Colors.orange, size: 30),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '🎯 Ubicación Precisa Requerida',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    text: 'La app ',
+                    style: TextStyle(fontSize: 16),
+                    children: <TextSpan>[
+                      TextSpan(
+                        text: 'REQUIERE',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' acceso a ',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text: 'UBICACIÓN PRECISA',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' para funcionar correctamente.',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  '⚠️ Actualmente solo tienes "Ubicación aproximada" activada.',
+                  style: TextStyle(fontSize: 14, color: Colors.orange),
+                ),
+                SizedBox(height: 15),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange, width: 2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '📋 Pasos para habilitar:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 5),
+                      Text(
+                        '1. Tap en "Abrir Configuración"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '2. Ve a "Permisos" → "Ubicación"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '3. Activa "Usar ubicación precisa"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      SizedBox(height: 8),
+                      Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.orange.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                color: Colors.orange, size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Ubicación aproximada reduce la precisión del rastreo.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.black87),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.settings, color: Colors.white),
+                label: Text('Abrir Configuración',
+                    style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () async {
+                  // Abrir configuración de la app para permisos
+                  await Geolocator.openAppSettings();
+
+                  // Esperar a que el usuario regrese de configuración
+                  await Future.delayed(Duration(seconds: 2));
+
+                  // 🔄 Re-verificar precisión en loop hasta que se active
+                  while (true) {
+                    try {
+                      LocationAccuracyStatus accuracyStatus =
+                          await Geolocator.getLocationAccuracy();
+                      if (accuracyStatus == LocationAccuracyStatus.precise) {
+                        // ✅ Ubicación precisa activada - cerrar diálogo y resetear flags
+                        _lastPrecisionDialogDismissed =
+                            DateTime.now(); // 🎯 Flag específica
+                        _precisionDialogShown = false; // 🎯 Flag específica
+                        Navigator.of(context).pop();
+                        break;
+                      }
+                    } catch (e) {
+                      // Si hay error (Android <12), asumir que está OK y cerrar
+                      _lastPrecisionDialogDismissed =
+                          DateTime.now(); // 🎯 Flag específica
+                      _precisionDialogShown = false; // 🎯 Flag específica
+                      Navigator.of(context).pop();
+                      break;
+                    }
+                    // ⏳ Esperar 2 segundos y volver a verificar
+                    await Future.delayed(Duration(seconds: 2));
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    ).then((_) {
+      _precisionDialogShown = false; // 🎯 Flag específica
+      _lastPrecisionDialogDismissed = DateTime.now(); // 🎯 Flag específica
     });
   }
 

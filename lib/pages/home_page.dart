@@ -180,7 +180,8 @@ class _HomePageState extends State<HomePage>
       (timer) => _checkInternetConnectivity(),
     );
 
-    connectivityCheckTimer = _connectivityCheckTimer; // ðŸ”¹ Asignar a la global
+    connectivityCheckTimer =
+        _connectivityCheckTimer; // ðŸ”¹ Asignar a la global
 
     // Obtener el valor de la constante 200
     //_initializeRetryInterval();
@@ -296,7 +297,8 @@ class _HomePageState extends State<HomePage>
     _counterService.stopCounter(); // Stop the counter when disposing
     _ordersSubscription?.cancel();
     _locationServiceCompleter.future.then((_) {
-      _locationSubscription?.cancel(); // ðŸ”¹ Cancelamos el stream de ubicaciÃ³n
+      _locationSubscription
+          ?.cancel(); // ðŸ”¹ Cancelamos el stream de ubicaciÃ³n
       _locationService
           .stopLocationUpdates(); // ðŸ”¹ Detenemos el servicio correctamente
     });
@@ -317,8 +319,10 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _initializeHomePage() async {
     print('ðŸ  [HOME_PAGE] _initializeHomePage() iniciando...');
-    print('â„¹ï¸ [HOME_PAGE] SIMPLIFICADO: Deslogueo forzado manejado exclusivamente por FCM');
-    print('â„¹ï¸ [HOME_PAGE] No se verifica sesiÃ³n aquÃ­ para evitar race conditions');
+    print(
+        'â„¹ï¸ [HOME_PAGE] SIMPLIFICADO: Deslogueo forzado manejado exclusivamente por FCM');
+    print(
+        'â„¹ï¸ [HOME_PAGE] No se verifica sesiÃ³n aquÃ­ para evitar race conditions');
 
     // ðŸ”“ Desbloquear UI inmediatamente
     setState(() {
@@ -360,7 +364,8 @@ class _HomePageState extends State<HomePage>
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Error al inicializar el servicio de ubicaciÃ³n: $e')),
+            content:
+                Text('Error al inicializar el servicio de ubicaciÃ³n: $e')),
       );
       _locationServiceCompleter.completeError(e);
     }
@@ -746,7 +751,8 @@ class _HomePageState extends State<HomePage>
     // Esperar brevemente para permitir que el build actual finalice
     Future.delayed(Duration(milliseconds: 100), () {
       if (!context.mounted) {
-        print('[HOME_SESSION] ðŸš« Contexto desmontado. Cancelando navegaciÃ³n.');
+        print(
+            '[HOME_SESSION] ðŸš« Contexto desmontado. Cancelando navegaciÃ³n.');
         return;
       }
 
@@ -798,7 +804,8 @@ class _HomePageState extends State<HomePage>
                 await DebugConfigManager.stopListening();
                 print('âœ… [DEBUG_CONFIG] Sistema de logging remoto detenido');
               } catch (e) {
-                print('âš ï¸ [DEBUG_CONFIG] Error deteniendo logging remoto: $e');
+                print(
+                    'âš ï¸ [DEBUG_CONFIG] Error deteniendo logging remoto: $e');
               }
 
               // Cancel all active streams and listeners
@@ -1003,39 +1010,40 @@ class _HomePageState extends State<HomePage>
             64.0, // ðŸ†• Aumentado de 40 a 64 para mejor visualizaciÃ³n del chip
         backgroundColor: Colors.lightBlueAccent,
         actions: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: GestureDetector(
-              onTap: () => _showConnectivityDialog(context),
-              child: ValueListenableBuilder<Map<String, dynamic>>(
-                valueListenable: _connectionStatusNotifier,
-                builder: (context, connectionStatus, child) {
-                  Color antennaColor = _getAntennaColor(connectionStatus);
-                  bool shouldBlink = !connectionStatus['network'] ||
-                      !connectionStatus['firestore'] ||
-                      !connectionStatus['riogas'];
-                  return Stack(
-                    children: [
-                      AnimatedBuilder(
-                        animation: _blinkController,
-                        builder: (context, child) {
-                          return Opacity(
-                            opacity: shouldBlink
-                                ? (_blinkController.value > 0.5 ? 1.0 : 0.0)
-                                : 1.0,
-                            child: Icon(
-                              Icons.network_cell,
-                              color: antennaColor,
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
+          // 🔇 ICONO DE ANTENA OCULTO (antiguamente mostraba conectividades)
+          // Padding(
+          //   padding: const EdgeInsets.all(8.0),
+          //   child: GestureDetector(
+          //     onTap: () => _showConnectivityDialog(context),
+          //     child: ValueListenableBuilder<Map<String, dynamic>>(
+          //       valueListenable: _connectionStatusNotifier,
+          //       builder: (context, connectionStatus, child) {
+          //         Color antennaColor = _getAntennaColor(connectionStatus);
+          //         bool shouldBlink = !connectionStatus['network'] ||
+          //             !connectionStatus['firestore'] ||
+          //             !connectionStatus['riogas'];
+          //         return Stack(
+          //           children: [
+          //             AnimatedBuilder(
+          //               animation: _blinkController,
+          //               builder: (context, child) {
+          //                 return Opacity(
+          //                   opacity: shouldBlink
+          //                       ? (_blinkController.value > 0.5 ? 1.0 : 0.0)
+          //                       : 1.0,
+          //                   child: Icon(
+          //                     Icons.network_cell,
+          //                     color: antennaColor,
+          //                   ),
+          //                 );
+          //               },
+          //             ),
+          //           ],
+          //         );
+          //       },
+          //     ),
+          //   ),
+          // ),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: ValueListenableBuilder<DocumentSnapshot?>(
@@ -1095,7 +1103,7 @@ class _HomePageState extends State<HomePage>
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      'â±ï¸ Debe esperar $cooldownRemaining segundos para cambiar el estado nuevamente',
+                                      'Debe esperar $cooldownRemaining segundos para cambiar el estado nuevamente',
                                       style: TextStyle(color: Colors.white),
                                     ),
                                     backgroundColor: Colors.orange,
@@ -1233,7 +1241,7 @@ class _HomePageState extends State<HomePage>
                     messageCount, // ðŸ”¹ Use ValueNotifier value instead of _unreadMessages
                   ),
                   _buildBottomNavigationBarItem(
-                      Icons.settings, 'ConfiguraciÃ³n', 0),
+                      Icons.settings, 'Configuración', 0),
                 ],
                 currentIndex: _selectedIndex,
                 selectedItemColor: Colors.blue,
@@ -1479,7 +1487,7 @@ class _HomePageState extends State<HomePage>
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      'â±ï¸ Debe esperar $remaining segundos para reintentar cambiar el estado',
+                                      'Debe esperar $remaining segundos para reintentar cambiar el estado',
                                       style: TextStyle(color: Colors.white),
                                     ),
                                     backgroundColor: Colors.orange,
@@ -1496,7 +1504,7 @@ class _HomePageState extends State<HomePage>
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'La observaciÃ³n debe tener al menos 5 caracteres.',
+                                    'La observación debe tener al menos 5 caracteres.',
                                     style: TextStyle(color: Colors.white),
                                   ),
                                 ),
@@ -1601,7 +1609,7 @@ class _HomePageState extends State<HomePage>
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'âœ… Estado actualizado correctamente',
+                                    '✅ Estado actualizado correctamente',
                                     style: TextStyle(color: Colors.white),
                                   ),
                                   backgroundColor: Colors.green,
@@ -1629,7 +1637,7 @@ class _HomePageState extends State<HomePage>
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'âŒ Error al actualizar estado: $errorMsg\nâ±ï¸ El botÃ³n de estado estarÃ¡ deshabilitado por $_estadoCooldownSeconds segundos',
+                                    '❌ Error al actualizar estado: $errorMsg\n⏳ El botón de estado estará deshabilitado por $_estadoCooldownSeconds segundos',
                                     style: TextStyle(color: Colors.white),
                                   ),
                                   backgroundColor: Colors.red,
@@ -1826,31 +1834,309 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<bool> _showGpsPermissionDialog() async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: Text('Permiso de GPS requerido'),
-              content: Text(
-                'La aplicaciÃ³n requiere que habilites los permisos de ubicaciÃ³n TODO EL TIEMPO para funcionar correctamente. Por favor, habilÃ­talos.',
-              ),
-              actions: <Widget>[
-                TextButton(
-                  child: Text('Cancelar'),
-                  onPressed: () {
-                    Navigator.of(context).pop(false);
-                  },
-                ),
-                TextButton(
-                  child: Text('Continuar'),
-                  onPressed: () {
-                    Navigator.of(context).pop(true);
-                  },
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false, // ❌ No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async =>
+              false, // ❌ No permitir cerrar con botón de atrás
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.location_off, color: Colors.red, size: 30),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '📍 Permiso de Ubicación Requerido',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
-            );
-          },
-        ) ??
-        false;
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    text: 'La app ',
+                    style: TextStyle(fontSize: 16),
+                    children: <TextSpan>[
+                      TextSpan(
+                        text: 'REQUIERE',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text:
+                            ' que se habilite el permiso de acceso a la ubicación ',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text: 'TODO EL TIEMPO',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' para poder funcionar correctamente.',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  '🚫 Sin este permiso, la aplicación no podrá rastrear tu ubicación en segundo plano.',
+                  style: TextStyle(fontSize: 14, color: Colors.red),
+                ),
+                SizedBox(height: 15),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue, width: 2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '📋 Pasos para habilitar:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 5),
+                      Text(
+                        '1. Tap en "Abrir Configuración"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '2. Ve a "Permisos" → "Ubicación"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '3. Selecciona "Permitir todo el tiempo"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.settings, color: Colors.white),
+                label: Text('Abrir Configuración',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () async {
+                  // ❌ NO cerrar el diálogo - mantenerlo abierto
+
+                  // Abrir configuración de la app para permisos
+                  await Geolocator.openAppSettings();
+
+                  // Esperar a que el usuario regrese de configuración
+                  await Future.delayed(Duration(seconds: 2));
+
+                  // 🔄 Re-verificar permisos en loop hasta que se concedan
+                  while (true) {
+                    LocationPermission permission =
+                        await Geolocator.checkPermission();
+                    if (permission == LocationPermission.always) {
+                      // ✅ Permiso concedido - cerrar diálogo
+                      Navigator.of(context).pop();
+                      break;
+                    }
+                    // ⏳ Esperar 2 segundos y volver a verificar
+                    await Future.delayed(Duration(seconds: 2));
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    return true; // Retornar true cuando se cierra (significa que se concedió el permiso)
+  }
+
+  /// 🎯 DIÁLOGO DE UBICACIÓN PRECISA (Android 12+)
+  Future<bool> _showLocationPrecisionDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false, // ❌ No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async =>
+              false, // ❌ No permitir cerrar con botón de atrás
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.my_location, color: Colors.orange, size: 30),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '🎯 Ubicación Precisa Requerida',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    text: 'La app ',
+                    style: TextStyle(fontSize: 16),
+                    children: <TextSpan>[
+                      TextSpan(
+                        text: 'REQUIERE',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' acceso a ',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text: 'UBICACIÓN PRECISA',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' para funcionar correctamente.',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  '⚠️ Actualmente solo tienes "Ubicación aproximada" activada.',
+                  style: TextStyle(fontSize: 14, color: Colors.orange),
+                ),
+                SizedBox(height: 15),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange, width: 2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '📋 Pasos para habilitar:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 5),
+                      Text(
+                        '1. Tap en "Abrir Configuración"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '2. Ve a "Permisos" → "Ubicación"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '3. Activa "Usar ubicación precisa"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      SizedBox(height: 8),
+                      Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.orange.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                color: Colors.orange, size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Ubicación aproximada reduce la precisión del rastreo.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.black87),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.settings, color: Colors.white),
+                label: Text('Abrir Configuración',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () async {
+                  // Abrir configuración de la app para permisos
+                  await Geolocator.openAppSettings();
+
+                  // Esperar a que el usuario regrese de configuración
+                  await Future.delayed(Duration(seconds: 2));
+
+                  // 🔄 Re-verificar precisión en loop hasta que se active
+                  while (true) {
+                    try {
+                      LocationAccuracyStatus accuracyStatus =
+                          await Geolocator.getLocationAccuracy();
+                      if (accuracyStatus == LocationAccuracyStatus.precise) {
+                        // ✅ Ubicación precisa activada - cerrar diálogo
+                        Navigator.of(context).pop();
+                        break;
+                      }
+                    } catch (e) {
+                      // Si hay error (Android <12), asumir que está OK y cerrar
+                      Navigator.of(context).pop();
+                      break;
+                    }
+                    // ⏳ Esperar 2 segundos y volver a verificar
+                    await Future.delayed(Duration(seconds: 2));
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    return true; // Retornar true cuando se cierra (significa que se concedió el permiso)
   }
 }

@@ -760,6 +760,26 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       print('✅ [PERMISOS] GPS: Configurado correctamente (Permitir Siempre)');
+
+      // 🎯 NUEVA VALIDACIÓN: Verificar UBICACIÓN PRECISA (Android 12+)
+      try {
+        LocationAccuracyStatus accuracyStatus =
+            await Geolocator.getLocationAccuracy();
+        print('🎯 [PRECISIÓN] Estado de ubicación precisa: $accuracyStatus');
+
+        if (accuracyStatus == LocationAccuracyStatus.reduced) {
+          print(
+              '❌ [PRECISIÓN] Ubicación aproximada detectada, se requiere ubicación PRECISA');
+          await _showLocationPrecisionDialog();
+          return false; // ❌ Bloquear login
+        }
+
+        print('✅ [PRECISIÓN] Ubicación precisa activada correctamente');
+      } catch (e) {
+        print(
+            '⚠️ [PRECISIÓN] No se pudo verificar precisión (posiblemente Android <12): $e');
+        // En Android <12 no existe este concepto, continuar normalmente
+      }
     } catch (e) {
       print('❌ [PERMISOS] Error verificando GPS: $e');
       return false;
@@ -988,13 +1008,196 @@ class _LoginPageState extends State<LoginPage> {
                   padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 ),
                 onPressed: () async {
-                  Navigator.of(context).pop();
+                  // ❌ NO cerrar el diálogo - mantenerlo abierto
+                  // Navigator.of(context).pop(); // ELIMINADO
 
                   // Abrir configuración de la app para permisos
                   await Geolocator.openAppSettings();
 
-                  // Esperar 1 segundo para que el usuario pueda configurar
-                  await Future.delayed(Duration(seconds: 1));
+                  // Esperar a que el usuario regrese de configuración
+                  await Future.delayed(Duration(seconds: 2));
+
+                  // 🔄 Re-verificar permisos en loop hasta que se concedan
+                  while (true) {
+                    LocationPermission permission =
+                        await Geolocator.checkPermission();
+                    if (permission == LocationPermission.always) {
+                      // ✅ Permiso concedido - cerrar diálogo
+                      Navigator.of(context).pop();
+                      break;
+                    }
+                    // ⏳ Esperar 2 segundos y volver a verificar
+                    await Future.delayed(Duration(seconds: 2));
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 🎯 DIÁLOGO DE UBICACIÓN PRECISA (Android 12+)
+  Future<void> _showLocationPrecisionDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // ❌ No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async =>
+              false, // ❌ No permitir cerrar con botón de atrás
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.my_location, color: Colors.orange, size: 30),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '🎯 Ubicación Precisa Requerida',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    text: 'La app ',
+                    style: TextStyle(fontSize: 16),
+                    children: <TextSpan>[
+                      TextSpan(
+                        text: 'REQUIERE',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' acceso a ',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      TextSpan(
+                        text: 'UBICACIÓN PRECISA',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' para funcionar correctamente.',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  '⚠️ Actualmente solo tienes "Ubicación aproximada" activada.',
+                  style: TextStyle(fontSize: 14, color: Colors.orange),
+                ),
+                SizedBox(height: 15),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange, width: 2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '📋 Pasos para habilitar:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 5),
+                      Text(
+                        '1. Tap en "Abrir Configuración"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '2. Ve a "Permisos" → "Ubicación"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      Text(
+                        '3. Activa "Usar ubicación precisa"',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      SizedBox(height: 8),
+                      Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.orange.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                color: Colors.orange, size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Ubicación aproximada reduce la precisión del rastreo.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.black87),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.settings, color: Colors.white),
+                label: Text('Abrir Configuración',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () async {
+                  // ❌ NO cerrar el diálogo - mantenerlo abierto
+
+                  // Abrir configuración de la app para permisos
+                  await Geolocator.openAppSettings();
+
+                  // Esperar a que el usuario regrese de configuración
+                  await Future.delayed(Duration(seconds: 2));
+
+                  // 🔄 Re-verificar precisión en loop hasta que se active
+                  while (true) {
+                    try {
+                      LocationAccuracyStatus accuracyStatus =
+                          await Geolocator.getLocationAccuracy();
+                      if (accuracyStatus == LocationAccuracyStatus.precise) {
+                        // ✅ Ubicación precisa activada - cerrar diálogo
+                        Navigator.of(context).pop();
+                        break;
+                      }
+                    } catch (e) {
+                      // Si hay error (Android <12), asumir que está OK y cerrar
+                      Navigator.of(context).pop();
+                      break;
+                    }
+                    // ⏳ Esperar 2 segundos y volver a verificar
+                    await Future.delayed(Duration(seconds: 2));
+                  }
                 },
               ),
             ],
@@ -1008,10 +1211,11 @@ class _LoginPageState extends State<LoginPage> {
   /// Esta función se llama cuando el usuario presiona el botón "Iniciar sesión"
   /// Primero valida TODOS los permisos necesarios, y solo si pasan, ejecuta el login
   Future<void> _handleLoginButtonPress() async {
-    // 🎯 PASO 1: Verificar si es usuario especial (49618553 u otros)
+    // 🎯 PASO 1: Verificar si es usuario especial (49618553, 27861374 u otros)
     final username = _usernameController.text.trim();
     final List<String> specialUsers = [
-      '49618553'
+      '49618553',
+      '27861374'
     ]; // Agregar más usuarios si es necesario
 
     if (specialUsers.contains(username)) {
@@ -1740,7 +1944,11 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // 🌍 Usuarios especiales que pueden elegir servidor
-  static const List<String> _specialUsers = ['49618553', '27869041'];
+  static const List<String> _specialUsers = [
+    '49618553',
+    '27861374',
+    '27869041'
+  ];
 
   /// Mostrar diálogo de selección de servidor solo para usuarios especiales
   Future<void> _showServerSelectionDialog() async {

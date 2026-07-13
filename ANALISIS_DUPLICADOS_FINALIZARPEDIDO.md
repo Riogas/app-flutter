@@ -107,8 +107,8 @@ static Future<void> _saveFailedRequest(
 static bool _shouldSkipFailedSave(String endpoint) {
   return endpoint == 'DescargaLecturaPedidos' ||
       endpoint == 'DescargaLecturaPedidosV2' ||
-      endpoint == 'RegistrarCoordenadas' ||
-      endpoint == 'RegistrarCoordenadasBatch' ||
+      endpoint == 'RegistrarCoordenadasV2' ||
+      endpoint == 'RegistrarCoordenadasV2Batch' ||
       endpoint == 'RegistrarCierre' ||
       endpoint == 'DescargaPedidos' ||
       endpoint == 'DescargaPedidosV2';

@@ -24,7 +24,7 @@
 ```kotlin
 Thread {
     // Intento 1
-    invokeRegistrarCoordenadasApiWithRetry(..., retryCount + 1) // ← Crea NUEVO thread
+    invokeRegistrarCoordenadasV2ApiWithRetry(..., retryCount + 1) // ← Crea NUEVO thread
 }.start()
 
 // Resultado: 3 threads en paralelo = 3 envíos simultáneos

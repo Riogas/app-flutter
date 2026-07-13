@@ -652,7 +652,7 @@ class RioGasService {
 
           // Endpoints que no reintentamos desde failedRequestsBox
           if (endpoint == 'RegistrarErrores' ||
-              endpoint == 'RegistrarCoordenadas' ||
+              endpoint == 'RegistrarCoordenadasV2' ||
               endpoint == 'ValidarDispositivo') {
             print('$tag ⛔ Endpoint $endpoint ignorado. No se reintenta.');
             continue;
@@ -749,18 +749,18 @@ class RioGasService {
         body['version'] = body['version'].replaceAll(RegExp(r'[^0-9.]'), '');
       }
 
-      if (endpoint == 'RegistrarCoordenadas') {
-        /*print('📦 Processing RegistrarCoordenadas...');
-        print('📦 RegistrarCoordenadas Body: $body');*/
+      if (endpoint == 'RegistrarCoordenadasV2') {
+        /*print('📦 Processing RegistrarCoordenadasV2...');
+        print('📦 RegistrarCoordenadasV2 Body: $body');*/
       }
 
-      if (endpoint == 'RegistrarCoordenadasBatch') {
+      if (endpoint == 'RegistrarCoordenadasV2Batch') {
         // Ensure Latitud, longitud, and FechaHora are inside "data"
         var failedRequestsBox = await Hive.openBox('failedRequestsBox');
 
-        // Filter pending requests for 'RegistrarCoordenadas'
+        // Filter pending requests for 'RegistrarCoordenadasV2'
         List<Map<String, dynamic>> pendingRequests = failedRequestsBox.values
-            .where((request) => request['endpoint'] == 'RegistrarCoordenadas')
+            .where((request) => request['endpoint'] == 'RegistrarCoordenadasV2')
             .map((request) => Map<String, dynamic>.from(request['payload']))
             .toList();
 
@@ -795,11 +795,11 @@ class RioGasService {
         body.remove('longitud');
         body.remove('FechaHora');
 
-        // Remove all 'RegistrarCoordenadas' entries from the failedRequestsBox
+        // Remove all 'RegistrarCoordenadasV2' entries from the failedRequestsBox
         final keysToRemove = failedRequestsBox.keys.where((key) {
           var request = failedRequestsBox.get(key);
           return request != null &&
-              request['endpoint'] == 'RegistrarCoordenadas';
+              request['endpoint'] == 'RegistrarCoordenadasV2';
         }).toList();
 
         for (var key in keysToRemove) {
@@ -1212,8 +1212,8 @@ class RioGasService {
   static bool _shouldSkipFailedSave(String endpoint) {
     return endpoint == 'DescargaLecturaPedidos' ||
         endpoint == 'DescargaLecturaPedidosV2' ||
-        endpoint == 'RegistrarCoordenadas' ||
-        endpoint == 'RegistrarCoordenadasBatch' ||
+        endpoint == 'RegistrarCoordenadasV2' ||
+        endpoint == 'RegistrarCoordenadasV2Batch' ||
         endpoint == 'RegistrarCierre' ||
         endpoint == 'DescargaPedidos' ||
         endpoint == 'DescargaPedidosV2' ||
@@ -1319,7 +1319,7 @@ class RioGasService {
     });
   }
 
-  static Future<Map<String, dynamic>?> registrarCoordenadas(
+  static Future<Map<String, dynamic>?> RegistrarCoordenadasV2(
       int movil,
       String latitud,
       String longitud,
@@ -1342,7 +1342,7 @@ class RioGasService {
         throw Exception('Invalid escenarioId: $escenarioId');
       }
       // Use the specified structure for the REST service request
-      return await _post('RegistrarCoordenadas', {
+      return await _post('RegistrarCoordenadasV2', {
         'token': token,
         'movil': movil,
         'Latitud': latitud,
@@ -1361,7 +1361,7 @@ class RioGasService {
       var failedRequestsBox = await Hive.openBox('failedRequestsBox');
       var existingRequest = failedRequestsBox.values.firstWhere(
         (request) =>
-            request['endpoint'] == 'RegistrarCoordenadasBatch' &&
+            request['endpoint'] == 'RegistrarCoordenadasV2Batch' &&
             request['payload']['movil'] == movil &&
             request['payload']['DeviceId'] == deviceId,
         orElse: () => null,
@@ -1389,7 +1389,7 @@ class RioGasService {
       } else {
         // Save a new failed request
         var newRequest = {
-          'endpoint': 'RegistrarCoordenadasBatch',
+          'endpoint': 'RegistrarCoordenadasV2Batch',
           'payload': {
             'token': token,
             'movil': movil,

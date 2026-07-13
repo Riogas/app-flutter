@@ -51,7 +51,7 @@ if (retryCount < maxRetries - 1) {
     val delayMs = calculateRetryDelay(retryCount)
     Log.w(TAG, "🔄 Reintentando en ${delayMs}ms...")
     Thread.sleep(delayMs)
-    invokeRegistrarCoordenadasApiWithRetry(..., retryCount + 1)
+    invokeRegistrarCoordenadasV2ApiWithRetry(..., retryCount + 1)
 } else {
     Log.e(TAG, "💥 Máximo de reintentos alcanzado")
     LocationLogger.logError(context, "MAX_RETRIES_REACHED", "Failed after $maxRetries attempts")
@@ -101,7 +101,7 @@ catch (e: Exception) {
     if (retryCount < maxRetries - 1) {
         val delayMs = calculateRetryDelay(retryCount)
         Thread.sleep(delayMs)
-        invokeRegistrarCoordenadasApiWithRetry(..., retryCount + 1)
+        invokeRegistrarCoordenadasV2ApiWithRetry(..., retryCount + 1)
     } else {
         Log.e(TAG, "💥 Máximo de reintentos de conexión alcanzado")
         LocationLogger.logError(context, "MAX_CONNECTION_RETRIES", "Connection failed after $maxRetries attempts")
@@ -317,7 +317,7 @@ fun sendPendingCoordinates(context: Context) {
     val db = CoordinatesDatabase.getInstance(context)
     val pending = db.getUnsent()
     pending.forEach { coord ->
-        invokeRegistrarCoordenadasApi(...) // Enviar cada una
+        invokeRegistrarCoordenadasV2Api(...) // Enviar cada una
         db.markAsSent(coord.id)
     }
 }

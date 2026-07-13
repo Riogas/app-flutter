@@ -158,8 +158,8 @@ Se agregaron los nuevos endpoints V3 a la lista de servicios que **NO deben guar
 static bool _shouldSkipFailedSave(String endpoint) {
   return endpoint == 'DescargaLecturaPedidos' ||
       endpoint == 'DescargaLecturaPedidosV3' ||
-      endpoint == 'RegistrarCoordenadas' ||
-      endpoint == 'RegistrarCoordenadasBatch' ||
+      endpoint == 'RegistrarCoordenadasV2' ||
+      endpoint == 'RegistrarCoordenadasV2Batch' ||
       endpoint == 'RegistrarCierre' ||
       endpoint == 'DescargaPedidos' ||
       endpoint == 'DescargaPedidosV3';
