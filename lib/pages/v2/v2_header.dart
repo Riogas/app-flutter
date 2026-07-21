@@ -102,10 +102,16 @@ class V2Header extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 if (titulo != null) ...[
-                  // Modo sección: título línea completa, píldora debajo
-                  _buildTitulo(),
+                  // Modo sección: título corto + píldora a la derecha
+                  Row(
+                    children: [
+                      Expanded(child: _buildTitulo()),
+                      const SizedBox(width: 10),
+                      _buildEstadoPill(context),
+                    ],
+                  ),
                   if (subtitulo != null) ...[
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(
                       subtitulo!,
                       maxLines: 2,
@@ -116,11 +122,6 @@ class V2Header extends StatelessWidget {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _buildEstadoPill(context),
-                  ),
                 ] else
                   // Modo home: nombre + píldora en la misma línea
                   Row(

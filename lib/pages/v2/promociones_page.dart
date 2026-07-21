@@ -356,9 +356,9 @@ class _PromocionesPageState extends State<PromocionesPage> {
                 V2Header(
                   messageCountNotifier: widget.messageCountNotifier,
                   onEstadoTap: widget.onEstadoTap,
-                  titulo: 'Promociones',
+                  titulo: 'Promos',
                   subtitulo: 'Validá beneficios del cliente antes de consumirlos',
-                  height: 212,
+                  height: 168,
                   bottomSpace: 40,
                 ),
                 Transform.translate(
