@@ -3228,52 +3228,27 @@ class _LoginPageState extends State<LoginPage> {
   // 👁️ Visibilidad de la contraseña
   bool _obscurePassword = true;
 
-  // 🖼️ Logo remoto cacheado (mismo asset de siempre)
-  static const String _logoUrl =
-      'https://www.riogas.uy/ica_geos_/static/Resources/RGDelivery.png';
-
-  /// Logo superior: más compacto, con jerarquía sobre la tarjeta.
-  /// El PNG trae aire transparente arriba/abajo: se recorta con ClipRect
-  /// para que la tarjeta quede pegada al logo real.
+  /// Logo superior: asset local nuevo sobre chip blanco (el texto del logo
+  /// es azul oscuro y necesita fondo claro para contrastar)
   Widget _buildLogo() {
-    return ClipRect(
-      child: Align(
-        alignment: Alignment.center,
-        heightFactor: 0.55,
-        child: _buildLogoImage(),
-      ),
-    );
-  }
-
-  Widget _buildLogoImage() {
-    return CachedNetworkImage(
-      imageUrl: _logoUrl,
-      height: 240,
-      fit: BoxFit.contain,
-      placeholder: (context, url) => const SizedBox(height: 240),
-      errorWidget: (context, url, error) {
-        print('❌ [LOGIN_LOGO] Error cargando logo: $error');
-        // Fallback limpio: wordmark en texto
-        return const SizedBox(
-          height: 240,
-          child: Center(
-            child: Text(
-              'RIOGAS DELIVERY',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2.0,
-              ),
-            ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
-        );
-      },
-      cacheKey: _logoUrl,
-      maxHeightDiskCache: 500,
-      maxWidthDiskCache: 500,
-      fadeInDuration: const Duration(milliseconds: 300),
-      fadeOutDuration: const Duration(milliseconds: 100),
+        ],
+      ),
+      child: Image.asset(
+        'assets/logo_delivery.png',
+        width: 245,
+        fit: BoxFit.contain,
+      ),
     );
   }
 

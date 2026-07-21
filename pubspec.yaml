@@ -63,9 +63,9 @@ dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/icon/RGDeliveryIcon.png"
-  adaptive_icon_foreground: "assets/icon/RGDeliveryIcon.png"
-  adaptive_icon_background: "#FF0000"
+  image_path: "assets/icon/icon_app.png"
+  adaptive_icon_foreground: "assets/icon/icon_app_fg.png"
+  adaptive_icon_background: "#FFFFFF"
 
 dev_dependencies:
   flutter_test:
@@ -77,6 +77,8 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/logo_delivery.png
+    - assets/icon/icono_delivery.png
     - assets/icon/RGDeliveryIcon.png
     - assets/back_video.mp4
     - assets/manual/RiogasDeliveryAPP.pdf
