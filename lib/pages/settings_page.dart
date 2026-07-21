@@ -947,6 +947,94 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // 🧭 Selector de navegador para "Iniciar viaje" / "Navegar ahora".
+  // Con Google Maps todo va por Maps (que reemplaza su propia ruta solo),
+  // evitando tener dos guías a la vez. La ruta multi-parada siempre es Maps.
+  Widget _buildNavegadorSelector() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Color(0xFFE3F2FD), width: 1.4),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0xFF0D2B4E).withOpacity(0.06),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ValueListenableBuilder<String>(
+        valueListenable: UiPrefs.navegador,
+        builder: (context, nav, _) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.navigation_outlined,
+                      color: Color(0xFF1E88E5), size: 22),
+                  SizedBox(width: 10),
+                  Text(
+                    'Navegador de rutas',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF16324A),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 6),
+              Text(
+                nav == 'maps'
+                    ? 'Todo por Google Maps: al mandar una ruta nueva, Maps '
+                        'reemplaza la anterior solo (nunca dos guías a la vez) '
+                        'y soporta rutas con paradas.'
+                    : 'Waze para navegar a cada pedido. Ojo: la "Ruta completa" '
+                        'con paradas se abre igual en Google Maps; cerrá Waze '
+                        'antes para no tener dos guías.',
+                style: TextStyle(fontSize: 12.5, color: Color(0xFF5A7184)),
+              ),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: ChoiceChip(
+                      label: Center(child: Text('Waze')),
+                      selected: nav == 'waze',
+                      selectedColor: Color(0xFF1E88E5),
+                      labelStyle: TextStyle(
+                        color: nav == 'waze' ? Colors.white : Color(0xFF16324A),
+                        fontWeight: FontWeight.w700,
+                      ),
+                      onSelected: (_) => UiPrefs.setNavegador('waze'),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: ChoiceChip(
+                      label: Center(child: Text('Google Maps')),
+                      selected: nav == 'maps',
+                      selectedColor: Color(0xFF1E88E5),
+                      labelStyle: TextStyle(
+                        color: nav == 'maps' ? Colors.white : Color(0xFF16324A),
+                        fontWeight: FontWeight.w700,
+                      ),
+                      onSelected: (_) => UiPrefs.setNavegador('maps'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   // 🎨 Selector de diseño: nuevo (Home V2) vs clásico
   Widget _buildDesignToggle() {
     return Container(
@@ -1044,6 +1132,8 @@ class _SettingsPageState extends State<SettingsPage> {
               _buildInfoSection(),
               SizedBox(height: 20),
               _buildDesignToggle(),
+              SizedBox(height: 10),
+              _buildNavegadorSelector(),
               SizedBox(height: 10),
               _buildChangePasswordButton(),
               SizedBox(height: 10),

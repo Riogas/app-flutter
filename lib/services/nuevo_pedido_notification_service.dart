@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart' show flutterLocalNotificationsPlugin;
 import 'persistent_stream_manager.dart';
+import 'ui_prefs.dart';
 
 /// 🔔 Notificaciones de pedidos nuevos con acciones de navegación.
 ///
@@ -228,17 +229,27 @@ class NuevoPedidoNotificationService {
   }
 
   static Future<void> _navegarAlNuevo(Map<String, dynamic> data) async {
+    // Respetar el navegador preferido (Waze default / Google Maps)
+    await UiPrefs.init();
+    final usarMaps = UiPrefs.navegador.value == 'maps';
+
     Uri? uri;
     final waze = (data['waze'] ?? '').toString();
     final lat = (data['lat'] ?? '').toString();
     final lng = (data['lng'] ?? '').toString();
 
-    if (waze.isNotEmpty) {
-      uri = Uri.tryParse(waze);
+    if (!usarMaps) {
+      if (waze.isNotEmpty) {
+        uri = Uri.tryParse(waze);
+      }
+      if (uri == null && lat.isNotEmpty && lng.isNotEmpty) {
+        // Universal link: abre Waze si está instalado, sino el navegador
+        uri = Uri.parse('https://waze.com/ul?ll=$lat,$lng&navigate=yes');
+      }
     }
     if (uri == null && lat.isNotEmpty && lng.isNotEmpty) {
-      // Universal link: abre Waze si está instalado, sino el navegador
-      uri = Uri.parse('https://waze.com/ul?ll=$lat,$lng&navigate=yes');
+      uri = Uri.parse(
+          'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
     }
     if (uri == null) return;
 

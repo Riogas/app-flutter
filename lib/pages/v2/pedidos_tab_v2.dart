@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/nuevo_pedido_notification_service.dart';
 import '../../services/pedido_lectura_service.dart';
+import '../../services/ui_prefs.dart';
 import '../../services/persistent_stream_manager.dart';
 import '../order_detail_page.dart';
 import 'v2_cards.dart';
@@ -201,21 +202,27 @@ class _PedidosTabV2State extends State<PedidosTabV2> {
     );
   }
 
-  /// Abre la navegación externa (Waze si el pedido trae WazeURL, sino Maps)
+  /// Abre la navegación externa según el navegador preferido:
+  /// Waze (WazeURL del pedido o link universal) o Google Maps.
   Future<void> _iniciarViaje(Map<String, dynamic> pedido) async {
     Uri? uri;
+    final u = pedido['ubicacion'];
+    final usarMaps = UiPrefs.navegador.value == 'maps';
 
-    final wazeUrl = pedido['WazeURL'];
-    if (wazeUrl is String && wazeUrl.trim().isNotEmpty) {
-      uri = Uri.tryParse(wazeUrl.trim());
+    if (!usarMaps) {
+      final wazeUrl = pedido['WazeURL'];
+      if (wazeUrl is String && wazeUrl.trim().isNotEmpty) {
+        uri = Uri.tryParse(wazeUrl.trim());
+      }
+      if (uri == null && u is GeoPoint) {
+        uri = Uri.parse(
+            'https://waze.com/ul?ll=${u.latitude},${u.longitude}&navigate=yes');
+      }
     }
 
-    if (uri == null) {
-      final u = pedido['ubicacion'];
-      if (u is GeoPoint) {
-        uri = Uri.parse(
-            'https://www.google.com/maps/dir/?api=1&destination=${u.latitude},${u.longitude}');
-      }
+    if (uri == null && u is GeoPoint) {
+      uri = Uri.parse(
+          'https://www.google.com/maps/dir/?api=1&destination=${u.latitude},${u.longitude}');
     }
 
     if (uri == null) {
@@ -287,6 +294,38 @@ class _PedidosTabV2State extends State<PedidosTabV2> {
   }
 
   Future<void> _abrirRutaCompleta() async {
+    // En modo Waze, recordarle que la multi-parada va por Maps y que
+    // cierre Waze si estaba navegando (Android no permite frenarlo desde acá)
+    if (UiPrefs.navegador.value != 'maps') {
+      final seguir = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Ruta completa'),
+          content: const Text(
+              'La ruta con paradas se abre en Google Maps.\n\n'
+              'Si estabas navegando con Waze, cerralo antes: dos guías a la '
+              'vez se pisan entre sí.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: V2Colors.accion,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Abrir Maps'),
+            ),
+          ],
+        ),
+      );
+      if (seguir != true) return;
+    }
+
     final ok = await NuevoPedidoNotificationService.abrirRutaCompleta();
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
