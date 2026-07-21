@@ -11,6 +11,7 @@ import 'dart:async';
 import '../services/riogas_service.dart'; // Import the RioGasService
 import 'package:geolocator/geolocator.dart'; // Import Geolocator for getting current location
 import '../services/location_service.dart'; // Import your location service
+import '../services/pedido_lectura_service.dart'; // 📦 Lógica de LECTURA/DESCARGA compartida con Home V2
 import 'dart:io' show Platform;
 import 'package:screen_protector/screen_protector.dart';
 
@@ -411,352 +412,34 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     }
   }
 
+  /// 📦 Delegado a PedidoLecturaService (lógica compartida con Home V2).
+  /// El comportamiento es idéntico al original: dedupe por Hive
+  /// descargaLecturaPedidosBox + gating por constantes 400/402.
   Future<void> marcarLecturaSiCorresponde({
     required Map<String, dynamic> pedido,
     required int pedidoId,
     BuildContext? context,
-  }) async {
-    const tag = '📦[LECTURA_ON_TAP_BG]';
-
-    if (_lecturaEnCurso) {
-      print('$tag ⏳ Hay otra LECTURA en curso, se omite');
-      return; // retorna inmediato, nada bloquea la UI
-    }
-    _lecturaEnCurso = true;
-
-    // Fire-and-forget: ejecuta en el próximo ciclo del event loop
-    // y retornamos sin esperar.
-    Future<void>(() async {
-      try {
-        final Box? box = await _openBoxSafe('descargaLecturaPedidosBox');
-        if (box == null) {
-          print('$tag ❌ No se pudo abrir "descargaLecturaPedidosBox"');
-          return;
-        }
-
-        final estadoActual = box.get(pedidoId); // null | DESCARGA | LECTURA
-        print('$tag 🔍 Pedido $pedidoId - Estado actual: $estadoActual');
-
-        if (estadoActual == 'DESCARGA') {
-          print('$tag 📖 Enviando LECTURA para $pedidoId (BG)...');
-          final success = await _callDescargaLecturaPedidos(
-            pedido,
-            pedidoId,
-            lectDesc: 'LECTURA',
-            context: context,
-          );
-
-          // ✅ Marcar como LECTURA en Hive SIEMPRE, independientemente del resultado HTTP
-          await box.put(pedidoId, 'LECTURA');
-
-          if (success) {
-            print('$tag ✅ LECTURA enviada y registrada para $pedidoId');
-          } else {
-            print(
-                '$tag ⚠️ LECTURA registrada localmente pero no se envió al servidor (constante 400 deshabilitada o error)');
-          }
-        } else if (estadoActual == null) {
-          // Robustez: si no hubo DESCARGA previa, la hacemos rápido en BG y luego LECTURA
-          print(
-              '$tag ℹ️ Sin DESCARGA previa. Ejecutando DESCARGA+LECTURA para $pedidoId (BG)...');
-
-          // ✅ Intentar enviar DESCARGA (puede fallar si constante 402='N')
-          final descargaSuccess = await _callDescargaLecturaPedidos(
-            pedido,
-            pedidoId,
-            lectDesc: 'DESCARGA',
-            context: context,
-          );
-
-          // ✅ Marcar como DESCARGA en Hive SIEMPRE, independientemente del resultado HTTP
-          await box.put(pedidoId, 'DESCARGA');
-
-          if (descargaSuccess) {
-            print('$tag ✅ DESCARGA enviada al servidor');
-          } else {
-            print(
-                '$tag ℹ️ DESCARGA registrada localmente pero no se envió al servidor (constante 402 deshabilitada o error)');
-          }
-
-          // ✅ Intentar enviar LECTURA (puede fallar si constante 400='N')
-          final lecturaSuccess = await _callDescargaLecturaPedidos(
-            pedido,
-            pedidoId,
-            lectDesc: 'LECTURA',
-            context: context,
-          );
-
-          // ✅ Marcar como LECTURA en Hive SIEMPRE, independientemente del resultado HTTP
-          await box.put(pedidoId, 'LECTURA');
-
-          if (lecturaSuccess) {
-            print('$tag ✅ LECTURA enviada al servidor');
-          } else {
-            print(
-                '$tag ℹ️ LECTURA registrada localmente pero no se envió al servidor (constante 400 deshabilitada o error)');
-          }
-
-          print('$tag ✅ DESCARGA+LECTURA registradas en Hive para $pedidoId');
-        } else {
-          print(
-              '$tag ⏭️ Pedido $pedidoId ya estaba en LECTURA. No se vuelve a llamar.');
-        }
-      } catch (e, st) {
-        print('$tag ❌ Error en marcarLecturaSiCorresponde($pedidoId): $e');
-        print(st);
-        // Si quisieras notificar en UI:
-        // if (context != null && context.mounted) {
-        //   ScaffoldMessenger.of(context).showSnackBar(
-        //     SnackBar(content: Text('Error al marcar lectura del pedido $pedidoId')),
-        //   );
-        // }
-      } finally {
-        _lecturaEnCurso = false;
-      }
-    });
-
-    // Retorna sin esperar
-    print('$tag 🚀 Tarea de lectura lanzada en segundo plano para $pedidoId');
+  }) {
+    return PedidoLecturaService().marcarLecturaSiCorresponde(
+      pedido: pedido,
+      pedidoId: pedidoId,
+      context: context,
+    );
   }
 
+  /// 📦 Delegado a PedidoLecturaService (lógica compartida con Home V2)
   Future<bool> _callDescargaLecturaPedidos(
     Map<String, dynamic> pedido,
     int pedidoId, {
     required String lectDesc,
-    BuildContext? context, // <- Opcional para mostrar mensajes
-  }) async {
-    // ✅ REMOVED: La validación de _lecturaEnCurso ya se hace en marcarLecturaSiCorresponde()
-    // No necesitamos validar nuevamente aquí porque bloquea las llamadas correctas
-
-    // setState(() => _lecturaEnCurso = true); ← REMOVED: ya se maneja en el caller
-
-    try {
-      print(
-          "🟠 [_callDescargaLecturaPedidos] Iniciando para pedidoId: $pedidoId");
-
-      final String pedidoTpo =
-          pedido['Tipo'] == 'Pedidos' ? 'PEDIDOS' : 'SERVICES';
-
-      // ✅ Capturar timestamp AL INICIO para evitar duplicados
-      final String fechaHoraCmbEst = DateTime.now().toUtc().toIso8601String();
-      print("🕒 [TIMESTAMP] Capturado timestamp único: $fechaHoraCmbEst");
-
-      final box = await Hive.openBox('sessionBox');
-
-      final String? deviceId = box.get('deviceId');
-      final String? movilid = box.get('movil');
-      final int escenarioId =
-          int.tryParse(box.get('escenario')?.toString() ?? '') ?? 0;
-      final String? username = box.get('username');
-
-      if ([deviceId, movilid, username].contains(null)) {
-        print("❌ Faltan datos en sessionBox (deviceId, movilid o username)");
-        if (context != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Error de sesión: faltan datos del usuario.')),
-          );
-        }
-        return false; // ❌ Falló
-      }
-
-      String inAux1 = movilid!;
-      String inAux2 = '';
-      String latitud = '0.0', longitud = '0.0', utmx = '0.0', utmy = '0.0';
-
-      print("🛰️ Obteniendo ubicación GPS...");
-      try {
-        final locationData = await locationService
-            .getCurrentLocation()
-            .timeout(const Duration(seconds: 5));
-
-        if (locationData != null) {
-          latitud = locationData['latitude'].toString();
-          longitud = locationData['longitude'].toString();
-          utmx = locationData['utmX'].toString();
-          utmy = locationData['utmY'].toString();
-          print("✅ Ubicación obtenida: $latitud, $longitud");
-        } else {
-          print("⚠️ No se obtuvo ubicación GPS.");
-        }
-      } on TimeoutException {
-        print("⏰ Timeout al obtener la ubicación GPS.");
-      } catch (e) {
-        print("❌ Error al obtener ubicación GPS: $e");
-      }
-
-      double velocidad = 0.0;
-      double distanciaRecorrida = 0.0;
-
-      try {
-        final locationBox = await Hive.openBox('locationBox');
-
-        // 🆕 DEBUGGING DETALLADO DE SINCRONIZACIÓN
-        print("🔍 [SYNC_DEBUG] Verificando contenido de locationBox...");
-        final allKeys = locationBox.keys.toList();
-        print("🔍 [SYNC_DEBUG] Claves disponibles en locationBox: $allKeys");
-
-        final rawSpeed = locationBox.get('lastSpeed', defaultValue: 0.0);
-        final rawDistance = locationBox.get('totalDistance', defaultValue: 0.0);
-
-        print(
-            "🔍 [SYNC_DEBUG] Valor crudo lastSpeed: $rawSpeed (tipo: ${rawSpeed.runtimeType})");
-        print(
-            "🔍 [SYNC_DEBUG] Valor crudo totalDistance: $rawDistance (tipo: ${rawDistance.runtimeType})");
-
-        velocidad = double.parse(rawSpeed.toStringAsFixed(2));
-        distanciaRecorrida = double.parse(rawDistance.toStringAsFixed(6));
-
-        print("🔍 [SYNC_DEBUG] Velocidad procesada: $velocidad");
-        print("🔍 [SYNC_DEBUG] Distancia procesada: $distanciaRecorrida");
-
-        // 🆕 VERIFICAR SI EXISTEN OTROS POSIBLES NOMBRES DE CLAVES
-        for (String key in allKeys) {
-          if (key.toLowerCase().contains('distance') ||
-              key.toLowerCase().contains('speed')) {
-            final value = locationBox.get(key);
-            print(
-                "🔍 [SYNC_DEBUG] Clave relacionada encontrada: $key = $value");
-          }
-        }
-      } catch (e) {
-        print(
-            "❌ [SYNC_DEBUG] Error leyendo datos de velocidad/distancia en Hive: $e");
-      }
-
-      // 🆕 GENERAR STRING DE ESTADO DEL MÓVIL PARA INAUX2
-      try {
-        print("🔧 Generando string de estado del móvil para INAux2...");
-
-        // Estado de la aplicación
-        String appState =
-            "active"; // Siempre active cuando la app está funcionando
-
-        // Estado de notificaciones (simulado)
-        String notificaciones = "ON"; // Podríamos verificar permisos reales
-
-        // Estado de permisos de ubicación
-        String permisos = "UNKNOWN";
-        try {
-          // Aquí podrías agregar verificación real de permisos si tienes acceso a platform channels
-          if (latitud != '0.0' && longitud != '0.0') {
-            permisos =
-                "FULL"; // Si tenemos ubicación, asumimos permisos completos
-          } else {
-            permisos = "DENIED";
-          }
-        } catch (e) {
-          permisos = "UNKNOWN";
-        }
-
-        // Estado del GPS
-        String gpsState =
-            (latitud != '0.0' && longitud != '0.0') ? "ON" : "OFF";
-
-        // Retry y Reset (por ahora valores fijos)
-        String retry = "0";
-        String reset = "No";
-
-        // Construir el string completo
-        inAux2 =
-            "Estado: $appState | Notificaciones: $notificaciones | Permisos: $permisos | GPS: $gpsState | Retry: $retry | Reset: $reset";
-
-        print("✅ INAux2 generado: $inAux2");
-      } catch (e) {
-        print("❌ Error generando string de estado: $e");
-        inAux2 = "Error generando estado";
-      }
-
-      print("📤 Enviando datos a RioGasService...");
-
-      // 🆕 Control separado por tipo de operación:
-      // - Constante 400: Controla LECTURAS (cuando usuario aprieta pedido)
-      // - Constante 402: Controla DESCARGAS individuales (cuando se registra descarga)
-      final constantId = lectDesc == 'LECTURA' ? '400' : '402';
-      final constantName = lectDesc == 'LECTURA' ? 'LECTURA' : 'DESCARGA';
-
-      var data = constantBox.get(constantId);
-      String llamarws = 'N';
-      print(
-          "🔍 Leyendo constante con ID $constantId para control de $constantName: $data");
-      if (data != null && data['Estado'] == 'A') {
-        print("✅ Estado es 'A' para ID $constantId");
-        llamarws = data['Valor'] ??
-            'N'; // Usar el valor de la constante o 'N' por defecto
-      } else {
-        print("❌ Estado no es 'A' para ID $constantId o data es null");
-        llamarws = 'N';
-      }
-
-      if (llamarws == 'S')
-        try {
-          // Recuperar el último check del servicio desde Hive
-          final sessionBox = await Hive.openBox('sessionBox');
-          final lastServiceCheck =
-              sessionBox.get('lastServiceCheck', defaultValue: 'NOCHECK');
-
-          print(
-              "🔍 Usando NroSesion desde lastServiceCheck: $lastServiceCheck");
-
-          await RioGasService.descargaLecturaPedidos(
-            escenarioId,
-            pedidoId,
-            pedidoTpo,
-            username!,
-            lastServiceCheck, // ✅ Usar el estado del servicio como NroSesion
-            deviceId!,
-            lectDesc,
-            fechaHoraCmbEst,
-            movilid,
-            inAux2,
-            latitud,
-            longitud,
-            utmx,
-            utmy,
-            velocidad,
-            distanciaRecorrida,
-          ).timeout(const Duration(seconds: 8));
-
-          print("✅ Petición completada con éxito para pedido $pedidoId");
-          return true; // ✅ Éxito
-        } on TimeoutException {
-          print("⏰ Timeout esperando respuesta de RioGasService");
-          if (context != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: Text('La conexión con el servidor ha expirado.')),
-            );
-          }
-          return false; // ❌ Timeout
-        } catch (e) {
-          print("❌ Error inesperado al llamar a RioGasService: $e");
-          if (context != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error al enviar datos al servidor.')),
-            );
-          }
-          return false; // ❌ Error
-        }
-      else {
-        print("ℹ️ No se llamará a RioGasService, 'llamarws' es 'N'");
-        if (context != null) {
-          //ScaffoldMessenger.of(context).showSnackBar(
-          //SnackBar(content: Text('No se requiere llamada al servidor.')),
-          //);
-        }
-        return false; // ❌ No se llamó
-      }
-    } catch (e, st) {
-      print("❌ Excepción general: $e");
-      print(st);
-      if (context != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ocurrió un error inesperado.')),
-        );
-      }
-      return false; // ❌ Error general
-    }
-    // ✅ REMOVED finally block: _lecturaEnCurso ya se maneja en marcarLecturaSiCorresponde()
+    BuildContext? context,
+  }) {
+    return PedidoLecturaService().callDescargaLectura(
+      pedido,
+      pedidoId,
+      lectDesc: lectDesc,
+      context: context,
+    );
   }
 
   Future<void> _callDescargaPedidos(

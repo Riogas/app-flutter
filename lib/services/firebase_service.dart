@@ -983,6 +983,44 @@ class FirebaseService {
     }
   }
 
+  /// 🎁 Stream de promociones (rediseño Home V2).
+  /// Colección `Promociones-{escenario}`; solo filtra VisibleEnApp server-side,
+  /// la vigencia por fecha y el móvil se filtran client-side en el
+  /// PersistentStreamManager (Movil es opcional en el documento).
+  /// Esquema del documento: ver docs/PROMOCIONES_FIRESTORE.md
+  Stream<List<DocumentSnapshot>> getPromocionesStream() async* {
+    try {
+      var box = await openBoxSafe('sessionBox');
+      if (box == null) return;
+      String escenarioId = box.get('escenario', defaultValue: '0').toString();
+
+      String collectionName = 'Promociones-$escenarioId';
+
+      try {
+        Stream<List<DocumentSnapshot>> promocionesStream = _firestore
+            .collection(collectionName)
+            .where('VisibleEnApp', isEqualTo: 'S')
+            .snapshots()
+            .handleError((error) async {
+          if (error is FirebaseException && error.code == 'permission-denied') {
+            await _logFirestorePermissionError(
+              error.message ?? 'Permission denied',
+            );
+          } else {
+            await _logError('Firestore Error', error.toString());
+          }
+        }).map((snapshot) => snapshot.docs);
+
+        monitorStreamWithUsage(promocionesStream, 'PromocionesStream');
+        yield* promocionesStream;
+      } catch (e, stackTrace) {
+        await _logError('Stream Setup Error', e.toString());
+      }
+    } catch (e, stackTrace) {
+      await _logError('General Error', e.toString());
+    }
+  }
+
   Future<List<DocumentSnapshot>> getUnreadMessages() async {
     var box = await openBoxSafe('sessionBox');
     if (box == null) return [];

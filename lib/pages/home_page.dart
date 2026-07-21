@@ -29,6 +29,8 @@ import 'package:android_intent_plus/flag.dart'; // Import Flag for AndroidIntent
 import 'package:flutter/services.dart'; // Import SystemNavigator
 import '../utils/stream_manager.dart'; // o el path correcto
 import '../services/persistent_stream_manager.dart';
+import '../services/ui_prefs.dart'; // 🎨 Toggle de diseño nuevo/clásico
+import 'v2/home_v2_scaffold.dart'; // 🎨 Rediseño Home V2
 
 // FunciÃ³n utilitaria para abrir cajas Hive de forma segura
 dynamic openBoxSafe(String boxName) async {
@@ -105,6 +107,7 @@ class _HomePageState extends State<HomePage>
   void initState() {
     super.initState();
     //secureScreen();
+    UiPrefs.init(); // 🎨 Cargar preferencia de diseño (nuevo/clásico)
 
     final streamManager = PersistentStreamManager();
 
@@ -997,6 +1000,23 @@ class _HomePageState extends State<HomePage>
     }
 
     // âœ… SesiÃ³n verificada - Mostrar UI normal
+    // 🎨 Toggle de diseño: nuevo (Home V2) o clásico, conmutable en runtime
+    return ValueListenableBuilder<bool>(
+      valueListenable: UiPrefs.homeV2,
+      builder: (context, isV2, _) {
+        if (isV2) {
+          return HomeV2Scaffold(
+            messageCountNotifier: _messageCountNotifier,
+            onEstadoTap: _handleEstadoTapV2,
+          );
+        }
+        return _buildLegacyScaffold(context);
+      },
+    );
+  }
+
+  // 🧱 Diseño clásico (pre-rediseño 2026), intacto
+  Widget _buildLegacyScaffold(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -1652,6 +1672,45 @@ class _HomePageState extends State<HomePage>
         );
       },
     );
+  }
+
+  /// 🎨 Punto de entrada del cambio de estado desde el diseño nuevo (Home V2).
+  /// Aplica el mismo guard de cooldown que el chip clásico y delega en
+  /// _handleEstadoClick con los datos actuales del stream manager.
+  Future<void> _handleEstadoTapV2(BuildContext context) async {
+    // Guard de cooldown (idéntico criterio que el chip del diseño clásico)
+    if (_lastEstadoChangeAttempt != null) {
+      final elapsed = DateTime.now().difference(_lastEstadoChangeAttempt!);
+      final remaining = _estadoCooldownSeconds - elapsed.inSeconds;
+      if (remaining > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Debe esperar $remaining segundos para cambiar el estado nuevamente'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+    }
+    if (_isEstadoChanging) return;
+
+    final movilSnapshot = _streamManager.movilNotifier.value;
+    final subEstados = _streamManager.subEstadoMovilesNotifier.value;
+    if (movilSnapshot == null || subEstados.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Estado del móvil aún no disponible.')),
+      );
+      return;
+    }
+
+    try {
+      final movilData = movilSnapshot.data() as Map<String, dynamic>;
+      await _handleEstadoClick(
+          context, movilSnapshot.id, movilData, subEstados);
+    } catch (e) {
+      print('❌ [V2] Error abriendo cambio de estado: $e');
+    }
   }
 
   Future<void> _handleEstadoClick(

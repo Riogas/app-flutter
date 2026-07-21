@@ -132,6 +132,9 @@ class PersistentStreamManager {
       ValueNotifier([]);
   final ValueNotifier<List<DocumentSnapshot>> _mensajesNotifier =
       ValueNotifier([]);
+  // 🎁 Promociones vigentes (rediseño Home V2)
+  final ValueNotifier<List<DocumentSnapshot>> _promocionesNotifier =
+      ValueNotifier([]);
   final ValueNotifier<DocumentSnapshot?> _movilNotifier = ValueNotifier(null);
   final ValueNotifier<Map<String, dynamic>?> _sesionesNotifier =
       ValueNotifier(null);
@@ -143,8 +146,13 @@ class PersistentStreamManager {
   // Persistent stream subscriptions (never cancelled)
   StreamSubscription? _pedidosSubscription;
   StreamSubscription? _mensajesSubscription;
+  StreamSubscription? _promocionesSubscription;
   StreamSubscription? _movilSubscription;
   StreamSubscription? _sesionesSubscription;
+
+  /// 🎁 Notifier de promociones vigentes (filtradas por fecha y móvil)
+  ValueNotifier<List<DocumentSnapshot>> get promocionesNotifier =>
+      _promocionesNotifier;
 
   // Listener counters for debugging
   int _pedidosListeners = 0;
@@ -230,6 +238,7 @@ class PersistentStreamManager {
     // Start all persistent listeners
     await _initializePedidosListener();
     await _initializeMensajesListener();
+    await _initializePromocionesListener();
     await _initializeMovilListener();
     await _initializeSesionesListener();
     await _loadSubEstadosCatalogos();
@@ -334,6 +343,7 @@ class PersistentStreamManager {
 
     _pedidosSubscription?.cancel();
     _mensajesSubscription?.cancel();
+    _promocionesSubscription?.cancel();
     _movilSubscription?.cancel();
     _sesionesSubscription?.cancel();
     // SubEstados/SubEstadoMoviles/SubEstadoFinalizacionPedidos ya no tienen
@@ -342,6 +352,7 @@ class PersistentStreamManager {
     // NO uses .dispose() en notifiers si pensás reusarlos, mejor:
     _pedidosNotifier.value = [];
     _mensajesNotifier.value = [];
+    _promocionesNotifier.value = [];
     _movilNotifier.value = null;
     _sesionesNotifier.value = null;
     _subEstadosNotifier.value = [];
@@ -349,6 +360,54 @@ class PersistentStreamManager {
 
     _hiveSyncInitialized = false;
     _initialized = false;
+  }
+
+  /// 🎁 Initialize persistent Promociones listener (rediseño Home V2)
+  /// Filtra client-side: VisibleEnApp=='S', vigencia FchDesde<=hoy<=FchHasta
+  /// (int AAAAMMDD) y Movil (0/ausente = todos los móviles).
+  Future<void> _initializePromocionesListener() async {
+    try {
+      final movil = int.tryParse(
+              Hive.box('sessionBox').get('movil', defaultValue: '0').toString()) ??
+          0;
+
+      _promocionesSubscription =
+          _firebaseService.getPromocionesStream().listen(
+        (List<DocumentSnapshot> promos) {
+          final hoyDt = DateTime.now().toUtc().subtract(Duration(hours: 3));
+          final hoy = hoyDt.year * 10000 + hoyDt.month * 100 + hoyDt.day;
+
+          final vigentes = promos.where((doc) {
+            final data = doc.data() as Map<String, dynamic>?;
+            if (data == null) return false;
+            if (data['VisibleEnApp'] != 'S') return false;
+            final desde =
+                int.tryParse(data['FchDesde']?.toString() ?? '') ?? 0;
+            final hasta =
+                int.tryParse(data['FchHasta']?.toString() ?? '') ?? 99999999;
+            if (hoy < desde || hoy > hasta) return false;
+            final promoMovil =
+                int.tryParse(data['Movil']?.toString() ?? '') ?? 0;
+            if (promoMovil != 0 && promoMovil != movil) return false;
+            return true;
+          }).toList();
+
+          print(
+              '🎁 [PersistentStreamManager] Promociones vigentes: ${vigentes.length}/${promos.length}');
+          _promocionesNotifier.value = vigentes;
+        },
+        onError: (error) {
+          print(
+              '❌ [PersistentStreamManager] Promociones stream error: $error');
+        },
+      );
+
+      print(
+          '🔄 [PersistentStreamManager] Promociones persistent listener started');
+    } catch (e) {
+      print(
+          '❌ [PersistentStreamManager] Error initializing promociones listener: $e');
+    }
   }
 
   /// Initialize persistent Movil listener
@@ -1074,6 +1133,7 @@ class PersistentStreamManager {
 
     _pedidosSubscription?.cancel();
     _mensajesSubscription?.cancel();
+    _promocionesSubscription?.cancel();
     _movilSubscription?.cancel();
     _sesionesSubscription?.cancel();
     // SubEstados/SubEstadoMoviles/SubEstadoFinalizacionPedidos ya no tienen

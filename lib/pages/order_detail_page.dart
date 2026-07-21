@@ -25,6 +25,10 @@ class OrderDetailPage extends StatefulWidget {
   final String pedidoTipo;
   final GeoPoint? ubicacion;
 
+  /// 🧭 true = abre directo el flujo de finalización al entrar
+  /// (usado por "Devolver pedido" del diseño nuevo)
+  final bool autoFinalize;
+
   OrderDetailPage({
     required this.detalleHtml,
     required this.estadoNro,
@@ -32,6 +36,7 @@ class OrderDetailPage extends StatefulWidget {
     required this.codPedido,
     required this.pedidoTipo,
     this.ubicacion,
+    this.autoFinalize = false,
   });
 
   @override
@@ -84,6 +89,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
     // 🆕 Verificar y reiniciar servicio de coordenadas si está muerto
     _checkAndRestartLocationService();
+
+    // 🧭 "Devolver pedido" (diseño nuevo): abre directo el flujo de
+    // finalización con TODAS las validaciones de siempre
+    if (widget.autoFinalize && widget.estadoNro == 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _iniciarFlujoFinalizacion();
+      });
+    }
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -1250,7 +1263,25 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: ElevatedButton.icon(
-                  onPressed: () async {
+                  icon: Icon(Icons.check, color: Colors.white),
+                  label: Text('Finalizar Pedido'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(double.infinity, 50), // Full width button
+                    backgroundColor: Colors.lightGreen,
+                  ),
+                  onPressed: _iniciarFlujoFinalizacion,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 🧭 Flujo de finalización (quick check → validación completa → diálogo).
+  /// Extraído del botón "Finalizar Pedido" para poder dispararlo también
+  /// desde "Devolver pedido" del diseño nuevo (autoFinalize).
+  Future<void> _iniciarFlujoFinalizacion() async {
                     // ===== VALIDACIÓN PREVIA ANTES DEL POPUP =====
                     print("🟢 [BUTTON] Botón 'Finalizar Pedido' presionado");
 
@@ -1446,18 +1477,5 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         );
                       },
                     );
-                  },
-                  icon: Icon(Icons.check, color: Colors.white),
-                  label: Text('Finalizar Pedido'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: Size(double.infinity, 50), // Full width button
-                    backgroundColor: Colors.lightGreen,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
   }
 }

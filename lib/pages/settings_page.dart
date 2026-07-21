@@ -23,6 +23,7 @@ import 'dart:convert';
 import '../services/native_log_sync_service.dart';
 import '../services/logout_service.dart';
 import 'package:device_info_plus/device_info_plus.dart'; // 🆕 Para obtener deviceId
+import '../services/ui_prefs.dart'; // 🎨 Toggle de diseño nuevo/clásico
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -946,6 +947,85 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // 🎨 Selector de diseño: nuevo (Home V2) vs clásico
+  Widget _buildDesignToggle() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0D2B4E), Color(0xFF1E88E5)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0xFF0D2B4E).withOpacity(0.25),
+            blurRadius: 12,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: UiPrefs.homeV2,
+        builder: (context, isV2, _) {
+          return Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  isV2 ? Icons.auto_awesome : Icons.history,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Diseño de la aplicación',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      isV2
+                          ? 'Nuevo diseño (2026) activado'
+                          : 'Diseño clásico activado',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: isV2,
+                activeColor: Colors.white,
+                activeTrackColor: Colors.lightBlueAccent,
+                inactiveThumbColor: Colors.white70,
+                inactiveTrackColor: Colors.white24,
+                onChanged: (v) => UiPrefs.setHomeV2(v),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -963,6 +1043,8 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(height: 20),
               _buildInfoSection(),
               SizedBox(height: 20),
+              _buildDesignToggle(),
+              SizedBox(height: 10),
               _buildChangePasswordButton(),
               SizedBox(height: 10),
               _buildChangePhoneNumberButton(),
