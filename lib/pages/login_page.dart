@@ -3232,8 +3232,20 @@ class _LoginPageState extends State<LoginPage> {
   static const String _logoUrl =
       'https://www.riogas.uy/ica_geos_/static/Resources/RGDelivery.png';
 
-  /// Logo superior: más compacto, con jerarquía sobre la tarjeta
+  /// Logo superior: más compacto, con jerarquía sobre la tarjeta.
+  /// El PNG trae aire transparente arriba/abajo: se recorta con ClipRect
+  /// para que la tarjeta quede pegada al logo real.
   Widget _buildLogo() {
+    return ClipRect(
+      child: Align(
+        alignment: Alignment.center,
+        heightFactor: 0.55,
+        child: _buildLogoImage(),
+      ),
+    );
+  }
+
+  Widget _buildLogoImage() {
     return CachedNetworkImage(
       imageUrl: _logoUrl,
       height: 205,
@@ -3522,7 +3534,7 @@ class _LoginPageState extends State<LoginPage> {
                           children: [
                             const SizedBox(height: 4),
                             _buildLogo(),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 8),
                             _buildLoginCard(),
                             const SizedBox(height: 24),
                           ],
