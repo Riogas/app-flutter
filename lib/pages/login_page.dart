@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' show ImageFilter; // 🧊 Para el blur del glassmorphism
 import '../services/auth_service.dart';
 import '../services/riogas_service.dart';
 import '../services/firebase_constants_service.dart';
@@ -244,8 +245,21 @@ class _LoginBackgroundState extends State<LoginBackground> {
       children: [
         // 🎨 Renderizar según el tipo de background
         _buildBackground(),
+        // 🌓 Scrim en degradé: refuerza legibilidad arriba (logo) y abajo
+        // (formulario) sin tapar la ilustración del medio
         Container(
-          color: Colors.black.withOpacity(0.3), // capa oscura encima opcional
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.black.withOpacity(0.45),
+                Colors.black.withOpacity(0.25),
+                Colors.black.withOpacity(0.55),
+              ],
+              stops: const [0.0, 0.45, 1.0],
+            ),
+          ),
         ),
         widget.child,
       ],
@@ -3209,192 +3223,317 @@ class _LoginPageState extends State<LoginPage> {
     await _checkNotificationPermissionAndNavigate();
   }
 
+  // ── UI del login ───────────────────────────────────────────────────────
+
+  // 👁️ Visibilidad de la contraseña
+  bool _obscurePassword = true;
+
+  // 🖼️ Logo remoto cacheado (mismo asset de siempre)
+  static const String _logoUrl =
+      'https://www.riogas.uy/ica_geos_/static/Resources/RGDelivery.png';
+
+  /// Logo superior: más compacto, con jerarquía sobre la tarjeta
+  Widget _buildLogo() {
+    return CachedNetworkImage(
+      imageUrl: _logoUrl,
+      height: 205,
+      fit: BoxFit.contain,
+      placeholder: (context, url) => const SizedBox(height: 205),
+      errorWidget: (context, url, error) {
+        print('❌ [LOGIN_LOGO] Error cargando logo: $error');
+        // Fallback limpio: wordmark en texto
+        return const SizedBox(
+          height: 205,
+          child: Center(
+            child: Text(
+              'RIOGAS DELIVERY',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.0,
+              ),
+            ),
+          ),
+        );
+      },
+      cacheKey: _logoUrl,
+      maxHeightDiskCache: 500,
+      maxWidthDiskCache: 500,
+      fadeInDuration: const Duration(milliseconds: 300),
+      fadeOutDuration: const Duration(milliseconds: 100),
+    );
+  }
+
+  /// Tarjeta central estilo glassmorphism con el formulario
+  Widget _buildLoginCard() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.28),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0E2A47).withOpacity(0.55),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.18),
+                width: 1.2,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Bienvenido',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Ingresá tus datos para continuar',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.75),
+                    fontSize: 14.5,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _buildTextField(
+                  controller: _usernameController,
+                  label: 'Usuario',
+                  icon: Icons.person_outline,
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  controller: _passwordController,
+                  label: 'Contraseña',
+                  icon: Icons.lock_outline,
+                  obscureText: _obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) {
+                    if (!_isLoginButtonLoading) _handleLoginButtonPress();
+                  },
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: Colors.white.withOpacity(0.7),
+                      size: 22,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                    tooltip: _obscurePassword
+                        ? 'Mostrar contraseña'
+                        : 'Ocultar contraseña',
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildLoginButton(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Campo de texto premium: relleno translúcido, borde suave, foco celeste
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool obscureText = false,
+    Widget? suffixIcon,
+    TextInputAction? textInputAction,
+    ValueChanged<String>? onSubmitted,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      textInputAction: textInputAction,
+      onSubmitted: onSubmitted,
+      style: const TextStyle(color: Colors.white, fontSize: 16),
+      cursorColor: const Color(0xFF4FC3F7),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.08),
+        labelText: label,
+        labelStyle: TextStyle(
+          color: Colors.white.withOpacity(0.75),
+          fontSize: 15,
+        ),
+        floatingLabelStyle: const TextStyle(
+          color: Color(0xFF4FC3F7),
+          fontSize: 13,
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.7), size: 22),
+        suffixIcon: suffixIcon,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF4FC3F7), width: 1.4),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.16)),
+        ),
+      ),
+    );
+  }
+
+  /// Botón principal con degradado azul → celeste
+  Widget _buildLoginButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [Color(0xFF1976D2), Color(0xFF29B6F6)],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1976D2).withOpacity(0.45),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: _isLoginButtonLoading
+              ? null
+              : _handleLoginButtonPress, // 🔐 Valida permisos antes de login
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            foregroundColor: Colors.white,
+            disabledForegroundColor: Colors.white70,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            textStyle: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+          ),
+          child: _isLoginButtonLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.5,
+                  ),
+                )
+              : const Text('Iniciar sesión'),
+        ),
+      ),
+    );
+  }
+
+  /// Footer discreto: ID de dispositivo, versión y audio
+  Widget _buildFooter() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 8, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'ID: $_deviceId',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white.withOpacity(0.55),
+              ),
+            ),
+          ),
+          Text(
+            _appVersion,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.white.withOpacity(0.55),
+            ),
+          ),
+          IconButton(
+            icon: Icon(
+              _isAudioEnabled
+                  ? Icons.volume_up_outlined
+                  : Icons.volume_off_outlined,
+              color: Colors.white.withOpacity(0.55),
+              size: 20,
+            ),
+            onPressed: _toggleAudio,
+            visualDensity: VisualDensity.compact,
+            tooltip: _isAudioEnabled ? 'Desactivar audio' : 'Activar audio',
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0B2545),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.white70),
+            )
           : LoginBackground(
-              child: Column(
-                children: [
-                  SizedBox(height: 5), // Margen superior igual a AppBar
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.all(1.0),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    Expanded(
+                      // Contenido alineado arriba: el logo lo más alto posible
+                      // y la tarjeta apenas separada, para que el teclado no
+                      // desplace el formulario
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // 🚀 Logo con caché automático (igual que el background)
-                            CachedNetworkImage(
-                              imageUrl:
-                                  'https://www.riogas.uy/ica_geos_/static/Resources/RGDelivery.png',
-                              width: 250,
-                              height: 250,
-                              // 📦 Placeholder mientras carga (primera vez o si no hay caché)
-                              placeholder: (context, url) => Container(
-                                width: 250,
-                                height: 250,
-                                color: Colors.transparent,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white.withOpacity(0.5),
-                                  ),
-                                ),
-                              ),
-                              // ❌ Widget de error si falla la carga
-                              errorWidget: (context, url, error) {
-                                print(
-                                    '❌ [LOGIN_LOGO] Error cargando logo: $error');
-                                // Fallback: mostrar un icono o texto
-                                return Container(
-                                  width: 250,
-                                  height: 250,
-                                  color: Colors.transparent,
-                                  child: Icon(
-                                    Icons.image_not_supported,
-                                    size: 100,
-                                    color: Colors.white.withOpacity(0.3),
-                                  ),
-                                );
-                              },
-                              // 🔄 Configuración de caché
-                              cacheKey:
-                                  'https://www.riogas.uy/ica_geos_/static/Resources/RGDelivery.png',
-                              maxHeightDiskCache:
-                                  500, // Optimización para logo más pequeño
-                              maxWidthDiskCache: 500,
-                              // ⏱️ Duración del caché: 7 días (pero verificará cambios en cada inicio)
-                              fadeInDuration: Duration(milliseconds: 300),
-                              fadeOutDuration: Duration(milliseconds: 100),
-                            ),
-                            SizedBox(height: 1),
-                            TextField(
-                              controller: _usernameController,
-                              style: TextStyle(color: Colors.white),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Colors.transparent,
-                                labelText: 'Usuario',
-                                labelStyle: TextStyle(color: Colors.white),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.white),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.white),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.white),
-                                ),
-                                prefixIcon:
-                                    Icon(Icons.person, color: Colors.white),
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            TextField(
-                              controller: _passwordController,
-                              obscureText: true,
-                              style: TextStyle(color: Colors.white),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Colors.transparent,
-                                labelText: 'Contraseña',
-                                labelStyle: TextStyle(color: Colors.white),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.white),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.white),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.white),
-                                ),
-                                prefixIcon:
-                                    Icon(Icons.lock, color: Colors.white),
-                              ),
-                            ),
-                            SizedBox(height: 20),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _isLoginButtonLoading
-                                    ? null
-                                    : _handleLoginButtonPress, // 🔐 Validar permisos antes de login
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blueAccent,
-                                  foregroundColor: Colors.white,
-                                  padding: EdgeInsets.symmetric(vertical: 16),
-                                  textStyle: TextStyle(fontSize: 18),
-                                ),
-                                child: _isLoginButtonLoading
-                                    ? SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : Text('Iniciar sesión'),
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            Text(
-                              _appVersion,
-                              textAlign: TextAlign.center,
-                              style:
-                                  TextStyle(fontSize: 14, color: Colors.grey),
-                            ),
-                            SizedBox(height: 20),
+                            const SizedBox(height: 4),
+                            _buildLogo(),
+                            const SizedBox(height: 10),
+                            _buildLoginCard(),
+                            const SizedBox(height: 24),
                           ],
                         ),
                       ),
                     ),
-                  ),
-                  // 🎵 Solo mostrar el footer cuando el teclado NO está visible
-                  if (MediaQuery.of(context).viewInsets.bottom == 0)
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: SafeArea(
-                        child: Stack(
-                          children: [
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'ID: $_deviceId',
-                                textAlign: TextAlign.center,
-                                style:
-                                    TextStyle(fontSize: 14, color: Colors.grey),
-                              ),
-                            ),
-                            // 🎵 Botón de audio en la esquina inferior derecha
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: IconButton(
-                                icon: Icon(
-                                  _isAudioEnabled
-                                      ? Icons.volume_up
-                                      : Icons.volume_off,
-                                  color: Colors.grey,
-                                  size: 28,
-                                ),
-                                onPressed: _toggleAudio,
-                                tooltip: _isAudioEnabled
-                                    ? 'Desactivar audio'
-                                    : 'Activar audio',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
+                    // Footer solo visible con el teclado cerrado
+                    if (MediaQuery.of(context).viewInsets.bottom == 0)
+                      _buildFooter(),
+                  ],
+                ),
               ),
             ),
     );

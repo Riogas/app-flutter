@@ -1919,6 +1919,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'MoveIT',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.blue),
       navigatorKey: navigatorKey,
       // 🌍 Banner visual si está en modo desarrollo
