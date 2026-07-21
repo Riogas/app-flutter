@@ -3228,27 +3228,12 @@ class _LoginPageState extends State<LoginPage> {
   // 👁️ Visibilidad de la contraseña
   bool _obscurePassword = true;
 
-  /// Logo superior: asset local nuevo sobre chip blanco (el texto del logo
-  /// es azul oscuro y necesita fondo claro para contrastar)
+  /// Logo superior: asset local nuevo con transparencia real
   Widget _buildLogo() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Image.asset(
-        'assets/logo_delivery.png',
-        width: 245,
-        fit: BoxFit.contain,
-      ),
+    return Image.asset(
+      'assets/logo_delivery.png',
+      width: 300,
+      fit: BoxFit.contain,
     );
   }
 

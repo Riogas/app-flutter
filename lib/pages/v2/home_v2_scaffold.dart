@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
 import '../../services/persistent_stream_manager.dart';
-import '../map_page.dart';
+import 'mapa_tab_v2.dart';
 import 'pedidos_tab_v2.dart';
 import 'promociones_page.dart';
 import 'v2_theme.dart';
@@ -55,7 +55,10 @@ class _HomeV2ScaffoldState extends State<HomeV2Scaffold> {
             onEstadoTap: widget.onEstadoTap,
             onVerPromos: () => setState(() => _tab = 2),
           ),
-          MapPage(),
+          MapaTabV2(
+            messageCountNotifier: widget.messageCountNotifier,
+            onEstadoTap: widget.onEstadoTap,
+          ),
           PromocionesPage(
             messageCountNotifier: widget.messageCountNotifier,
             onEstadoTap: widget.onEstadoTap,

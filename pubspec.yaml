@@ -60,12 +60,12 @@ dependencies:
   audioplayers: ^6.0.0
   cached_network_image: ^3.3.1
 
+# Sin adaptive icon: Android obliga a fondo opaco en adaptive; se usan los
+# íconos legacy transparentes para respetar la transparencia de la llama
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/icon/icon_app.png"
-  adaptive_icon_foreground: "assets/icon/icon_app_fg.png"
-  adaptive_icon_background: "#FFFFFF"
 
 dev_dependencies:
   flutter_test:

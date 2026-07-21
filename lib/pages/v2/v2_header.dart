@@ -141,27 +141,12 @@ class V2Header extends StatelessWidget {
     );
   }
 
-  // ── Logo (asset local sobre chip blanco: el texto del logo es azul
-  // oscuro y necesita fondo claro para contrastar) ──
+  // ── Logo (asset local con transparencia real) ──
   Widget _buildLogo() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Image.asset(
-        'assets/logo_delivery.png',
-        height: 26,
-        fit: BoxFit.contain,
-      ),
+    return Image.asset(
+      'assets/logo_delivery.png',
+      height: 40,
+      fit: BoxFit.contain,
     );
   }
 
