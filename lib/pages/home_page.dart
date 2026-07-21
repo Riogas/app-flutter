@@ -31,6 +31,7 @@ import '../utils/stream_manager.dart'; // o el path correcto
 import '../services/persistent_stream_manager.dart';
 import '../services/ui_prefs.dart'; // 🎨 Toggle de diseño nuevo/clásico
 import '../services/nuevo_pedido_notification_service.dart'; // 🔔 Notif. pedidos nuevos
+import 'v2/v2_header.dart'; // 🎨 Navbar nuevo (también en el diseño clásico)
 import 'v2/home_v2_scaffold.dart'; // 🎨 Rediseño Home V2
 
 // FunciÃ³n utilitaria para abrir cajas Hive de forma segura
@@ -1019,6 +1020,135 @@ class _HomePageState extends State<HomePage>
 
   // 🧱 Diseño clásico (pre-rediseño 2026), intacto
   Widget _buildLegacyScaffold(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Column(
+        children: [
+          // 🎨 Navbar nuevo (V2) también en el diseño clásico
+          V2Header(
+            messageCountNotifier: _messageCountNotifier,
+            onEstadoTap: _handleEstadoTapV2,
+            height: 112,
+            bottomSpace: 12,
+          ),
+          Expanded(child: _buildLegacyBody()),
+        ],
+      ),
+      bottomNavigationBar: _buildLegacyBottomNavV2(),
+    );
+  }
+
+  /// Índice acotado a los 2 tabs del clásico (Pedidos/Mapa); mensajes y
+  /// configuración viven ahora en el navbar superior
+  int get _legacyIndex => _selectedIndex > 1 ? 0 : _selectedIndex;
+
+  Widget _buildLegacyBody() {
+    return Hive.isBoxOpen('sessionBox')
+        ? ValueListenableBuilder<Map<String, dynamic>?>(
+            valueListenable: _streamManager.sesionesNotifier,
+            builder: (context, data, _) {
+              return _widgetOptions.elementAt(_legacyIndex);
+            },
+          )
+        : FutureBuilder(
+            future: Hive.openBox('sessionBox'),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return Center(child: CircularProgressIndicator());
+              }
+              return ValueListenableBuilder<Map<String, dynamic>?>(
+                valueListenable: _streamManager.sesionesNotifier,
+                builder: (context, data, _) {
+                  return _widgetOptions.elementAt(_legacyIndex);
+                },
+              );
+            },
+          );
+  }
+
+  Widget _buildLegacyBottomNavV2() {
+    return ValueListenableBuilder<int>(
+      valueListenable: _pendingOrdersCountNotifier,
+      builder: (context, pendingOrdersCount, child) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Color(0xFF0D2B4E).withOpacity(0.10),
+                blurRadius: 16,
+                offset: Offset(0, -4),
+              ),
+            ],
+          ),
+          child: BottomNavigationBar(
+            items: [
+              _navItemV2(Icons.local_shipping_outlined, Icons.local_shipping,
+                  'Pedidos', pendingOrdersCount),
+              _navItemV2(Icons.map_outlined, Icons.map, 'Mapa', 0),
+            ],
+            currentIndex: _legacyIndex,
+            onTap: _onItemTapped,
+            backgroundColor: Colors.white,
+            elevation: 0,
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: Color(0xFF1E88E5),
+            unselectedItemColor: Color(0xFF5A7184),
+            selectedLabelStyle:
+                TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+            unselectedLabelStyle:
+                TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
+            showUnselectedLabels: true,
+          ),
+        );
+      },
+    );
+  }
+
+  BottomNavigationBarItem _navItemV2(
+      IconData icon, IconData activeIcon, String label, int badge) {
+    Widget conBadge(Widget child) {
+      if (badge <= 0) return child;
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          child,
+          Positioned(
+            right: -8,
+            top: -4,
+            child: Container(
+              padding: EdgeInsets.all(3.5),
+              decoration: BoxDecoration(
+                color: Color(0xFFE53935),
+                shape: BoxShape.circle,
+              ),
+              constraints: BoxConstraints(minWidth: 17, minHeight: 17),
+              child: Text(
+                '$badge',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return BottomNavigationBarItem(
+      icon: conBadge(Icon(icon, size: 24)),
+      activeIcon: conBadge(Icon(activeIcon, size: 24)),
+      label: label,
+    );
+  }
+
+  // 🗄️ Scaffold clásico ANTERIOR (AppBar con chip + 4 tabs). Ya no se usa:
+  // el navbar V2 y el menú de 2 tabs lo reemplazan. Se conserva de referencia.
+  // ignore: unused_element
+  Widget _buildLegacyScaffoldAnterior(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(
