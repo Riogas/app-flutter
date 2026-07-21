@@ -9,6 +9,7 @@ import 'package:hive/hive.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/nuevo_pedido_notification_service.dart';
 import '../../services/pedido_lectura_service.dart';
 import '../../services/persistent_stream_manager.dart';
 import '../order_detail_page.dart';
@@ -239,6 +240,62 @@ class _PedidosTabV2State extends State<PedidosTabV2> {
     }
   }
 
+  /// 🗺️ Ruta multi-parada con todos los pendientes en Google Maps.
+  /// (Waze no soporta paradas por API; si venías navegando en Waze,
+  /// cerralo para no tener dos ruteos a la vez)
+  Widget _buildRutaCompletaRow() {
+    return V2Card(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: _abrirRutaCompleta,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            children: [
+              const Icon(Icons.alt_route, color: V2Colors.accion, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Ruta completa en Google Maps',
+                      style: TextStyle(
+                        color: V2Colors.textoPrimario,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'Todas las paradas en un solo recorrido',
+                      style: TextStyle(
+                        color: V2Colors.textoSecundario,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.open_in_new,
+                  color: V2Colors.textoSecundario, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _abrirRutaCompleta() async {
+    final ok = await NuevoPedidoNotificationService.abrirRutaCompleta();
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Los pedidos no tienen ubicación para armar la ruta.')),
+      );
+    }
+  }
+
   void _mostrarListaCompleta(List<DocumentSnapshot> pedidos) {
     showModalBottomSheet(
       context: context,
@@ -416,6 +473,10 @@ class _PedidosTabV2State extends State<PedidosTabV2> {
                             cantidad: pedidos.length - 2,
                             onTap: () => _mostrarListaCompleta(pedidos),
                           ),
+                        ],
+                        if (pedidos.length >= 2) ...[
+                          const SizedBox(height: 12),
+                          _buildRutaCompletaRow(),
                         ],
                       ],
                       const SizedBox(height: 12),

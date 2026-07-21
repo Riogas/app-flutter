@@ -24,6 +24,7 @@ import 'package:http/http.dart'
     as http; // Importa http para realizar solicitudes HTTP
 import 'package:cloud_firestore/cloud_firestore.dart'; // Importa cloud_firestore para usar Firestore
 import 'utils/constantes.dart'; // Importa constantes para usar getConstantValue
+import 'services/nuevo_pedido_notification_service.dart'; // 🔔 Notif. pedidos nuevos
 import 'package:dio/dio.dart'; // Importa dio para la descarga
 import 'package:open_file/open_file.dart'; // Importa open_file para abrir el archivo descargado
 import 'package:path_provider/path_provider.dart'; // Importa path_provider para obtener directorios
@@ -524,7 +525,12 @@ Future<void> _initializeFirebaseMessaging() async {
   final InitializationSettings initializationSettings = InitializationSettings(
     android: initializationSettingsAndroid,
   );
-  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  await flutterLocalNotificationsPlugin.initialize(
+    initializationSettings,
+    // 🔔 Acciones de las notificaciones de pedidos nuevos (Navegar/Ruta completa)
+    onDidReceiveNotificationResponse:
+        NuevoPedidoNotificationService.onNotificationResponse,
+  );
 
   // Configurar el manejo de mensajes en foreground
   FirebaseMessaging.onMessage.listen((RemoteMessage message) async {

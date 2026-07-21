@@ -30,6 +30,7 @@ import 'package:flutter/services.dart'; // Import SystemNavigator
 import '../utils/stream_manager.dart'; // o el path correcto
 import '../services/persistent_stream_manager.dart';
 import '../services/ui_prefs.dart'; // 🎨 Toggle de diseño nuevo/clásico
+import '../services/nuevo_pedido_notification_service.dart'; // 🔔 Notif. pedidos nuevos
 import 'v2/home_v2_scaffold.dart'; // 🎨 Rediseño Home V2
 
 // FunciÃ³n utilitaria para abrir cajas Hive de forma segura
@@ -108,6 +109,7 @@ class _HomePageState extends State<HomePage>
     super.initState();
     //secureScreen();
     UiPrefs.init(); // 🎨 Cargar preferencia de diseño (nuevo/clásico)
+    NuevoPedidoNotificationService().init(); // 🔔 Aviso de pedidos nuevos
 
     final streamManager = PersistentStreamManager();
 
