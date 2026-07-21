@@ -257,6 +257,24 @@ class _MapaTabV2State extends State<MapaTabV2> {
     );
   }
 
+  /// 🔒 Privacidad: la dirección se muestra recortada en el mapa para no
+  /// exponer la dirección completa del cliente
+  String _direccionCorta(String dir) {
+    final d = dir.trim();
+    return d.length <= 10 ? d : '${d.substring(0, 10)}…';
+  }
+
+  /// Distancia + ETA desde la posición actual hasta el pedido
+  String _distanciaEta(Map<String, dynamic> pedido) {
+    final u = pedido['ubicacion'];
+    if (u is GeoPoint && _pos != null) {
+      final m = const Distance()
+          .as(LengthUnit.Meter, _pos!, LatLng(u.latitude, u.longitude));
+      return '${V2Data.fmtKm(m)} · ${V2Data.fmtEta(m)}';
+    }
+    return '';
+  }
+
   Color _colorParada(int index, Map<String, dynamic> pedido) {
     final restantes = V2Data.minutosRestantes(pedido);
     if (restantes != null && restantes < 15) return V2Colors.naranja;
@@ -671,12 +689,7 @@ class _MapaTabV2State extends State<MapaTabV2> {
 
   Widget _cardParadaSeleccionada(Map<String, dynamic> pedido, int index) {
     final direccion = (pedido['ClienteDireccion'] ?? 'Sin dirección').toString();
-    double? dist;
-    final u = pedido['ubicacion'];
-    if (u is GeoPoint && _pos != null) {
-      dist = const Distance()
-          .as(LengthUnit.Meter, _pos!, LatLng(u.latitude, u.longitude));
-    }
+    final extra = _distanciaEta(pedido);
     return V2Card(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       shadows: V2Shadows.cardElevada,
@@ -700,7 +713,7 @@ class _MapaTabV2State extends State<MapaTabV2> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  direccion,
+                  _direccionCorta(direccion),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -710,8 +723,7 @@ class _MapaTabV2State extends State<MapaTabV2> {
                   ),
                 ),
                 Text(
-                  'Parada ${index + 1}'
-                  '${dist != null ? ' · ${V2Data.fmtKm(dist)}' : ''}',
+                  'Parada ${index + 1}${extra.isNotEmpty ? ' · $extra' : ''}',
                   style: const TextStyle(
                     color: V2Colors.textoSecundario,
                     fontSize: 12,
@@ -724,7 +736,7 @@ class _MapaTabV2State extends State<MapaTabV2> {
             onPressed: () =>
                 PedidoActionsV2.abrirDetalle(context, pedido),
             child: const Text(
-              'Ver pedido',
+              'Detalle',
               style: TextStyle(
                 color: V2Colors.accion,
                 fontWeight: FontWeight.w700,
@@ -812,17 +824,19 @@ class _MapaTabV2State extends State<MapaTabV2> {
           _filaParada(
             color: V2Colors.rojo,
             etiqueta: 'Parada actual',
-            direccion:
-                (actual['ClienteDireccion'] ?? 'Sin dirección').toString(),
+            direccion: _direccionCorta(
+                (actual['ClienteDireccion'] ?? 'Sin dirección').toString()),
+            extra: _distanciaEta(actual),
           ),
           if (siguiente != null) ...[
             const SizedBox(height: 6),
             _filaParada(
               color: V2Colors.celeste,
               etiqueta: 'Próxima parada',
-              direccion:
+              direccion: _direccionCorta(
                   (siguiente['ClienteDireccion'] ?? 'Sin dirección')
-                      .toString(),
+                      .toString()),
+              extra: _distanciaEta(siguiente),
             ),
           ],
           if (pedidos.length > 2) ...[
@@ -893,7 +907,7 @@ class _MapaTabV2State extends State<MapaTabV2> {
                     ),
                     icon: const Icon(Icons.receipt_long_outlined, size: 18),
                     label: const Text(
-                      'Ver pedido',
+                      'Detalle',
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
@@ -913,6 +927,7 @@ class _MapaTabV2State extends State<MapaTabV2> {
     required Color color,
     required String etiqueta,
     required String direccion,
+    String extra = '',
   }) {
     return Row(
       children: [
@@ -931,15 +946,31 @@ class _MapaTabV2State extends State<MapaTabV2> {
                   letterSpacing: 0.4,
                 ),
               ),
-              Text(
-                direccion,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: V2Colors.textoPrimario,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
+              Row(
+                children: [
+                  Text(
+                    direccion,
+                    style: const TextStyle(
+                      color: V2Colors.textoPrimario,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (extra.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        extra,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: V2Colors.textoSecundario,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -994,8 +1025,9 @@ class _MapaTabV2State extends State<MapaTabV2> {
                       ),
                     ),
                     title: Text(
-                      (pedido['ClienteDireccion'] ?? 'Sin dirección')
-                          .toString(),
+                      _direccionCorta(
+                          (pedido['ClienteDireccion'] ?? 'Sin dirección')
+                              .toString()),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1004,6 +1036,12 @@ class _MapaTabV2State extends State<MapaTabV2> {
                         color: V2Colors.textoPrimario,
                       ),
                     ),
+                    subtitle: _distanciaEta(pedido).isNotEmpty
+                        ? Text(
+                            _distanciaEta(pedido),
+                            style: const TextStyle(fontSize: 12),
+                          )
+                        : null,
                     trailing: const Icon(Icons.chevron_right,
                         color: V2Colors.textoSecundario),
                     onTap: () {

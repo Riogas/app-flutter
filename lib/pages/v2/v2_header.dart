@@ -2,11 +2,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/logout_service.dart';
 import '../../services/persistent_stream_manager.dart';
-import '../../utils/constantes.dart';
 import '../message_page.dart';
 import '../settings_page.dart';
 import 'v2_data.dart';
@@ -210,10 +208,7 @@ class V2Header extends StatelessWidget {
       ),
       onSelected: (value) => _onMenuSelected(context, value),
       itemBuilder: (context) => [
-        _menuItem('perfil', Icons.badge_outlined, 'Perfil del chofer'),
         _menuItem('config', Icons.settings_outlined, 'Configuración'),
-        _menuItem('estado', Icons.local_shipping_outlined, 'Estado del móvil'),
-        _menuItem('ayuda', Icons.help_outline, 'Ayuda'),
         const PopupMenuDivider(),
         _menuItem('logout', Icons.logout, 'Cerrar sesión',
             color: V2Colors.rojo),
@@ -238,62 +233,16 @@ class V2Header extends StatelessWidget {
 
   Future<void> _onMenuSelected(BuildContext context, String value) async {
     switch (value) {
-      case 'perfil':
       case 'config':
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => SettingsPage()),
         );
         break;
-      case 'estado':
-        await onEstadoTap(context);
-        break;
-      case 'ayuda':
-        await _mostrarAyuda(context);
-        break;
       case 'logout':
         await _confirmarLogout(context);
         break;
     }
-  }
-
-  Future<void> _mostrarAyuda(BuildContext context) async {
-    final telefono = (await getConstantValue('170') ?? '').trim();
-    if (!context.mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Ayuda'),
-        content: Text(
-          telefono.isNotEmpty
-              ? 'Ante cualquier problema comunicate con despacho.'
-              : 'Ante cualquier problema comunicate con despacho o con tu supervisor.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cerrar'),
-          ),
-          if (telefono.isNotEmpty)
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: V2Colors.accion,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                final uri = Uri.parse('tel:$telefono');
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri);
-                }
-              },
-              icon: const Icon(Icons.phone, size: 18),
-              label: const Text('Llamar a despacho'),
-            ),
-        ],
-      ),
-    );
   }
 
   Future<void> _confirmarLogout(BuildContext context) async {
