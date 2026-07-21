@@ -1,46 +1,62 @@
-# Promociones — esquema Firestore
+# Promociones (beneficios de clientes) — esquema Firestore y flujo
 
-La pantalla **Promociones** del rediseño (Home V2) lee la colección
-**`Promociones-{escenario}`** (ej.: `Promociones-1000`, `Promociones-2000`)
-en el mismo Firestore que ya usa la app. Hoy no hay backend que la escriba:
-los documentos se cargan a mano desde la consola de Firebase (o desde
-GeneXus cuando exista el proceso).
+La pantalla **Promociones** del rediseño (Home V2) permite al chofer
+**validar y consumir beneficios del cliente** (Antel, Claro, OCA Metros,
+etc.). La configuración de cada promoción viene de la colección Firestore
+**top-level `Promociones`** (administrada por GeneXus).
 
-## Documento
+## Documento de la colección `Promociones`
 
-| Campo | Tipo | Requerido | Descripción |
-|---|---|---|---|
-| `Titulo` | string | ✅ | Título de la promo ("Completá 10 entregas hoy") |
-| `Descripcion` | string | — | Texto descriptivo |
-| `TipoMeta` | string | ✅ | `entregas_dia` (desafío con barra de progreso contra las entregas de hoy) o `info` (campaña informativa sin progreso) |
-| `MetaCantidad` | number | solo si `entregas_dia` | Meta de entregas del día (ej. 10) |
-| `Premio` | string | — | Texto del premio ("Bono adicional") |
-| `FchDesde` | number | ✅ | Vigencia desde, int AAAAMMDD (ej. 20260721) |
-| `FchHasta` | number | ✅ | Vigencia hasta, int AAAAMMDD inclusive |
-| `VisibleEnApp` | string | ✅ | `'S'` para mostrarla (la query filtra por este campo) |
-| `Movil` | number | — | Si está y ≠ 0, la promo solo la ve ese móvil. Ausente o 0 = todos |
+| Campo | Tipo | Uso en la app |
+|---|---|---|
+| `NombreCombo` | string | Valor mostrado en el combo de promociones |
+| `Descripcion` | string | Subtítulo en el selector |
+| `Estado` | string | Solo se leen documentos con `'A'` (filtro server-side) |
+| `IdInterno` | int | Identificador que se envía a las APIs |
+| `FechaDesde` / `FechaHasta` | timestamp | Vigencia; fuera del rango la promo no aparece |
+| `EscenariosHabilitados` | array<string> | `["*"]` = todos; sino solo esos escenarios |
+| `AgenciasHabilitadas` | array<string> | `["*"]` = todas (⚠️ aún no se evalúa: la app no conoce la agencia) |
+| `LabelCodCliente` | string | Label del campo código (ej. "PIN Antel"); vacío/ausente = campo oculto |
+| `LabelCodTelCliente` | string | Label del campo teléfono; vacío = oculto |
+| `LabelNomCliente` | string | Label del campo nombre; vacío = oculto |
+| `LabelAuxIn1` | string | Label del campo auxiliar/observaciones; vacío = oculto |
+| `ReqNomCliente` / `ReqAuxIn1` | string | `"Requerido"` u `"Opcional"` (default: opcional) |
+| `ReqCodCliente` / `ReqCodTelCliente` | string | Ídem (default: **requerido** si el campo es visible) |
+| `TelValores` | string | Texto de ayuda bajo el teléfono (ej. "Fijos y Celulares") |
+| `LabelBotonValidar` | string | Texto del botón de validación (default "Validar") |
+| `LabelBotonConsumir` | string | Texto del botón de consumo (default "Consumir beneficio") |
+| `NotaAnteriorAlBotonValidar` | string | Nota informativa antes del botón (banner naranja) |
 
-## Comportamiento en la app
+**Reglas de renderizado:** un campo se muestra solo si su `Label*` tiene
+texto. Código y teléfono son requeridos por defecto; nombre y auxiliar son
+opcionales por defecto. Los `Req*` explícitos ganan.
 
-- El filtro de vigencia (`FchDesde`/`FchHasta`, fecha operativa base UTC-3) y
-  el de `Movil` se aplican en el cliente (`PersistentStreamManager`).
-- El **progreso** de los desafíos `entregas_dia` se calcula contra las
-  entregas reales del día del móvil (`Pedidos-{escenario}` con
-  `EstadoNro == 2` y `FchPara == hoy`).
-- El **badge** del tab Promos marca las promos vigentes que el chofer todavía
-  no abrió (caja Hive local `promocionesVistasBox`).
+## APIs (⚠️ SIMULADAS hoy)
 
-## Ejemplo
+`lib/services/beneficios_service.dart` define el contrato — `validar()`,
+`confirmarPin()`, `reenviarPin()`, `consumir()` — con implementación
+simulada hasta que existan los endpoints GeneXus (marcados con
+`TODO(GeneXus)`). Reglas de la simulación para demos:
 
-```json
-{
-  "Titulo": "Completá 10 entregas hoy",
-  "Descripcion": "Llegá a 10 entregas en el día y ganá un bono adicional.",
-  "TipoMeta": "entregas_dia",
-  "MetaCantidad": 10,
-  "Premio": "Bono adicional",
-  "FchDesde": 20260721,
-  "FchHasta": 20260731,
-  "VisibleEnApp": "S"
-}
-```
+| Código ingresado | Resultado |
+|---|---|
+| `0000` | "El código ingresado no es válido." |
+| `1111` | "El cliente no tiene beneficios disponibles..." |
+| `2222` | "El beneficio ya fue utilizado anteriormente." |
+| `9999` | "No fue posible conectarse al servicio..." |
+| Empieza con `9` | Requiere PIN por SMS (el PIN correcto es **123456**) |
+| Cualquier otro | Beneficio directo: "20% de descuento en la compra." |
+
+El consumo siempre devuelve OK con un código de autorización `AUT-XXXXXX`.
+
+## Flujo en la app
+
+1. Combo de promociones (vigentes + escenario habilitado) → campos dinámicos.
+2. **Validar** (deshabilitado hasta completar los requeridos) → resultado:
+   beneficio directo / requiere PIN (abre bottom sheet de 6 casillas con
+   auto-avance, pegado, reenvío con cuenta regresiva y expiración 5 min) /
+   error amigable.
+3. **Consumir** (solo tras validación OK) → modal de confirmación con
+   promoción/cliente/beneficio → tarjeta verde "Beneficio consumido" con
+   autorización y fecha; el formulario queda bloqueado hasta
+   "Nueva validación" (evita consumos duplicados).

@@ -56,7 +56,10 @@ class _HomeV2ScaffoldState extends State<HomeV2Scaffold> {
             onVerPromos: () => setState(() => _tab = 2),
           ),
           MapPage(),
-          const PromocionesPage(),
+          PromocionesPage(
+            messageCountNotifier: widget.messageCountNotifier,
+            onEstadoTap: widget.onEstadoTap,
+          ),
         ],
       ),
       bottomNavigationBar: ValueListenableBuilder<List<DocumentSnapshot>>(

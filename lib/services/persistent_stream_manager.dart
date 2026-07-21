@@ -363,32 +363,38 @@ class PersistentStreamManager {
   }
 
   /// 🎁 Initialize persistent Promociones listener (rediseño Home V2)
-  /// Filtra client-side: VisibleEnApp=='S', vigencia FchDesde<=hoy<=FchHasta
-  /// (int AAAAMMDD) y Movil (0/ausente = todos los móviles).
+  /// Colección real `Promociones` (config GeneXus de beneficios).
+  /// Filtra client-side: Estado=='A', vigencia FechaDesde/FechaHasta
+  /// (Timestamps) y EscenariosHabilitados ('*' = todos).
+  /// Nota: AgenciasHabilitadas no se evalúa aún (la app no conoce la agencia).
   Future<void> _initializePromocionesListener() async {
     try {
-      final movil = int.tryParse(
-              Hive.box('sessionBox').get('movil', defaultValue: '0').toString()) ??
-          0;
+      final escenarioStr =
+          Hive.box('sessionBox').get('escenario', defaultValue: '0').toString();
 
       _promocionesSubscription =
           _firebaseService.getPromocionesStream().listen(
         (List<DocumentSnapshot> promos) {
-          final hoyDt = DateTime.now().toUtc().subtract(Duration(hours: 3));
-          final hoy = hoyDt.year * 10000 + hoyDt.month * 100 + hoyDt.day;
+          final ahora = DateTime.now();
 
           final vigentes = promos.where((doc) {
             final data = doc.data() as Map<String, dynamic>?;
             if (data == null) return false;
-            if (data['VisibleEnApp'] != 'S') return false;
-            final desde =
-                int.tryParse(data['FchDesde']?.toString() ?? '') ?? 0;
-            final hasta =
-                int.tryParse(data['FchHasta']?.toString() ?? '') ?? 99999999;
-            if (hoy < desde || hoy > hasta) return false;
-            final promoMovil =
-                int.tryParse(data['Movil']?.toString() ?? '') ?? 0;
-            if (promoMovil != 0 && promoMovil != movil) return false;
+            if (data['Estado'] != 'A') return false;
+            final desde = data['FechaDesde'];
+            if (desde is Timestamp && ahora.isBefore(desde.toDate())) {
+              return false;
+            }
+            final hasta = data['FechaHasta'];
+            if (hasta is Timestamp && ahora.isAfter(hasta.toDate())) {
+              return false;
+            }
+            final escenarios = data['EscenariosHabilitados'];
+            if (escenarios is List && escenarios.isNotEmpty) {
+              final habilitado = escenarios.any((e) =>
+                  e.toString() == '*' || e.toString() == escenarioStr);
+              if (!habilitado) return false;
+            }
             return true;
           }).toList();
 

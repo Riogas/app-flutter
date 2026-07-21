@@ -19,11 +19,22 @@ class V2Header extends StatelessWidget {
   final Future<void> Function(BuildContext context) onEstadoTap;
   final bool problemaTecnico; // GPS/conexión con problemas → píldora naranja
 
+  /// Modo sección: si [titulo] viene, se muestra en lugar del nombre del
+  /// chofer (con [subtitulo] opcional debajo). Usado por Promociones.
+  final String? titulo;
+  final String? subtitulo;
+  final double height;
+  final double bottomSpace;
+
   const V2Header({
     super.key,
     required this.messageCountNotifier,
     required this.onEstadoTap,
     this.problemaTecnico = false,
+    this.titulo,
+    this.subtitulo,
+    this.height = 182,
+    this.bottomSpace = 82,
   });
 
   static const String _resourcesBase =
@@ -38,7 +49,7 @@ class V2Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusBar = MediaQuery.of(context).padding.top;
     return SizedBox(
-      height: 182 + statusBar,
+      height: height + statusBar,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -90,16 +101,37 @@ class V2Header extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                // Nombre a la izquierda + estado del móvil a la derecha
-                Row(
-                  children: [
-                    Expanded(child: _buildNombre()),
-                    const SizedBox(width: 10),
-                    _buildEstadoPill(context),
+                if (titulo != null) ...[
+                  // Modo sección: título línea completa, píldora debajo
+                  _buildTitulo(),
+                  if (subtitulo != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitulo!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 13.5,
+                      ),
+                    ),
                   ],
-                ),
-                // Espacio para la tarjeta de resumen que se superpone
-                const SizedBox(height: 82),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildEstadoPill(context),
+                  ),
+                ] else
+                  // Modo home: nombre + píldora en la misma línea
+                  Row(
+                    children: [
+                      Expanded(child: _buildNombre()),
+                      const SizedBox(width: 10),
+                      _buildEstadoPill(context),
+                    ],
+                  ),
+                // Espacio inferior (para tarjetas que se superponen)
+                SizedBox(height: bottomSpace),
               ],
             ),
           ),
@@ -400,6 +432,20 @@ class V2Header extends StatelessWidget {
       }
     } catch (_) {}
     return V2Colors.textoSecundario;
+  }
+
+  Widget _buildTitulo() {
+    return Text(
+      titulo!,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 22,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.2,
+      ),
+    );
   }
 
   // ── Nombre del chofer (misma línea que la píldora de estado) ──

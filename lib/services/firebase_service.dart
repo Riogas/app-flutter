@@ -983,23 +983,22 @@ class FirebaseService {
     }
   }
 
-  /// 🎁 Stream de promociones (rediseño Home V2).
-  /// Colección `Promociones-{escenario}`; solo filtra VisibleEnApp server-side,
-  /// la vigencia por fecha y el móvil se filtran client-side en el
-  /// PersistentStreamManager (Movil es opcional en el documento).
-  /// Esquema del documento: ver docs/PROMOCIONES_FIRESTORE.md
+  /// 🎁 Stream de promociones/beneficios (rediseño Home V2).
+  /// Colección REAL top-level `Promociones` (config GeneXus de beneficios:
+  /// Antel, Claro, OCA, etc.). Server-side solo Estado=='A'; la vigencia por
+  /// Timestamp y EscenariosHabilitados se filtran client-side en el
+  /// PersistentStreamManager. Esquema: ver docs/PROMOCIONES_FIRESTORE.md
   Stream<List<DocumentSnapshot>> getPromocionesStream() async* {
     try {
       var box = await openBoxSafe('sessionBox');
       if (box == null) return;
-      String escenarioId = box.get('escenario', defaultValue: '0').toString();
 
-      String collectionName = 'Promociones-$escenarioId';
+      String collectionName = 'Promociones';
 
       try {
         Stream<List<DocumentSnapshot>> promocionesStream = _firestore
             .collection(collectionName)
-            .where('VisibleEnApp', isEqualTo: 'S')
+            .where('Estado', isEqualTo: 'A')
             .snapshots()
             .handleError((error) async {
           if (error is FirebaseException && error.code == 'permission-denied') {
