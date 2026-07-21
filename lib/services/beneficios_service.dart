@@ -75,6 +75,9 @@ class BeneficiosService {
     required String movil,
     required String usuario,
     required String escenario,
+    // 🌍 Ubicación administrativa del móvil (GPS + Nominatim) — dato interno
+    String? departamento,
+    String? localidad,
   }) async {
     // TODO(GeneXus): llamar al endpoint real de validación de la promo
     await Future.delayed(const Duration(milliseconds: 1400));

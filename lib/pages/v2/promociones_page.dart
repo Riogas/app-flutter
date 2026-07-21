@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:hive/hive.dart';
+import 'package:http/http.dart' as http;
 
 import '../../services/beneficios_service.dart';
 import '../../services/persistent_stream_manager.dart';
@@ -57,6 +61,11 @@ class _PromocionesPageState extends State<PromocionesPage> {
   String _mensajeResultado = '';
   String? _codigoAutorizacion;
   DateTime? _fechaConsumo;
+  bool _opcionalesAbiertos = false;
+
+  // 🌍 Ubicación administrativa actual (interna, para la API de validación)
+  String? _departamento;
+  String? _localidad;
 
   @override
   void initState() {
@@ -145,7 +154,47 @@ class _PromocionesPageState extends State<PromocionesPage> {
       _mensajeResultado = '';
       _codigoAutorizacion = null;
       _fechaConsumo = null;
+      _opcionalesAbiertos = false;
     });
+    _obtenerGeo();
+  }
+
+  /// 🌍 Obtiene departamento y localidad actuales (GPS + Nominatim propio de
+  /// RioGas). Datos INTERNOS: se envían a la API de validación cuando exista;
+  /// solo se muestran en pantalla en modo debug.
+  Future<void> _obtenerGeo() async {
+    try {
+      Position? p = await Geolocator.getLastKnownPosition();
+      p ??= await Geolocator.getCurrentPosition(
+          timeLimit: const Duration(seconds: 8));
+
+      final resp = await http
+          .get(Uri.parse(
+              'http://nominatim.riogas.uy/reverse?lat=${p.latitude}&lon=${p.longitude}&format=json'))
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode != 200) return;
+
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      final addr = (data['address'] as Map<String, dynamic>?) ?? {};
+      final dep = (addr['state'] ?? addr['county'] ?? '').toString();
+      final loc = (addr['city'] ??
+              addr['town'] ??
+              addr['village'] ??
+              addr['municipality'] ??
+              addr['suburb'] ??
+              '')
+          .toString();
+
+      print('🌍 [PROMOS] Ubicación administrativa: $dep / $loc');
+      if (mounted) {
+        setState(() {
+          _departamento = dep;
+          _localidad = loc;
+        });
+      }
+    } catch (e) {
+      print('⚠️ [PROMOS] Error obteniendo departamento/localidad: $e');
+    }
   }
 
   Future<Map<String, String>> _identidad() async {
@@ -176,6 +225,8 @@ class _PromocionesPageState extends State<PromocionesPage> {
       movil: ident['movil']!,
       usuario: ident['usuario']!,
       escenario: ident['escenario']!,
+      departamento: _departamento,
+      localidad: _localidad,
     );
 
     if (!mounted) return;
@@ -308,6 +359,7 @@ class _PromocionesPageState extends State<PromocionesPage> {
       _mensajeResultado = '';
       _codigoAutorizacion = null;
       _fechaConsumo = null;
+      _opcionalesAbiertos = false;
     });
   }
 
@@ -463,55 +515,23 @@ class _PromocionesPageState extends State<PromocionesPage> {
           style: const TextStyle(
               color: V2Colors.textoSecundario, fontSize: 11.5),
         ),
+        // 🧪 Solo visible en modo debug: la ubicación administrativa es un
+        // dato interno que viajará a la API de validación
+        if (kDebugMode &&
+            _promoDoc != null &&
+            (_departamento ?? '').isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            '🧪 interno: ${_departamento ?? ''} · ${_localidad ?? ''}',
+            style: const TextStyle(
+              color: V2Colors.textoSecundario,
+              fontSize: 11,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
         if (_promoDoc != null) ...[
-          if (_tieneCodigo) ...[
-            const SizedBox(height: 16),
-            _labelCampo(_label('LabelCodCliente'), requerido: _codigoReq),
-            const SizedBox(height: 6),
-            _campoTexto(
-              controller: _codigoCtrl,
-              hint: 'Ingresá el código de la promoción',
-              icon: Icons.qr_code_2,
-            ),
-          ],
-          if (_tieneTel) ...[
-            const SizedBox(height: 14),
-            _labelCampo(_label('LabelCodTelCliente'), requerido: _telReq),
-            const SizedBox(height: 6),
-            _campoTexto(
-              controller: _telCtrl,
-              hint: 'Ingresá el teléfono del cliente',
-              icon: Icons.phone_outlined,
-              keyboardType: TextInputType.phone,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              helper: _label('TelValores').isNotEmpty
-                  ? _label('TelValores')
-                  : null,
-            ),
-          ],
-          if (_tieneNombre) ...[
-            const SizedBox(height: 14),
-            _labelCampo(_label('LabelNomCliente'), requerido: _nombreReq),
-            const SizedBox(height: 6),
-            _campoTexto(
-              controller: _nombreCtrl,
-              hint: 'Nombre y apellido del cliente',
-              icon: Icons.person_outline,
-              textCapitalization: TextCapitalization.words,
-            ),
-          ],
-          if (_tieneAux) ...[
-            const SizedBox(height: 14),
-            _labelCampo(_label('LabelAuxIn1'), requerido: _auxReq),
-            const SizedBox(height: 6),
-            _campoTexto(
-              controller: _auxCtrl,
-              hint: 'Agregá cualquier observación relevante',
-              icon: Icons.notes_outlined,
-              maxLines: 3,
-              maxLength: 120,
-            ),
-          ],
+          ..._camposFormulario(),
           if (nota.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
@@ -684,6 +704,149 @@ class _PromocionesPageState extends State<PromocionesPage> {
             ),
             const Icon(Icons.keyboard_arrow_down,
                 color: V2Colors.textoSecundario),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Campos del formulario: los requeridos siempre visibles; los opcionales
+  /// agrupados en un colapsable con "+" (por lo general nadie los completa)
+  List<Widget> _camposFormulario() {
+    final requeridos = <Widget>[];
+    final opcionales = <Widget>[];
+
+    void agregar(bool visible, bool req, Widget Function() builder) {
+      if (!visible) return;
+      (req ? requeridos : opcionales).add(builder());
+    }
+
+    agregar(
+        _tieneCodigo,
+        _codigoReq,
+        () => _bloqueCampo(
+              label: _label('LabelCodCliente'),
+              requerido: _codigoReq,
+              campo: _campoTexto(
+                controller: _codigoCtrl,
+                hint: 'Ingresá el código de la promoción',
+                icon: Icons.qr_code_2,
+              ),
+            ));
+    agregar(
+        _tieneTel,
+        _telReq,
+        () => _bloqueCampo(
+              label: _label('LabelCodTelCliente'),
+              requerido: _telReq,
+              campo: _campoTexto(
+                controller: _telCtrl,
+                hint: 'Ingresá el teléfono del cliente',
+                icon: Icons.phone_outlined,
+                keyboardType: TextInputType.phone,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                helper: _label('TelValores').isNotEmpty
+                    ? _label('TelValores')
+                    : null,
+              ),
+            ));
+    agregar(
+        _tieneNombre,
+        _nombreReq,
+        () => _bloqueCampo(
+              label: _label('LabelNomCliente'),
+              requerido: _nombreReq,
+              campo: _campoTexto(
+                controller: _nombreCtrl,
+                hint: 'Nombre y apellido del cliente',
+                icon: Icons.person_outline,
+                textCapitalization: TextCapitalization.words,
+              ),
+            ));
+    agregar(
+        _tieneAux,
+        _auxReq,
+        () => _bloqueCampo(
+              label: _label('LabelAuxIn1'),
+              requerido: _auxReq,
+              campo: _campoTexto(
+                controller: _auxCtrl,
+                hint: 'Agregá cualquier observación relevante',
+                icon: Icons.notes_outlined,
+                maxLines: 3,
+                maxLength: 120,
+              ),
+            ));
+
+    return [
+      ...requeridos,
+      if (opcionales.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        _toggleOpcionales(opcionales.length),
+        if (_opcionalesAbiertos) ...opcionales,
+      ],
+    ];
+  }
+
+  Widget _bloqueCampo({
+    required String label,
+    required bool requerido,
+    required Widget campo,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _labelCampo(label, requerido: requerido),
+          const SizedBox(height: 6),
+          campo,
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleOpcionales(int cantidad) {
+    return InkWell(
+      onTap: () => setState(() => _opcionalesAbiertos = !_opcionalesAbiertos),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F8FB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: V2Colors.celesteClaro, width: 1.4),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              _opcionalesAbiertos
+                  ? Icons.remove_circle_outline
+                  : Icons.add_circle_outline,
+              color: V2Colors.accion,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              cantidad == 1
+                  ? 'Dato opcional'
+                  : 'Datos opcionales ($cantidad)',
+              style: const TextStyle(
+                color: V2Colors.textoPrimario,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              _opcionalesAbiertos ? 'Ocultar' : 'Agregar',
+              style: const TextStyle(
+                color: V2Colors.accion,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       ),
