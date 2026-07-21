@@ -652,21 +652,31 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     print('🔧 PendingOrdersPage: Building main scaffold');
 
     return Scaffold(
-      appBar: AppBar(
-        title: ValueListenableBuilder<List<DocumentSnapshot>>(
-          valueListenable: _streamManager.pedidosNotifier,
-          builder: (context, pedidos, child) {
-            final count = pedidos.where((order) {
-              var orderData = order.data() as Map<String, dynamic>?;
-              int pedidoId = orderData?['id'] ?? -1;
-              var pedidoEstado = pedidosBox!.get(pedidoId);
-              return pedidoEstado != 'Procesando';
-            }).length;
-            return Text('Visitas ($count)');
-          },
-        ),
-      ),
-      body: ValueListenableBuilder(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Título compacto pegado al navbar (sin AppBar anidada, que
+          // duplicaba el padding de la barra de estado)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+            child: ValueListenableBuilder<List<DocumentSnapshot>>(
+              valueListenable: _streamManager.pedidosNotifier,
+              builder: (context, pedidos, child) {
+                final count = pedidos.where((order) {
+                  var orderData = order.data() as Map<String, dynamic>?;
+                  int pedidoId = orderData?['id'] ?? -1;
+                  var pedidoEstado = pedidosBox!.get(pedidoId);
+                  return pedidoEstado != 'Procesando';
+                }).length;
+                return Text(
+                  'Visitas ($count)',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                );
+              },
+            ),
+          ),
+          Expanded(
+            child: ValueListenableBuilder(
         valueListenable: Hive.box('sessionBox').listenable(
             keys: ['_locationPermissionAlways', '_locationPermissionDenied']),
         builder: (context, sessionBox, _) {
@@ -765,6 +775,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                       }
 
                       return ListView.builder(
+                        padding: const EdgeInsets.only(top: 2, bottom: 8),
                         itemCount: pedidos.length,
                         itemBuilder: (context, index) {
                           var pedido =
@@ -993,6 +1004,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
             },
           );
         },
+            ),
+          ),
+        ],
       ),
     );
   }
