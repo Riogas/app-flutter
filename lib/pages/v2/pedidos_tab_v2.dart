@@ -310,8 +310,8 @@ class _PedidosTabV2State extends State<PedidosTabV2> {
                       subtitle: restantes != null
                           ? Text(
                               restantes >= 0
-                                  ? 'Quedan $restantes min'
-                                  : 'Atrasado ${-restantes} min',
+                                  ? 'Quedan ${V2Data.fmtMinutos(restantes)}'
+                                  : 'Atrasado ${V2Data.fmtMinutos(restantes)}',
                               style: const TextStyle(fontSize: 12.5),
                             )
                           : null,

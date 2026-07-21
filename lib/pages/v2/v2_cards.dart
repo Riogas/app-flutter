@@ -194,11 +194,13 @@ class V2PedidoActualCard extends StatelessWidget {
                         children: [
                           Text(
                             direccion,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: V2Colors.textoPrimario,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              height: 1.25,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              height: 1.2,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -213,8 +215,8 @@ class V2PedidoActualCard extends StatelessWidget {
                             _dato(
                               Icons.schedule,
                               restantes >= 0
-                                  ? 'Quedan $restantes min'
-                                  : 'Atrasado ${-restantes} min',
+                                  ? 'Quedan ${V2Data.fmtMinutos(restantes)}'
+                                  : 'Atrasado ${V2Data.fmtMinutos(restantes)}',
                               color: restantes < 15
                                   ? V2Colors.rojo
                                   : V2Colors.textoSecundario,

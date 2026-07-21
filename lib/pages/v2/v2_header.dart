@@ -38,7 +38,7 @@ class V2Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusBar = MediaQuery.of(context).padding.top;
     return SizedBox(
-      height: 312 + statusBar,
+      height: 182 + statusBar,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -89,10 +89,15 @@ class V2Header extends StatelessWidget {
                     _buildAvatarMenu(context),
                   ],
                 ),
-                const Spacer(),
-                _buildEstadoPill(context),
-                const SizedBox(height: 10),
-                _buildSaludo(),
+                const SizedBox(height: 2),
+                // Nombre a la izquierda + estado del móvil a la derecha
+                Row(
+                  children: [
+                    Expanded(child: _buildNombre()),
+                    const SizedBox(width: 10),
+                    _buildEstadoPill(context),
+                  ],
+                ),
                 // Espacio para la tarjeta de resumen que se superpone
                 const SizedBox(height: 82),
               ],
@@ -397,44 +402,22 @@ class V2Header extends StatelessWidget {
     return V2Colors.textoSecundario;
   }
 
-  // ── Saludo ──
-  Widget _buildSaludo() {
-    final sm = PersistentStreamManager();
+  // ── Nombre del chofer (misma línea que la píldora de estado) ──
+  Widget _buildNombre() {
     String nombre = '';
     try {
       nombre = Hive.box('sessionBox').get('NombreUsuario', defaultValue: '');
     } catch (_) {}
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '${V2Data.saludo()}, ${V2Data.primerNombre(nombre)}!',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.2,
-          ),
-        ),
-        const SizedBox(height: 3),
-        ValueListenableBuilder<List<DocumentSnapshot>>(
-          valueListenable: sm.pedidosNotifier,
-          builder: (context, pedidos, _) {
-            final texto = pedidos.isEmpty
-                ? 'Sin pedidos pendientes por ahora'
-                : pedidos.length == 1
-                    ? 'Tenés 1 pedido en tu ruta'
-                    : 'Tenés ${pedidos.length} pedidos en tu ruta';
-            return Text(
-              texto,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.85),
-                fontSize: 14.5,
-              ),
-            );
-          },
-        ),
-      ],
+    return Text(
+      V2Data.primerNombre(nombre),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 20,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.2,
+      ),
     );
   }
 }

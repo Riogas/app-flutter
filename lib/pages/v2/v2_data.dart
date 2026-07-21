@@ -131,6 +131,14 @@ class V2Data {
     return '~$minutos min';
   }
 
+  /// Formatea minutos en algo legible: "45 min" / "3h 20m" / "7d 20h"
+  static String fmtMinutos(int minutos) {
+    final m = minutos.abs();
+    if (m < 60) return '$m min';
+    if (m < 1440) return '${m ~/ 60}h ${m % 60}m';
+    return '${m ~/ 1440}d ${(m % 1440) ~/ 60}h';
+  }
+
   static String fmtHora(DateTime dt) {
     return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
