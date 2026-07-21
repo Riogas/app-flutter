@@ -3248,14 +3248,14 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildLogoImage() {
     return CachedNetworkImage(
       imageUrl: _logoUrl,
-      height: 205,
+      height: 240,
       fit: BoxFit.contain,
-      placeholder: (context, url) => const SizedBox(height: 205),
+      placeholder: (context, url) => const SizedBox(height: 240),
       errorWidget: (context, url, error) {
         print('❌ [LOGIN_LOGO] Error cargando logo: $error');
         // Fallback limpio: wordmark en texto
         return const SizedBox(
-          height: 205,
+          height: 240,
           child: Center(
             child: Text(
               'RIOGAS DELIVERY',
