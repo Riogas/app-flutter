@@ -10,6 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:hive/hive.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../services/osrm_service.dart';
 import '../../services/persistent_stream_manager.dart';
 import 'pedido_actions_v2.dart';
 import 'v2_data.dart';
@@ -51,6 +52,7 @@ class _MapaTabV2State extends State<MapaTabV2> {
   DateTime? _ultimaSync;
 
   bool _mostrarPedidos = true; // capa de pines de pedidos
+  OsrmRuta? _rutaOsrm; // ruta real por calles (null = fallback línea recta)
   int? _paradaSeleccionada; // índice del marker tocado
   bool _mapListo = false;
   bool _centradoInicial = false;
@@ -64,6 +66,7 @@ class _MapaTabV2State extends State<MapaTabV2> {
 
     _pedidosListener = () {
       if (mounted) setState(() => _ultimaSync = DateTime.now());
+      _actualizarRutaOsrm();
     };
     _streamManager.pedidosNotifier.addListener(_pedidosListener!);
 
@@ -161,7 +164,20 @@ class _MapaTabV2State extends State<MapaTabV2> {
         _posAt = posAt;
       });
       _centrarInicialSiCorresponde();
+      _actualizarRutaOsrm();
     }
+  }
+
+  /// 🛣️ Ruta real por calles vía OSRM propio (cache + dedupe en el servicio);
+  /// si no responde queda null y se dibuja la línea recta punteada
+  Future<void> _actualizarRutaOsrm() async {
+    final destino = _destinoActual;
+    if (_pos == null || destino == null) {
+      if (_rutaOsrm != null && mounted) setState(() => _rutaOsrm = null);
+      return;
+    }
+    final ruta = await OsrmService().ruta(_pos!, destino);
+    if (mounted) setState(() => _rutaOsrm = ruta);
   }
 
   bool get _posDesactualizada =>
@@ -417,20 +433,31 @@ class _MapaTabV2State extends State<MapaTabV2> {
                         : NetworkTileProvider(),
                     userAgentPackageName: 'com.example.moveit',
                   ),
-                  // Ruta recta al destino actual
-                  // TODO(OSRM): reemplazar por ruta real cuando haya routing público
+                  // 🛣️ Ruta al destino actual: por calles (OSRM riogas) o
+                  // línea recta punteada como fallback si OSRM no responde
                   if (_mostrarPedidos && _pos != null && pedidos.isNotEmpty)
                     Builder(builder: (context) {
                       final destino = _destinoActual;
                       if (destino == null) return const SizedBox.shrink();
+                      final rutaReal = _rutaOsrm != null &&
+                          _rutaOsrm!.puntos.length >= 2;
                       return PolylineLayer(
                         polylines: [
-                          Polyline(
-                            points: [_pos!, destino],
-                            color: V2Colors.accion.withOpacity(0.85),
-                            strokeWidth: 4.5,
-                            pattern: const StrokePattern.dotted(),
-                          ),
+                          if (rutaReal)
+                            Polyline(
+                              points: _rutaOsrm!.puntos,
+                              color: V2Colors.accion.withOpacity(0.9),
+                              strokeWidth: 5,
+                              borderColor: Colors.white,
+                              borderStrokeWidth: 1.5,
+                            )
+                          else
+                            Polyline(
+                              points: [_pos!, destino],
+                              color: V2Colors.accion.withOpacity(0.85),
+                              strokeWidth: 4.5,
+                              pattern: const StrokePattern.dotted(),
+                            ),
                         ],
                       );
                     }),
@@ -826,7 +853,10 @@ class _MapaTabV2State extends State<MapaTabV2> {
             etiqueta: 'Parada actual',
             direccion: _direccionCorta(
                 (actual['ClienteDireccion'] ?? 'Sin dirección').toString()),
-            extra: _distanciaEta(actual),
+            // Con OSRM: distancia y tiempo REALES por calles
+            extra: _rutaOsrm != null
+                ? '${V2Data.fmtKm(_rutaOsrm!.distanciaM)} · ${V2Data.fmtEtaSeg(_rutaOsrm!.duracionSeg)}'
+                : _distanciaEta(actual),
           ),
           if (siguiente != null) ...[
             const SizedBox(height: 6),

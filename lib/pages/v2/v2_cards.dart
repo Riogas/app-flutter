@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../services/osrm_service.dart';
 import 'v2_data.dart';
 import 'v2_theme.dart';
 
@@ -95,7 +96,7 @@ class V2ResumenCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 // 🚚 Tarjeta PEDIDO ACTUAL
 // ─────────────────────────────────────────────────────────────────────────
-class V2PedidoActualCard extends StatelessWidget {
+class V2PedidoActualCard extends StatefulWidget {
   final Map<String, dynamic> pedido;
   final int pedidoId;
   final LatLng? posicionActual;
@@ -115,6 +116,44 @@ class V2PedidoActualCard extends StatelessWidget {
     required this.onDevolver,
   });
 
+  @override
+  State<V2PedidoActualCard> createState() => _V2PedidoActualCardState();
+}
+
+class _V2PedidoActualCardState extends State<V2PedidoActualCard> {
+  Map<String, dynamic> get pedido => widget.pedido;
+  int get pedidoId => widget.pedidoId;
+  LatLng? get posicionActual => widget.posicionActual;
+  String get tileUrl => widget.tileUrl;
+  VoidCallback get onIniciarViaje => widget.onIniciarViaje;
+  VoidCallback get onVerDetalle => widget.onVerDetalle;
+  VoidCallback get onDevolver => widget.onDevolver;
+
+  OsrmRuta? _ruta; // ruta real por calles (null → estimación recta)
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarRuta();
+  }
+
+  @override
+  void didUpdateWidget(covariant V2PedidoActualCard old) {
+    super.didUpdateWidget(old);
+    if (old.pedidoId != pedidoId ||
+        old.posicionActual != widget.posicionActual) {
+      _cargarRuta();
+    }
+  }
+
+  Future<void> _cargarRuta() async {
+    final d = _destino;
+    final p = posicionActual;
+    if (d == null || p == null) return;
+    final ruta = await OsrmService().ruta(p, d);
+    if (mounted) setState(() => _ruta = ruta);
+  }
+
   LatLng? get _destino {
     final u = pedido['ubicacion'];
     if (u is GeoPoint) return LatLng(u.latitude, u.longitude);
@@ -122,6 +161,7 @@ class V2PedidoActualCard extends StatelessWidget {
   }
 
   double? get _distanciaMts {
+    if (_ruta != null) return _ruta!.distanciaM;
     final d = _destino;
     final p = posicionActual;
     if (d == null || p == null) return null;
@@ -224,7 +264,9 @@ class V2PedidoActualCard extends StatelessWidget {
                           if (dist != null)
                             _dato(
                               Icons.near_me_outlined,
-                              '${V2Data.fmtKm(dist)} · ${V2Data.fmtEta(dist)}',
+                              _ruta != null
+                                  ? '${V2Data.fmtKm(dist)} · ${V2Data.fmtEtaSeg(_ruta!.duracionSeg)}'
+                                  : '${V2Data.fmtKm(dist)} · ${V2Data.fmtEta(dist)}',
                             ),
                           if (obs.isNotEmpty)
                             Padding(
@@ -257,6 +299,7 @@ class V2PedidoActualCard extends StatelessWidget {
                         destino: _destino!,
                         actual: posicionActual,
                         tileUrl: tileUrl,
+                        rutaPuntos: _ruta?.puntos,
                       ),
                   ],
                 ),
@@ -381,11 +424,13 @@ class _MiniMapa extends StatelessWidget {
   final LatLng destino;
   final LatLng? actual;
   final String tileUrl;
+  final List<LatLng>? rutaPuntos; // ruta OSRM; null → línea recta
 
   const _MiniMapa({
     required this.destino,
     required this.actual,
     required this.tileUrl,
+    this.rutaPuntos,
   });
 
   double get _zoom {
@@ -426,7 +471,17 @@ class _MiniMapa extends StatelessWidget {
                 urlTemplate: '$tileUrl/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.example.moveit',
               ),
-              if (actual != null)
+              if (rutaPuntos != null && rutaPuntos!.length >= 2)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: rutaPuntos!,
+                      color: V2Colors.accion,
+                      strokeWidth: 3.5,
+                    ),
+                  ],
+                )
+              else if (actual != null)
                 PolylineLayer(
                   polylines: [
                     Polyline(

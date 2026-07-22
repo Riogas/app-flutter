@@ -131,6 +131,12 @@ class V2Data {
     return '~$minutos min';
   }
 
+  /// ETA a partir de la duración real de OSRM
+  static String fmtEtaSeg(double segundos) {
+    final minutos = (segundos / 60).ceil().clamp(1, 999);
+    return '~$minutos min';
+  }
+
   /// Formatea minutos en algo legible: "45 min" / "3h 20m" / "7d 20h"
   static String fmtMinutos(int minutos) {
     final m = minutos.abs();
