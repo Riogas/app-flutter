@@ -168,15 +168,20 @@ class _MapaTabV2State extends State<MapaTabV2> {
     }
   }
 
-  /// 🛣️ Ruta real por calles vía OSRM propio (cache + dedupe en el servicio);
-  /// si no responde queda null y se dibuja la línea recta punteada
+  /// 🛣️ Ruta real por calles vía OSRM propio, pasando por TODAS las paradas
+  /// en orden (posición → P1 → P2 → ...); si no responde queda null y se
+  /// dibuja la línea recta punteada al primer destino
   Future<void> _actualizarRutaOsrm() async {
-    final destino = _destinoActual;
-    if (_pos == null || destino == null) {
+    final paradas = <LatLng>[];
+    for (final doc in _streamManager.pedidosNotifier.value) {
+      final u = (doc.data() as Map<String, dynamic>)['ubicacion'];
+      if (u is GeoPoint) paradas.add(LatLng(u.latitude, u.longitude));
+    }
+    if (_pos == null || paradas.isEmpty) {
       if (_rutaOsrm != null && mounted) setState(() => _rutaOsrm = null);
       return;
     }
-    final ruta = await OsrmService().ruta(_pos!, destino);
+    final ruta = await OsrmService().rutaPorPuntos([_pos!, ...paradas]);
     if (mounted) setState(() => _rutaOsrm = ruta);
   }
 
@@ -853,9 +858,9 @@ class _MapaTabV2State extends State<MapaTabV2> {
             etiqueta: 'Parada actual',
             direccion: _direccionCorta(
                 (actual['ClienteDireccion'] ?? 'Sin dirección').toString()),
-            // Con OSRM: distancia y tiempo REALES por calles
-            extra: _rutaOsrm != null
-                ? '${V2Data.fmtKm(_rutaOsrm!.distanciaM)} · ${V2Data.fmtEtaSeg(_rutaOsrm!.duracionSeg)}'
+            // Con OSRM: distancia y tiempo REALES del tramo hasta la parada
+            extra: _rutaOsrm?.primerTramo != null
+                ? '${V2Data.fmtKm(_rutaOsrm!.primerTramo!.distanciaM)} · ${V2Data.fmtEtaSeg(_rutaOsrm!.primerTramo!.duracionSeg)}'
                 : _distanciaEta(actual),
           ),
           if (siguiente != null) ...[
@@ -866,7 +871,10 @@ class _MapaTabV2State extends State<MapaTabV2> {
               direccion: _direccionCorta(
                   (siguiente['ClienteDireccion'] ?? 'Sin dirección')
                       .toString()),
-              extra: _distanciaEta(siguiente),
+              // Tramo real P1→P2 de OSRM si está disponible
+              extra: (_rutaOsrm != null && _rutaOsrm!.tramos.length >= 2)
+                  ? '${V2Data.fmtKm(_rutaOsrm!.tramos[1].distanciaM)} · ${V2Data.fmtEtaSeg(_rutaOsrm!.tramos[1].duracionSeg)}'
+                  : _distanciaEta(siguiente),
             ),
           ],
           if (pedidos.length > 2) ...[
