@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 
 import '../../services/beneficios_service.dart';
 import '../../services/persistent_stream_manager.dart';
+import '../../services/promo_consumos_store.dart';
 import 'v2_data.dart';
 import 'v2_header.dart';
 import 'v2_theme.dart';
@@ -71,6 +72,7 @@ class _PromocionesPageState extends State<PromocionesPage> {
   void initState() {
     super.initState();
     _marcarVistas();
+    PromoConsumosStore().init();
     // Refrescar habilitación del botón Validar al tipear
     for (final c in [_codigoCtrl, _telCtrl, _nombreCtrl, _auxCtrl]) {
       c.addListener(() => setState(() {}));
@@ -347,6 +349,21 @@ class _PromocionesPageState extends State<PromocionesPage> {
         _mensajeResultado = res.mensaje;
       }
     });
+
+    // 🧾 Registrar el consumo en el dispositivo (permite anular 30 min)
+    if (res.ok) {
+      await PromoConsumosStore().registrar(
+        promo: _label('NombreCombo'),
+        idInterno:
+            int.tryParse(_promo['IdInterno']?.toString() ?? '') ?? 0,
+        codigo: _codigoCtrl.text.trim(),
+        telefono: _telCtrl.text.trim(),
+        cliente: _nombreCtrl.text.trim(),
+        beneficio: _mensajeResultado,
+        autorizacion: res.codigoAutorizacion ?? '',
+        fechaHora: res.fechaHora,
+      );
+    }
   }
 
   void _nuevaValidacion() {
@@ -425,6 +442,8 @@ class _PromocionesPageState extends State<PromocionesPage> {
                           _formCard(promos),
                         const SizedBox(height: 12),
                         ..._resultado(),
+                        const SizedBox(height: 12),
+                        _consumosDelDiaRow(),
                         const SizedBox(height: 8),
                         const Text(
                           '⚙️ Modo demostración: validación con servicios simulados',
@@ -708,6 +727,337 @@ class _PromocionesPageState extends State<PromocionesPage> {
         ),
       ),
     );
+  }
+
+  // ── 🧾 Promos del día (consumos locales, anulables por 30 min) ──────────
+
+  Widget _consumosDelDiaRow() {
+    return ValueListenableBuilder<List<PromoConsumo>>(
+      valueListenable: PromoConsumosStore().consumos,
+      builder: (context, _, __) {
+        final delDia = PromoConsumosStore().delDia;
+        final anulables =
+            delDia.where(PromoConsumosStore().puedeAnular).length;
+        return V2Card(
+          padding: EdgeInsets.zero,
+          child: InkWell(
+            onTap: _mostrarConsumosDelDia,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                      color: V2Colors.celesteClaro,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.receipt_long,
+                        color: V2Colors.accion, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          delDia.isEmpty
+                              ? 'Promos del día'
+                              : 'Promos del día (${delDia.length})',
+                          style: const TextStyle(
+                            color: V2Colors.textoPrimario,
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          delDia.isEmpty
+                              ? 'Todavía no consumiste beneficios hoy'
+                              : anulables > 0
+                                  ? '$anulables ${anulables == 1 ? 'anulable' : 'anulables'} por tiempo limitado'
+                                  : 'Consumos confirmados',
+                          style: const TextStyle(
+                            color: V2Colors.textoSecundario,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (anulables > 0)
+                    Container(
+                      margin: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: V2Colors.naranja.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '$anulables',
+                        style: const TextStyle(
+                          color: V2Colors.naranja,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  const Icon(Icons.chevron_right,
+                      color: V2Colors.textoSecundario),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _mostrarConsumosDelDia() async {
+    Timer? refresco;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx2, setSheet) {
+          // ⏱️ Refresco del contador de anulación cada 30s
+          refresco ??= Timer.periodic(const Duration(seconds: 30), (_) {
+            if (ctx2.mounted) setSheet(() {});
+          });
+          final delDia = PromoConsumosStore().delDia;
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 10),
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: V2Colors.celesteClaro,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'Promos del día',
+                    style: TextStyle(
+                      color: V2Colors.textoPrimario,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (delDia.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(24, 12, 24, 32),
+                    child: Text(
+                      'Todavía no consumiste beneficios hoy.',
+                      style: TextStyle(
+                        color: V2Colors.textoSecundario,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      itemCount: delDia.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: 8),
+                      itemBuilder: (_, i) =>
+                          _consumoTile(delDia[i], setSheet),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    refresco?.cancel();
+  }
+
+  Widget _consumoTile(PromoConsumo c, StateSetter setSheet) {
+    final store = PromoConsumosStore();
+    final anulable = store.puedeAnular(c);
+    final minutos = store.minutosParaAnular(c);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.anulada ? const Color(0xFFF7F9FB) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: c.anulada
+              ? V2Colors.textoSecundario.withOpacity(0.25)
+              : anulable
+                  ? V2Colors.naranja.withOpacity(0.5)
+                  : V2Colors.celesteClaro,
+          width: 1.4,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                V2Data.fmtHora(c.fechaHora),
+                style: const TextStyle(
+                  color: V2Colors.textoPrimario,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  c.promo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: V2Colors.textoPrimario,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (c.anulada)
+                _chipEstado('Anulada', V2Colors.textoSecundario)
+              else if (anulable)
+                _chipEstado('Anulable ${minutos}m', V2Colors.naranja)
+              else
+                _chipEstado('Confirmada', V2Colors.verde),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            c.beneficio,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: V2Colors.textoSecundario,
+              fontSize: 12.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            [
+              if (c.autorizacion.isNotEmpty) 'Aut: ${c.autorizacion}',
+              if (c.telefono.isNotEmpty) 'Tel: ${c.telefono}',
+              if (c.cliente.isNotEmpty) c.cliente,
+            ].join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: V2Colors.textoSecundario,
+              fontSize: 11.5,
+            ),
+          ),
+          if (anulable) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 42,
+              child: OutlinedButton.icon(
+                onPressed: () => _anularConsumo(c, setSheet),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: V2Colors.rojo,
+                  side:
+                      BorderSide(color: V2Colors.rojo.withOpacity(0.6)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.undo, size: 18),
+                label: const Text('Anular consumo'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _chipEstado(String texto, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        texto,
+        style: TextStyle(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _anularConsumo(PromoConsumo c, StateSetter setSheet) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Anular consumo'),
+        content: Text(
+            '¿Anular el beneficio de ${c.promo} (${c.autorizacion.isNotEmpty ? c.autorizacion : V2Data.fmtHora(c.fechaHora)})?\n\nEsta acción no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: V2Colors.rojo,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Anular'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+
+    final ident = await _identidad();
+    final res = await _service.anular(
+      autorizacion: c.autorizacion,
+      promoIdInterno: c.idInterno,
+      promoNombre: c.promo,
+      movil: ident['movil']!,
+      usuario: ident['usuario']!,
+      escenario: ident['escenario']!,
+    );
+
+    if (res.ok) {
+      await PromoConsumosStore().marcarAnulada(c.id);
+      setSheet(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res.mensaje)),
+        );
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(res.mensaje)),
+      );
+    }
   }
 
   /// Campos del formulario: los requeridos siempre visibles; los opcionales

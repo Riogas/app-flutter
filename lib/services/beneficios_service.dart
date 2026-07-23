@@ -144,6 +144,27 @@ class BeneficiosService {
     _pinEnviadoEn = DateTime.now();
   }
 
+  /// Anula un consumo dentro de la ventana de anulación.
+  /// ⚠️ SIMULADO — cuando exista el endpoint GeneXus, además de marcar la
+  /// anulación local debe viajar al backend con la autorización.
+  Future<BeneficioConsumo> anular({
+    required String autorizacion,
+    required int promoIdInterno,
+    required String promoNombre,
+    required String movil,
+    required String usuario,
+    required String escenario,
+  }) async {
+    // TODO(GeneXus): llamar al endpoint real de anulación del consumo
+    await Future.delayed(const Duration(milliseconds: 1000));
+    return BeneficioConsumo(
+      ok: true,
+      mensaje: 'El consumo fue anulado correctamente.',
+      codigoAutorizacion: autorizacion,
+      fechaHora: DateTime.now(),
+    );
+  }
+
   Future<BeneficioConsumo> consumir({
     required int promoIdInterno,
     required String promoNombre,
