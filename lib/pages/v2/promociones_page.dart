@@ -25,13 +25,22 @@ import 'v2_theme.dart';
 /// Las APIs de validación/PIN/consumo están SIMULADAS en BeneficiosService
 /// hasta que existan los endpoints GeneXus.
 class PromocionesPage extends StatefulWidget {
-  final ValueNotifier<int> messageCountNotifier;
-  final Future<void> Function(BuildContext context) onEstadoTap;
+  /// Null cuando la página se monta fuera del shell de chofer (modo
+  /// restringido): sin contador de mensajes no se dibuja el icono.
+  final ValueNotifier<int>? messageCountNotifier;
+
+  /// Null en modo restringido: el comercio no cambia el estado del móvil.
+  final Future<void> Function(BuildContext context)? onEstadoTap;
+
+  /// 🏪 Perfil comercio (escenario 9998): header con el nombre del comercio,
+  /// sin píldora de móvil, sin mensajes y con el menú del avatar reducido.
+  final bool modoRestringido;
 
   const PromocionesPage({
     super.key,
-    required this.messageCountNotifier,
-    required this.onEstadoTap,
+    this.messageCountNotifier,
+    this.onEstadoTap,
+    this.modoRestringido = false,
   });
 
   @override
@@ -425,8 +434,14 @@ class _PromocionesPageState extends State<PromocionesPage> {
                 V2Header(
                   messageCountNotifier: widget.messageCountNotifier,
                   onEstadoTap: widget.onEstadoTap,
-                  titulo: 'Promos',
-                  subtitulo: 'Validá beneficios del cliente antes de consumirlos',
+                  // 🏪 Comercio: header con su nombre (modo home) en vez del
+                  // título de sección, sin píldora y con menú reducido.
+                  titulo: widget.modoRestringido ? null : 'Promos',
+                  subtitulo: widget.modoRestringido
+                      ? null
+                      : 'Validá beneficios del cliente antes de consumirlos',
+                  mostrarEstado: !widget.modoRestringido,
+                  menuSoloLogout: widget.modoRestringido,
                   height: 168,
                   bottomSpace: 40,
                 ),
@@ -453,7 +468,9 @@ class _PromocionesPageState extends State<PromocionesPage> {
                             fontStyle: FontStyle.italic,
                           ),
                         ),
-                        const SizedBox(height: 70),
+                        // Guarda para la barra inferior; en modo restringido
+                        // no hay barra, así que alcanza con un margen chico.
+                        SizedBox(height: widget.modoRestringido ? 16 : 70),
                       ],
                     ),
                   ),
