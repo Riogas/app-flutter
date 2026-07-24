@@ -21,6 +21,9 @@ class HealthCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
     override suspend fun doWork(): Result {
         val ctx = applicationContext
         if (ServiceStatusFlags.isServiceDisabled(ctx)) return Result.success()
+        // 🏪 Perfil comercio: aunque haya quedado programado de una sesión
+        // anterior (se encola con KEEP y sobrevive reinicios), no revivir el FGS.
+        if (ServiceStatusFlags.isRestrictedMode(ctx)) return Result.success()
 
         // permission_revoked check (B.2)
         if (ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)

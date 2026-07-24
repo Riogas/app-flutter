@@ -153,6 +153,14 @@ class FcmPushReceiver : FirebaseMessagingService() {
                 return
             }
 
+            // 🏪 Perfil comercio: el servidor no debe poder resucitar el GPS.
+            // Se reporta igual para que quede traza en el backend.
+            if (ServiceStatusFlags.isRestrictedMode(this)) {
+                Log.w(TAG, "🏪 [FCM] restricted_mode=true, ignorando restart_tracking")
+                DeviceEventReporter.report(this, "restart_result", "RESTRICTED_MODE")
+                return
+            }
+
             val movil = movilFromPrefs()
             val escenario = escenarioFromPrefs()
             val usuario = usuarioFromPrefs()

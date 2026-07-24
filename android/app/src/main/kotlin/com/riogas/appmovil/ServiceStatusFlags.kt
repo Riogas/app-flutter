@@ -30,6 +30,7 @@ object ServiceStatusFlags {
     private const val KEY_SERVICE_DISABLED = "service_disabled"
     private const val KEY_SERVICE_PAUSED = "service_paused"
     private const val KEY_WATCHDOG_DISABLED = "watchdog_disabled"
+    private const val KEY_RESTRICTED_MODE = "restricted_mode"
 
     /**
      * Dueño único del flag de deshabilitación del servicio GPS.
@@ -52,6 +53,29 @@ object ServiceStatusFlags {
             .putLong("service_disabled_ts", System.currentTimeMillis())
             .commit() // commit síncrono a propósito: transición atómica visible entre procesos/hilos
         Log.i(TAG, "service_disabled=$disabled reason=$reason")
+    }
+
+    /**
+     * 🏪 Perfil comercio (escenario 9998): la app NO debe trackear ubicación.
+     *
+     * Es distinto de service_disabled: aquel es un apagado temporal y global
+     * del dispositivo, que startLocationService y restart_tracking limpian.
+     * Este describe QUIÉN está logueado, y ningún camino de arranque de GPS
+     * puede limpiarlo — solo el login o el logout lo cambian.
+     */
+    @Synchronized
+    fun isRestrictedMode(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_RESTRICTED_MODE, false)
+
+    @Synchronized
+    fun setRestrictedMode(context: Context, restricted: Boolean, reason: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_RESTRICTED_MODE, restricted)
+            .putString("restricted_mode_reason", reason)
+            .putLong("restricted_mode_ts", System.currentTimeMillis())
+            .commit() // commit síncrono: MainActivity.onCreate lo lee antes de Flutter
+        Log.i(TAG, "restricted_mode=$restricted reason=$reason")
     }
 
     /**
