@@ -1283,16 +1283,43 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     // 🎯 PASO 2: Validar permisos ANTES de hacer login
-    bool permissionsGranted = await _validatePermissionsBeforeLogin();
+    // 🏪 Salvo que el último login de este mismo usuario haya sido de un
+    // comercio: no tiene sentido exigirle GPS y batería a alguien que no
+    // trackea. En el primer login todavía no sabemos el perfil.
+    if (await _puedeSaltearPermisos(username)) {
+      print(
+          '🏪 [LOGIN] Perfil comercio recordado: se omite el gate de permisos');
+    } else {
+      bool permissionsGranted = await _validatePermissionsBeforeLogin();
 
-    if (!permissionsGranted) {
-      print('⚠️ [LOGIN] Login bloqueado - Permisos incompletos');
-      return; // ❌ NO CONTINUAR con el login
+      if (!permissionsGranted) {
+        print('⚠️ [LOGIN] Login bloqueado - Permisos incompletos');
+        return; // ❌ NO CONTINUAR con el login
+      }
     }
 
     // ✅ Todos los permisos están OK, proceder con login normal
     print('✅ [LOGIN] Permisos validados - Procediendo con login');
     await _login();
+  }
+
+  /// ¿Se puede saltear el gate de permisos (batería + GPS always + precisión)?
+  ///
+  /// Solo si el último login en este dispositivo fue de un comercio Y el
+  /// usuario tipeado es el mismo. El gate corre ANTES de ValidarUsuario, así
+  /// que en el primer login es imposible saber el perfil: se piden todos.
+  Future<bool> _puedeSaltearPermisos(String username) async {
+    try {
+      final userbox = await Hive.openBox('usuarioBox');
+      final fueRestringido =
+          userbox.get('ultimoPerfilRestringido', defaultValue: false) == true;
+      final mismoUsuario =
+          userbox.get('lastUsername', defaultValue: '').toString() == username;
+      return fueRestringido && mismoUsuario;
+    } catch (e) {
+      print('⚠️ [LOGIN] No se pudo leer el perfil anterior: $e');
+      return false;
+    }
   }
 
   /// 🎯 Mostrar diálogo de selección de ambiente (Desarrollo/Producción)
