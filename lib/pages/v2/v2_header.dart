@@ -13,8 +13,10 @@ import 'v2_theme.dart';
 /// 🏙️ Cabecera del rediseño: ilustración + degradado, logo, mensajes,
 /// avatar con menú, píldora de estado del móvil y saludo.
 class V2Header extends StatelessWidget {
-  final ValueNotifier<int> messageCountNotifier;
-  final Future<void> Function(BuildContext context) onEstadoTap;
+  // Opcionales: en pantallas pushed (ej. Mensajes) no hay contador de
+  // mensajes ni cambio de estado disponibles; se omiten.
+  final ValueNotifier<int>? messageCountNotifier;
+  final Future<void> Function(BuildContext context)? onEstadoTap;
   final bool problemaTecnico; // GPS/conexión con problemas → píldora naranja
 
   /// Modo sección: si [titulo] viene, se muestra en lugar del nombre del
@@ -24,15 +26,24 @@ class V2Header extends StatelessWidget {
   final double height;
   final double bottomSpace;
 
+  /// Si viene, la izquierda muestra un botón de volver en lugar del logo.
+  final VoidCallback? onBack;
+
+  /// Si false, oculta el icono de mensajes y el avatar (para pantallas que
+  /// ya están pushed, como Mensajes, donde serían redundantes).
+  final bool showActions;
+
   const V2Header({
     super.key,
-    required this.messageCountNotifier,
-    required this.onEstadoTap,
+    this.messageCountNotifier,
+    this.onEstadoTap,
     this.problemaTecnico = false,
     this.titulo,
     this.subtitulo,
     this.height = 182,
     this.bottomSpace = 82,
+    this.onBack,
+    this.showActions = true,
   });
 
   static const String _resourcesBase =
@@ -91,11 +102,13 @@ class V2Header extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _buildLogo(),
+                    onBack != null ? _buildBackButton(context) : _buildLogo(),
                     const Spacer(),
-                    _buildMensajesIcon(context),
-                    const SizedBox(width: 4),
-                    _buildAvatarMenu(context),
+                    if (showActions) ...[
+                      _buildMensajesIcon(context),
+                      const SizedBox(width: 4),
+                      _buildAvatarMenu(context),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -148,10 +161,28 @@ class V2Header extends StatelessWidget {
     );
   }
 
+  // ── Botón de volver (pantallas pushed) ──
+  Widget _buildBackButton(BuildContext context) {
+    return Material(
+      color: Colors.white.withOpacity(0.16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onBack,
+        child: const SizedBox(
+          width: 42,
+          height: 42,
+          child: Icon(Icons.arrow_back, color: Colors.white, size: 22),
+        ),
+      ),
+    );
+  }
+
   // ── Icono de mensajes con badge de no leídos ──
   Widget _buildMensajesIcon(BuildContext context) {
+    if (messageCountNotifier == null) return const SizedBox.shrink();
     return ValueListenableBuilder<int>(
-      valueListenable: messageCountNotifier,
+      valueListenable: messageCountNotifier!,
       builder: (context, count, _) {
         return IconButton(
           tooltip: 'Mensajes de despacho',
@@ -317,7 +348,8 @@ class V2Header extends StatelessWidget {
             if (problemaTecnico) color = V2Colors.naranja;
 
             return GestureDetector(
-              onTap: () => onEstadoTap(context),
+              onTap:
+                  onEstadoTap == null ? null : () => onEstadoTap!(context),
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -344,9 +376,11 @@ class V2Header extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Icon(Icons.keyboard_arrow_down,
-                        color: Colors.white.withOpacity(0.8), size: 18),
+                    if (onEstadoTap != null) ...[
+                      const SizedBox(width: 6),
+                      Icon(Icons.keyboard_arrow_down,
+                          color: Colors.white.withOpacity(0.8), size: 18),
+                    ],
                   ],
                 ),
               ),
