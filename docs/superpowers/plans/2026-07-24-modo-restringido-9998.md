@@ -1446,11 +1446,11 @@ respetando la indentación de cada sitio. Los tres sitios son:
 
 - [ ] **Step 7: Verificar que no quedó ningún call site suelto**
 
-Run: `git grep -c "_showMobileSelectionDialog" -- lib/pages/login_page.dart`
-Expected: `3` — la definición del método y las dos llamadas desde `_manejarMovilesYContinuar` (la reducida con `movilFijo: true` y la completa)
+Run: `grep -n "await _showMobileSelectionDialog\|_availableMoviles = _extractAvailableMoviles" lib/pages/login_page.dart`
 
-Run: `git grep -c "_extractAvailableMoviles" -- lib/pages/login_page.dart`
-Expected: `2` — la definición y la única llamada desde `_manejarMovilesYContinuar`
+Expected: exactamente **tres** líneas, las tres dentro de `_manejarMovilesYContinuar` — una extracción de móviles y dos llamadas al diálogo (la reducida con `movilFijo: true` y la completa).
+
+> No usar `git grep -c` sobre los nombres pelados: el docstring de `_manejarMovilesYContinuar` los menciona a los dos en una misma línea, así que el conteo da uno de más en cada caso y parece que quedó un call site suelto.
 
 - [ ] **Step 8: Agregar el import y verificar compilación**
 

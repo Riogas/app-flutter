@@ -1506,25 +1506,7 @@ class _LoginPageState extends State<LoginPage> {
                   );
                   return; // Volver al login
                 } else {
-                  print("📥 Extrayendo lista de móviles...");
-                  _availableMoviles = _extractAvailableMoviles(response);
-
-                  if (_availableMoviles.isNotEmpty) {
-                    print(
-                        "📋 Móviles disponibles para seleccionar: $_availableMoviles");
-                    print(
-                        "🛑 Mostrando selección de móviles antes de continuar...");
-
-                    // 🌍 Si es usuario especial, mostrar selección de servidor PRIMERO
-                    if (_specialUsers.contains(_usernameController.text)) {
-                      print(
-                          '🌍 [SERVER] Usuario especial detectado: ${_usernameController.text}');
-                      await _showServerSelectionDialog();
-                    }
-
-                    // 🔹 Mostrar selección de móviles antes de continuar
-                    await _showMobileSelectionDialog(response);
-                  }
+                  await _manejarMovilesYContinuar(response);
                 }
               } else {
                 print("❌ Error al registrar el dispositivo.");
@@ -1542,25 +1524,7 @@ class _LoginPageState extends State<LoginPage> {
             }
           }
 
-          // 🔹 Extraer lista de móviles de la respuesta
-          print("📥 Extrayendo lista de móviles...");
-          _availableMoviles = _extractAvailableMoviles(response);
-
-          if (_availableMoviles.isNotEmpty) {
-            print(
-                "📋 Móviles disponibles para seleccionar: $_availableMoviles");
-            print("🛑 Mostrando selección de móviles antes de continuar...");
-
-            // 🌍 Si es usuario especial, mostrar selección de servidor PRIMERO
-            if (_specialUsers.contains(_usernameController.text)) {
-              print(
-                  '🌍 [SERVER] Usuario especial detectado: ${_usernameController.text}');
-              await _showServerSelectionDialog();
-            }
-
-            // 🔹 Mostrar selección de móviles antes de continuar
-            await _showMobileSelectionDialog(response);
-          }
+          await _manejarMovilesYContinuar(response);
         } else if (response != null && response['OK'] == 9) {
           // 🔹 Validar dispositivo antes de mostrar selección de móviles
           bool isDeviceValid = await _validateDevice();
@@ -1616,26 +1580,7 @@ class _LoginPageState extends State<LoginPage> {
                       "🔍 Validación de dispositivo: ${isDeviceValid ? '✅ Válido' : '❌ Inválido'}",
                     );
 
-                    // 🔹 Extraer lista de móviles de la respuesta
-                    print("📥 Extrayendo lista de móviles...");
-                    _availableMoviles = _extractAvailableMoviles(response);
-
-                    if (_availableMoviles.isNotEmpty) {
-                      print(
-                          "📋 Móviles disponibles para seleccionar: $_availableMoviles");
-                      print(
-                          "🛑 Mostrando selección de móviles antes de continuar...");
-
-                      // 🌍 Si es usuario especial, mostrar selección de servidor PRIMERO
-                      if (_specialUsers.contains(_usernameController.text)) {
-                        print(
-                            '🌍 [SERVER] Usuario especial detectado: ${_usernameController.text}');
-                        await _showServerSelectionDialog();
-                      }
-
-                      // 🔹 Mostrar selección de móviles antes de continuar
-                      await _showMobileSelectionDialog(response);
-                    }
+                    await _manejarMovilesYContinuar(response);
                   }
                 }
               } else {
@@ -2088,11 +2033,187 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Future<void> _showMobileSelectionDialog(Map<String, dynamic> response) async {
+  /// Persiste el móvil elegido y dispara el resto del login.
+  ///
+  /// Es EXACTAMENTE lo que hacía el botón Confirmar del diálogo: ocho
+  /// escrituras (Hive sessionBox + usuarioBox, SharedPreferences de Flutter,
+  /// y las prefs nativas movil/escenario/baseUrl/isDevelopment) más la fecha,
+  /// antes de `_proceedAfterMobileSelection`. No simplificar: CriticalLogger,
+  /// la baseUrl del canal FCM y el arranque de servicios dependen de todas.
+  Future<void> _seleccionarMovilYContinuar(
+    Map<String, dynamic> response,
+    String movilId, {
+    String? matricula,
+  }) async {
+    var userbox = await Hive.openBox('usuarioBox');
+    var box = await Hive.openBox('sessionBox');
+    await box.put('movil', movilId);
+    await userbox.put('movil', movilId);
+
+    // 🔄 Sincronizar datos de sesión a SharedPreferences
+    try {
+      await SessionSyncService.syncToSharedPrefs();
+      print('✅ Datos de sesión sincronizados (movil guardado)');
+    } catch (e) {
+      print('⚠️ Error sincronizando datos de sesión: $e');
+    }
+
+    // 🆕 Guardar móvil en SharedPreferences nativo (Android) para CriticalLogger
+    try {
+      const platform = MethodChannel('com.riogas.appmovil/shared_prefs');
+      await platform.invokeMethod('saveMovil', {'movil': movilId});
+      print('✅ Móvil guardado en SharedPreferences nativo: $movilId');
+    } catch (e) {
+      print('⚠️ Error guardando móvil en SharedPreferences nativo: $e');
+      try {
+        const platform = MethodChannel('com.riogas.appmovil/shared_prefs');
+        await platform.invokeMethod('criticalLogFromFlutter', {
+          'type': 'SharedPreferencesError',
+          'movil': movilId,
+          'error': e.toString(),
+          'context':
+              'Error guardando móvil en SharedPreferences desde Flutter (login_page)',
+        });
+        print('✅ Error enviado a CriticalLogger en Android');
+      } catch (err) {
+        print('⚠️ Error enviando log crítico a Android: $err');
+      }
+    }
+
+    // 🆕 Guardar escenario en SharedPreferences nativo para FCM API
+    try {
+      const platform = MethodChannel('com.riogas.appmovil/shared_prefs');
+      String escenarioValue =
+          ModoRestringido.normalizarEscenario(response['escenarioid']);
+      await platform
+          .invokeMethod('saveEscenario', {'escenario': escenarioValue});
+      print(
+          '✅ Escenario guardado en SharedPreferences nativo: $escenarioValue');
+    } catch (e) {
+      print('⚠️ Error guardando escenario en SharedPreferences nativo: $e');
+    }
+
+    // 🆕 Guardar baseUrl en SharedPreferences nativo para FCM API
+    try {
+      const platform = MethodChannel('com.riogas.appmovil/shared_prefs');
+
+      final baseRootConst = (await getConstantValue('600'))?.trim();
+      final servicesPathConst = (await getConstantValue('601'))?.trim();
+
+      var baseRoot = (baseRootConst != null && baseRootConst.isNotEmpty)
+          ? baseRootConst
+          : 'https://www.riogas.uy/ica_geos_/';
+
+      var servicesPath =
+          (servicesPathConst != null && servicesPathConst.isNotEmpty)
+              ? servicesPathConst
+              : 'appservices/';
+
+      baseRoot = baseRoot.replaceAll(
+          RegExp(r'appservices/?$', caseSensitive: false), '');
+      if (!baseRoot.endsWith('/')) baseRoot += '/';
+      if (servicesPath.startsWith('/')) servicesPath = servicesPath.substring(1);
+      if (!servicesPath.endsWith('/')) servicesPath += '/';
+
+      String fullBaseUrl = AppEnvironment.isDevelopment
+          ? AppEnvironment.devUrl
+          : '$baseRoot$servicesPath';
+
+      await platform.invokeMethod('saveBaseUrl', {'baseUrl': fullBaseUrl});
+      await platform.invokeMethod(
+          'saveIsDevelopment', {'isDevelopment': AppEnvironment.isDevelopment});
+
+      print('✅ BaseUrl guardada en SharedPreferences nativo: $fullBaseUrl');
+      print(
+          '🔧 [LOGIN] Ambiente: ${AppEnvironment.isDevelopment ? "DESARROLLO" : "PRODUCCIÓN"}');
+    } catch (e) {
+      print('⚠️ Error guardando baseUrl en SharedPreferences nativo: $e');
+    }
+
+    String hoy = DateTime.now()
+        .toUtc()
+        .toIso8601String()
+        .split('T')[0]
+        .replaceAll('-', '');
+
+    await box.put('fecha', hoy);
+    if (matricula != null) {
+      await box.put('matricula', matricula);
+      await userbox.put('matricula', matricula);
+    }
+
+    print("Continuar luego de seleccionado un movil");
+
+    await _proceedAfterMobileSelection(response, movilId);
+  }
+
+  /// Decide qué hacer con la lista de móviles y continúa el login.
+  ///
+  /// Reemplaza los tres bloques duplicados que antes hacían
+  /// `_extractAvailableMoviles` + `if (isNotEmpty) _showMobileSelectionDialog`.
+  Future<void> _manejarMovilesYContinuar(Map<String, dynamic> response) async {
+    _availableMoviles = _extractAvailableMoviles(response);
+
+    // 🌍 Si es usuario especial, elegir servidor ANTES de cualquier otra cosa
+    if (_specialUsers.contains(_usernameController.text)) {
+      print(
+          '🌍 [SERVER] Usuario especial detectado: ${_usernameController.text}');
+      await _showServerSelectionDialog();
+    }
+
+    final pideMatricula = (await getConstantValue('180')) == 'S';
+    final accion = MovilSelection.decidir(
+      moviles: _availableMoviles,
+      pideMatricula: pideMatricula,
+    );
+    print('🚚 [LOGIN] ${_availableMoviles.length} móvil(es) → $accion');
+
+    switch (accion) {
+      case AccionMovil.sinMoviles:
+        // Antes de esta feature el login moría acá en silencio.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Su usuario no tiene ningún móvil asignado. Comuníquese con la agencia.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+
+      case AccionMovil.autoSeleccionar:
+        final movilId = MovilSelection.idUnico(_availableMoviles)!;
+        print('🚚 [LOGIN] Móvil único ($movilId): se entra directo');
+        await _seleccionarMovilYContinuar(response, movilId);
+        return;
+
+      case AccionMovil.pedirMatricula:
+        // Un solo móvil pero la matrícula es obligatoria: diálogo REDUCIDO,
+        // sin dropdown, con el móvil ya fijado.
+        await _showMobileSelectionDialog(response, movilFijo: true);
+        return;
+
+      case AccionMovil.mostrarDialogo:
+        await _showMobileSelectionDialog(response);
+        return;
+    }
+  }
+
+  Future<void> _showMobileSelectionDialog(
+    Map<String, dynamic> response, {
+    bool movilFijo = false,
+  }) async {
     String? selectedMovil;
     bool isLoading = false;
     TextEditingController licensePlateController = TextEditingController();
     bool showLicensePlateField = false;
+
+    // 🚚 Con un solo móvil no hay nada que elegir: queda preseleccionado.
+    // Va acá y no dentro del FutureBuilder del dropdown porque en el modo
+    // `movilFijo` ese dropdown ni se construye.
+    if (_availableMoviles.length == 1) {
+      selectedMovil = _availableMoviles.first['id'];
+    }
 
     // Fetch the constant value with ID 170
     String? value = await getConstantValue('180');
@@ -2108,7 +2229,8 @@ class _LoginPageState extends State<LoginPage> {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setState) {
             return AlertDialog(
-              title: Text('Seleccionar Móvil'),
+              title: Text(
+                  movilFijo ? 'Ingresar matrícula' : 'Seleccionar Móvil'),
               content: isLoading
                   ? Column(
                       mainAxisSize: MainAxisSize.min,
@@ -2121,7 +2243,10 @@ class _LoginPageState extends State<LoginPage> {
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
+                        // 🚚 Con el móvil ya fijado (un solo móvil + matrícula
+                        // obligatoria) el dropdown no aporta nada: se oculta.
+                        if (!movilFijo)
+                          Row(
                           mainAxisAlignment: MainAxisAlignment.start,
                           mainAxisSize: MainAxisSize.max,
                           children: [
@@ -2209,140 +2334,14 @@ class _LoginPageState extends State<LoginPage> {
                           isLoading = true;
                         });
 
-                        // 🔹 Guardar móvil seleccionado y matrícula en Hive
-                        var userbox = await Hive.openBox('usuarioBox');
-                        var box = await Hive.openBox('sessionBox');
-                        await box.put('movil', selectedMovil);
-                        await userbox.put('movil', selectedMovil);
-
-                        // 🔄 Sincronizar datos de sesión a SharedPreferences
-                        try {
-                          await SessionSyncService.syncToSharedPrefs();
-                          print(
-                              '✅ Datos de sesión sincronizados (movil guardado)');
-                        } catch (e) {
-                          print('⚠️ Error sincronizando datos de sesión: $e');
-                        }
-
-                        // 🆕 Guardar móvil en SharedPreferences nativo (Android) para CriticalLogger
-                        try {
-                          const platform =
-                              MethodChannel('com.riogas.appmovil/shared_prefs');
-                          await platform.invokeMethod(
-                              'saveMovil', {'movil': selectedMovil});
-                          print(
-                              '✅ Móvil guardado en SharedPreferences nativo: $selectedMovil');
-                        } catch (e) {
-                          print(
-                              '⚠️ Error guardando móvil en SharedPreferences nativo: $e');
-                          // Enviar error a Android para que CriticalLogger lo registre
-                          try {
-                            const platform = MethodChannel(
-                                'com.riogas.appmovil/shared_prefs');
-                            await platform
-                                .invokeMethod('criticalLogFromFlutter', {
-                              'type': 'SharedPreferencesError',
-                              'movil': selectedMovil ?? 0,
-                              'error': e.toString(),
-                              'context':
-                                  'Error guardando móvil en SharedPreferences desde Flutter (login_page)',
-                            });
-                            print(
-                                '✅ Error enviado a CriticalLogger en Android');
-                          } catch (err) {
-                            print(
-                                '⚠️ Error enviando log crítico a Android: $err');
-                          }
-                        }
-
-                        // 🆕 Guardar escenario en SharedPreferences nativo para FCM API
-                        try {
-                          const platform =
-                              MethodChannel('com.riogas.appmovil/shared_prefs');
-                          String escenarioValue = ModoRestringido
-                              .normalizarEscenario(response['escenarioid']);
-                          await platform.invokeMethod(
-                              'saveEscenario', {'escenario': escenarioValue});
-                          print(
-                              '✅ Escenario guardado en SharedPreferences nativo: $escenarioValue');
-                        } catch (e) {
-                          print(
-                              '⚠️ Error guardando escenario en SharedPreferences nativo: $e');
-                        }
-
-                        // 🆕 Guardar baseUrl en SharedPreferences nativo para FCM API
-                        try {
-                          const platform =
-                              MethodChannel('com.riogas.appmovil/shared_prefs');
-
-                          // Obtener URL base desde constantes (igual que en riogas_service.dart)
-                          final baseRootConst =
-                              (await getConstantValue('600'))?.trim();
-                          final servicesPathConst =
-                              (await getConstantValue('601'))?.trim();
-
-                          var baseRoot = (baseRootConst != null &&
-                                  baseRootConst.isNotEmpty)
-                              ? baseRootConst
-                              : 'https://www.riogas.uy/ica_geos_/';
-
-                          var servicesPath = (servicesPathConst != null &&
-                                  servicesPathConst.isNotEmpty)
-                              ? servicesPathConst
-                              : 'appservices/';
-
-                          // Normalizaciones
-                          baseRoot = baseRoot.replaceAll(
-                              RegExp(r'appservices/?$', caseSensitive: false),
-                              '');
-                          if (!baseRoot.endsWith('/')) baseRoot += '/';
-                          if (servicesPath.startsWith('/'))
-                            servicesPath = servicesPath.substring(1);
-                          if (!servicesPath.endsWith('/')) servicesPath += '/';
-
-                          // 🆕 RESPETAR AMBIENTE: Usar devUrl si isDevelopment=true
-                          String fullBaseUrl = AppEnvironment.isDevelopment
-                              ? AppEnvironment.devUrl // Desarrollo
-                              : '$baseRoot$servicesPath'; // Producción (600+601)
-
-                          await platform.invokeMethod(
-                              'saveBaseUrl', {'baseUrl': fullBaseUrl});
-
-                          // 🆕 GUARDAR FLAG DE DESARROLLO para que FCM también lo respete
-                          await platform.invokeMethod('saveIsDevelopment',
-                              {'isDevelopment': AppEnvironment.isDevelopment});
-
-                          print(
-                              '✅ BaseUrl guardada en SharedPreferences nativo: $fullBaseUrl');
-                          print(
-                              '🔧 [LOGIN] Ambiente: ${AppEnvironment.isDevelopment ? "DESARROLLO" : "PRODUCCIÓN"}');
-                        } catch (e) {
-                          print(
-                              '⚠️ Error guardando baseUrl en SharedPreferences nativo: $e');
-                        }
-
-                        String hoy = DateTime.now()
-                            .toUtc()
-                            .toIso8601String()
-                            .split('T')[0]
-                            .replaceAll('-', '');
-
-                        await box.put('fecha', hoy);
-                        if (showLicensePlateField) {
-                          await box.put(
-                              'matricula', licensePlateController.text);
-                          await userbox.put(
-                              'matricula', licensePlateController.text);
-                        }
-
                         Navigator.of(dialogContext).pop();
 
-                        print("Continuar luego de seleccionado un movil");
-
-                        // 🔹 Continuar con el flujo después de la selección del móvil
-                        await _proceedAfterMobileSelection(
+                        await _seleccionarMovilYContinuar(
                           response,
-                          selectedMovil,
+                          selectedMovil!,
+                          matricula: showLicensePlateField
+                              ? licensePlateController.text
+                              : null,
                         );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
