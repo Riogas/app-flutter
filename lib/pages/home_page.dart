@@ -1689,6 +1689,10 @@ class _HomePageState extends State<HomePage>
                             setState(() => _isEstadoChanging = true);
 
                             // 5ï¸âƒ£ OBTENER DATOS DE UBICACIÃ“N
+                            // 🛡️ try: ninguna excepción (GPS/parse/red) debe
+                            // dejar colgado el diálogo "Cambiando estado..." ni
+                            // _isEstadoChanging trabado en true.
+                            try {
                             var locationBox = await openBoxSafe('locationBox');
                             if (locationBox == null) {
                               Navigator.of(context, rootNavigator: true).pop();
@@ -1722,7 +1726,12 @@ class _HomePageState extends State<HomePage>
                                 await RioGasService.actualizarMoviles(
                               int.parse(await Hive.box('sessionBox')
                                   .get('escenario', defaultValue: '0')),
-                              int.parse(movilId),
+                              // 🐛 FIX: movilId es el ID del documento
+                              // ("Moviles-336"), no un número → int.parse lo
+                              // reventaba con FormatException y colgaba el
+                              // diálogo de carga. Extraemos solo los dígitos.
+                              int.parse(
+                                  movilId.replaceAll(RegExp(r'[^0-9]'), '')),
                               await Hive.box('sessionBox')
                                   .get('username', defaultValue: ''),
                               '',
@@ -1793,6 +1802,29 @@ class _HomePageState extends State<HomePage>
                                   duration: Duration(seconds: 5),
                                 ),
                               );
+                            }
+                            } catch (e, st) {
+                              print('❌ [ESTADO] Excepción no manejada: $e');
+                              if (mounted) {
+                                setState(() => _isEstadoChanging = false);
+                              }
+                              // Cerrar loading + selección si siguen abiertos
+                              try {
+                                Navigator.of(context, rootNavigator: true).pop();
+                              } catch (_) {}
+                              try {
+                                Navigator.of(context).pop();
+                              } catch (_) {}
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'No se pudo cambiar el estado. Intentá nuevamente.'),
+                                    backgroundColor: Colors.red,
+                                    duration: Duration(seconds: 3),
+                                  ),
+                                );
+                              }
                             }
                           }
                         },
