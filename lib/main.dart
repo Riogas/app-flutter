@@ -38,6 +38,7 @@ import 'package:android_intent_plus/flag.dart';
 import 'services/location_service.dart'; // 🔹 Importamos LocationService
 import 'services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogSyncService
 import 'package:screen_protector/screen_protector.dart';
+import 'services/modo_restringido.dart'; // 🏪 Perfil comercio (escenario 9998)
 import 'services/remote_logout_listener.dart'; // 🚨 Importar listener de logout remoto
 import 'services/fcm_token_manager.dart'; // 🔑 Importar FCM Token Manager
 
@@ -360,6 +361,15 @@ void main() async {
     } catch (e) {
       print('⚠️ Error verificando login: $e - Redirigiendo a login');
       isLoggedIn = false;
+    }
+
+    // 🏪 Derivar el modo restringido del escenario persistido. Al reabrir la
+    // app no se vuelve a llamar a ValidarUsuario, así que este es el único
+    // lugar donde se puede saber que el usuario es un comercio 9998.
+    try {
+      await ModoRestringido.init();
+    } catch (e) {
+      print('⚠️ Error inicializando ModoRestringido: $e');
     }
 
     // 🔹 Inicializar sincronización centralizada de Hive (mensajes y pedidos)

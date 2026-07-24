@@ -6,6 +6,8 @@ import '../services/firebase_constants_service.dart';
 import '../services/session_service.dart';
 import '../services/session_sync_service.dart'; // 🔄 Sincronización de sesión
 import '../services/debug_config_manager.dart'; // 🆕 Sistema de logging remoto
+import '../services/modo_restringido.dart'; // 🏪 Perfil comercio (escenario 9998)
+import '../services/movil_selection.dart'; // 🚚 Decisión 0/1/N de móviles
 import 'home_page.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hive/hive.dart';
@@ -2257,10 +2259,8 @@ class _LoginPageState extends State<LoginPage> {
                         try {
                           const platform =
                               MethodChannel('com.riogas.appmovil/shared_prefs');
-                          String escenarioValue =
-                              response['escenarioid'] == "1000"
-                                  ? "1000"
-                                  : "2000";
+                          String escenarioValue = ModoRestringido
+                              .normalizarEscenario(response['escenarioid']);
                           await platform.invokeMethod(
                               'saveEscenario', {'escenario': escenarioValue});
                           print(
@@ -2419,10 +2419,10 @@ class _LoginPageState extends State<LoginPage> {
     var box = await Hive.openBox('sessionBox');
     await box.put('username', _usernameController.text);
     await box.put('password', _passwordController.text);
-    await box.put(
-      'escenario',
-      response['escenarioid'] == "1000" ? "1000" : "2000",
-    );
+    final escenarioNormalizado =
+        ModoRestringido.normalizarEscenario(response['escenarioid']);
+    await box.put('escenario', escenarioNormalizado);
+    ModoRestringido.aplicar(escenarioNormalizado);
     await box.put('NombreUsuario', response['NombreUsuario'].trim());
     await box.put('deviceId', _deviceId);
 
