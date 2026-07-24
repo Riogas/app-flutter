@@ -155,7 +155,11 @@ class _HomePageState extends State<HomePage>
     });
 
     // ðŸ”¹ Inicializar el servicio de ubicaciÃ³n
-    _initializeLocationService();
+    // 🏪 El comercio no trackea: el LocationService legado dispara el intent
+    // de exención de batería en cada init, sin motivo para este perfil.
+    if (!ModoRestringido.activo.value) {
+      _initializeLocationService();
+    }
 
     // ðŸ”¹ Escuchar cambios en Firestore para pedidos y mensajes
     // REMOVED: _listenToFirestoreChangesWithDelay(); // This was creating duplicate direct Firestore subscriptions

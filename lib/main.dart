@@ -1194,6 +1194,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _checkBatteryOptimization() async {
     if (!Platform.isAndroid) return;
 
+    // 🏪 El comercio no necesita exención de batería: no hay tracking continuo.
+    if (ModoRestringido.activo.value) {
+      print('🏪 [BATERÍA] Modo restringido: se omite el chequeo');
+      return;
+    }
+
     // 🛡️ Si ya se verificó y el usuario cerró el diálogo, NO volver a molestar
     if (_batteryCheckCompleted) {
       print('🔋 Verificación de batería ya completada, no se vuelve a mostrar');

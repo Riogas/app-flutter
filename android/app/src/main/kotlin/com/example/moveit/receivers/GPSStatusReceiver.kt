@@ -124,7 +124,11 @@ class GPSStatusReceiver : BroadcastReceiver() {
                         "timestamp" to System.currentTimeMillis()
                     ))
                     DeviceEventReporter.report(context, "gps_off", "PROVIDERS_CHANGED")
-                    showGpsOffNotification(context)
+                    // 🏪 El comercio no usa ubicación: no tiene sentido pedirle
+                    // que la prenda con una notificación fija.
+                    if (!com.riogas.appmovil.ServiceStatusFlags.isRestrictedMode(context)) {
+                        showGpsOffNotification(context)
+                    }
                 } else {
                     Log.i(TAG, "✅ GPS encendido - Precisión de ubicación mejorada")
                     DebugLogger.i(TAG, "GPS habilitado por usuario", mapOf(
