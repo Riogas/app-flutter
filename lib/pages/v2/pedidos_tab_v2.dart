@@ -56,7 +56,8 @@ class _PedidosTabV2State extends State<PedidosTabV2> {
 
     _pedidosListener = () {
       if (!mounted) return;
-      setState(() => _ultimaActualizacion = DateTime.now());
+      // Nota: _ultimaActualizacion ("Sincro") ya NO se toca acá — refleja la
+      // frescura del GPS, no los cambios de la lista de pedidos.
       _cargarEntregadas();
     };
     _streamManager.pedidosNotifier.addListener(_pedidosListener!);
@@ -94,6 +95,7 @@ class _PedidosTabV2State extends State<PedidosTabV2> {
     int? bateria = _bateria;
     LatLng? pos = _posicionActual;
     double km = _kmHoy;
+    DateTime? fixTime = _ultimaActualizacion;
 
     try {
       gpsOk = await Geolocator.isLocationServiceEnabled();
@@ -115,7 +117,14 @@ class _PedidosTabV2State extends State<PedidosTabV2> {
 
     try {
       final p = await Geolocator.getLastKnownPosition();
-      if (p != null) pos = LatLng(p.latitude, p.longitude);
+      if (p != null) {
+        pos = LatLng(p.latitude, p.longitude);
+        // 🕒 "Sincro" = frescura REAL del GPS: usamos el timestamp del último
+        // fix de ubicación (el tracking nativo lo actualiza cada ~13s), no el
+        // stream de pedidos. .toLocal() para que "Actualizado" muestre bien la
+        // hora; difference() es TZ-agnóstico así que el "Hace Xm" sale exacto.
+        fixTime = p.timestamp.toLocal();
+      }
     } catch (_) {}
 
     km = await V2Data.kmRecorridosHoy();
@@ -127,6 +136,7 @@ class _PedidosTabV2State extends State<PedidosTabV2> {
         _bateria = bateria;
         _posicionActual = pos;
         _kmHoy = km;
+        _ultimaActualizacion = fixTime;
       });
     }
   }
