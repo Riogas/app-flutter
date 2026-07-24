@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- 🏪 Keep-alive del perfil comercio (escenario 9998), sin ubicación -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     
     <!-- 🆕 PERMISO PARA GOOGLE PLAY SERVICES LOCATION -->
     <uses-permission android:name="com.google.android.gms.permission.ACCESS_LOCATION" />
@@ -90,6 +93,12 @@
         <service
             android:name="com.riogas.appmovil.tracking.LocationTrackingService"
             android:foregroundServiceType="location"
+            android:exported="false" />
+
+        <!-- 🏪 Keep-alive del perfil comercio: sin GPS, solo mantiene vivo el proceso -->
+        <service
+            android:name="com.riogas.appmovil.tracking.PromoKeepAliveService"
+            android:foregroundServiceType="dataSync"
             android:exported="false" />
 
         <!-- 🆕 Receiver para reiniciar servicio después de reboot o cierre de app -->

@@ -383,6 +383,9 @@
                         com.riogas.appmovil.ServiceStatusFlags.setServiceDisabled(this, false, "startLocationService desde Flutter UI")
                         com.riogas.appmovil.ServiceStatusFlags.setServicePaused(this, false, "startLocationService desde Flutter UI")
                         com.riogas.appmovil.ServiceStatusFlags.setWatchdogDisabled(this, false, "startLocationService")
+                        // 🏪 Un chofer normal arrancando tracking limpia el perfil comercio,
+                        // por si este mismo teléfono lo usó antes un comercio 9998.
+                        com.riogas.appmovil.ServiceStatusFlags.setRestrictedMode(this, false, "startLocationService desde Flutter UI")
                         val prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
                         prefs.edit().apply {
                             remove("stop_reason")
@@ -416,6 +419,30 @@
 
                         Log.d("MainActivity", "✅ LocationTrackingService iniciado desde Flutter")
                         result.success("✅ Servicio de ubicación iniciado con intervalo $interval minutos")
+                    }
+                    "saveRestrictedMode" -> {
+                        val restricted = call.argument<Boolean>("restricted") ?: false
+                        com.riogas.appmovil.ServiceStatusFlags.setRestrictedMode(
+                            this, restricted, "login Flutter")
+                        if (restricted) {
+                            // Nada de tracking para este perfil: matar el FGS por
+                            // si venía corriendo de una sesión anterior de chofer.
+                            com.riogas.appmovil.tracking.LocationTrackingService.stop(this)
+                        }
+                        result.success("✅ restricted_mode=$restricted")
+                    }
+                    "cancelHealthCheck" -> {
+                        com.riogas.appmovil.tracking.HealthCheckWorker.cancel(this)
+                        Log.i("MainActivity", "🏪 HealthCheckWorker cancelado (modo restringido)")
+                        result.success("✅ HealthCheckWorker cancelado")
+                    }
+                    "startPromoKeepAlive" -> {
+                        com.riogas.appmovil.tracking.PromoKeepAliveService.start(this)
+                        result.success("✅ PromoKeepAliveService iniciado")
+                    }
+                    "stopPromoKeepAlive" -> {
+                        com.riogas.appmovil.tracking.PromoKeepAliveService.stop(this)
+                        result.success("✅ PromoKeepAliveService detenido")
                     }
                     "stopLocationService" -> {
                         val movil = call.argument<String>("movil") ?: "0"
@@ -816,6 +843,15 @@
          * acceda a la ubicación (ya que se inicia desde foreground, no desde background).
          */
         private fun restartLocationServiceFromForeground() {
+            // 🏪 Perfil comercio: nunca arrancar el FGS de ubicación. Este método
+            // corre en onCreate ANTES de super.onCreate(), o sea antes de que
+            // exista el engine de Flutter: es el único punto donde se puede
+            // frenar este camino.
+            if (com.riogas.appmovil.ServiceStatusFlags.isRestrictedMode(this)) {
+                Log.i("MainActivity", "🏪 restricted_mode=true → no se arranca el FGS de ubicación")
+                return
+            }
+
             val prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
             val movil = prefs.getString("last_movil", "")
             val isDisabled = com.riogas.appmovil.ServiceStatusFlags.isServiceDisabled(this)
@@ -934,7 +970,14 @@
             androidx.work.WorkManager.getInstance(this).cancelUniqueWork("LocationPeriodicWork")
 
             // 🔄 REINICIAR SERVICIO DESDE FOREGROUND (Android 12+ compatible)
-            restartLocationServiceFromForeground()
+            // 🏪 Simétrico al camino del GPS: el comercio arranca su keep-alive
+            // sin ubicación, el chofer arranca el FGS de tracking.
+            if (com.riogas.appmovil.ServiceStatusFlags.isRestrictedMode(this)) {
+                com.riogas.appmovil.tracking.PromoKeepAliveService.start(this)
+                Log.i("MainActivity", "🏪 Keep-alive del comercio iniciado desde onCreate")
+            } else {
+                restartLocationServiceFromForeground()
+            }
 
             val args = mutableListOf<String>()
 
