@@ -35,8 +35,8 @@ import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
-import '../services/location_service.dart'; // 🔹 Importamos LocationService
-import '../services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogSyncService
+import 'services/location_service.dart'; // 🔹 Importamos LocationService
+import 'services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogSyncService
 import 'package:screen_protector/screen_protector.dart';
 import 'services/remote_logout_listener.dart'; // 🚨 Importar listener de logout remoto
 import 'services/fcm_token_manager.dart'; // 🔑 Importar FCM Token Manager
