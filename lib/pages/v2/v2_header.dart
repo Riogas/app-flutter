@@ -33,6 +33,14 @@ class V2Header extends StatelessWidget {
   /// ya están pushed, como Mensajes, donde serían redundantes).
   final bool showActions;
 
+  /// Si false, oculta la píldora "Móvil N · Estado" (y con ella el acceso a
+  /// cambiar el estado del móvil). Usado por el modo restringido, donde el
+  /// comercio no tiene operativa de móvil.
+  final bool mostrarEstado;
+
+  /// Si true, el menú del avatar queda con un único item: Cerrar sesión.
+  final bool menuSoloLogout;
+
   const V2Header({
     super.key,
     this.messageCountNotifier,
@@ -44,6 +52,8 @@ class V2Header extends StatelessWidget {
     this.bottomSpace = 82,
     this.onBack,
     this.showActions = true,
+    this.mostrarEstado = true,
+    this.menuSoloLogout = false,
   });
 
   static const String _resourcesBase =
@@ -117,8 +127,10 @@ class V2Header extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(child: _buildTitulo()),
-                      const SizedBox(width: 10),
-                      _buildEstadoPill(context),
+                      if (mostrarEstado) ...[
+                        const SizedBox(width: 10),
+                        _buildEstadoPill(context),
+                      ],
                     ],
                   ),
                   if (subtitulo != null) ...[
@@ -138,8 +150,10 @@ class V2Header extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(child: _buildNombre()),
-                      const SizedBox(width: 10),
-                      _buildEstadoPill(context),
+                      if (mostrarEstado) ...[
+                        const SizedBox(width: 10),
+                        _buildEstadoPill(context),
+                      ],
                     ],
                   ),
                 // Espacio inferior (para tarjetas que se superponen)
@@ -185,6 +199,7 @@ class V2Header extends StatelessWidget {
       valueListenable: messageCountNotifier!,
       builder: (context, count, _) {
         return IconButton(
+          key: const Key('v2-mensajes-icon'),
           tooltip: 'Mensajes de despacho',
           onPressed: () {
             Navigator.push(
@@ -229,6 +244,7 @@ class V2Header extends StatelessWidget {
   // ── Avatar con menú del chofer ──
   Widget _buildAvatarMenu(BuildContext context) {
     return PopupMenuButton<String>(
+      key: const Key('v2-avatar-menu'),
       tooltip: 'Menú del chofer',
       offset: const Offset(0, 48),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -239,8 +255,10 @@ class V2Header extends StatelessWidget {
       ),
       onSelected: (value) => _onMenuSelected(context, value),
       itemBuilder: (context) => [
-        _menuItem('config', Icons.settings_outlined, 'Configuración'),
-        const PopupMenuDivider(),
+        if (!menuSoloLogout) ...[
+          _menuItem('config', Icons.settings_outlined, 'Configuración'),
+          const PopupMenuDivider(),
+        ],
         _menuItem('logout', Icons.logout, 'Cerrar sesión',
             color: V2Colors.rojo),
       ],
@@ -348,6 +366,7 @@ class V2Header extends StatelessWidget {
             if (problemaTecnico) color = V2Colors.naranja;
 
             return GestureDetector(
+              key: const Key('v2-estado-pill'),
               onTap:
                   onEstadoTap == null ? null : () => onEstadoTap!(context),
               child: Container(
