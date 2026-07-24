@@ -732,108 +732,33 @@ class PersistentStreamManager {
         _sesionesSubscription != null;
   }
 
-  // Getters for ValueNotifiers (widgets subscribe to these)
-  ValueNotifier<List<DocumentSnapshot>> get pedidosNotifier {
-    _pedidosListeners++;
-    print(
-        '👂 [PersistentStreamManager] Pedidos listener added (total: $_pedidosListeners)');
-    _incrementListener('pedidos');
-    _logToMonitoreo('PedidosListenerCount', _pedidosListeners);
-    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
-    _logToMonitoreo('PedidosReads', _pedidosReads);
-    _logToMonitoreo('TotalReads', totalReads);
-    // Attach a removal callback for real listener tracking
-    _pedidosNotifier.addListener(() {
-      // No-op, just to ensure listener is tracked
-    });
-    // Remove listener when widget is disposed
-    _pedidosNotifier.addListener(() {
-      // This will be called on dispose, so decrement
-      _decrementListener('pedidos');
-    });
-    return _pedidosNotifier;
-  }
+  // Getters for ValueNotifiers (widgets subscribe to these).
+  //
+  // ⚠️ ACCESORES PUROS: devuelven el notifier y nada más.
+  // Antes cada getter hacía `_XNotifier.addListener(() {...})` con la idea
+  // (equivocada) de "trackear/decrementar en dispose". Pero addListener
+  // dispara el callback en notifyListeners() — NO en dispose — y nunca se
+  // removía, así que cada acceso al getter (uno por build() de cada
+  // ValueListenableBuilder) acumulaba 2 listeners no-op permanentes.
+  // Resultado: leak de listeners que crecía toda la sesión y encarecía cada
+  // notifyListeners de los notifiers que sí cambian seguido (pedidos, movil).
+  // El ValueListenableBuilder ya administra su propio add/removeListener
+  // sobre el notifier devuelto; el getter no debe tener efectos secundarios.
+  ValueNotifier<List<DocumentSnapshot>> get pedidosNotifier => _pedidosNotifier;
 
-  ValueNotifier<List<DocumentSnapshot>> get mensajesNotifier {
-    _mensajesListeners++;
-    print(
-        '👂 [PersistentStreamManager] Mensajes listener added (total: $_mensajesListeners)');
-    _incrementListener('mensajes');
-    _logToMonitoreo('MensajesListenerCount', _mensajesListeners);
-    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
-    _logToMonitoreo('MensajesReads', _mensajesReads);
-    _logToMonitoreo('TotalReads', totalReads);
-    _mensajesNotifier.addListener(() {});
-    _mensajesNotifier.addListener(() {
-      _decrementListener('mensajes');
-    });
-    return _mensajesNotifier;
-  }
+  ValueNotifier<List<DocumentSnapshot>> get mensajesNotifier =>
+      _mensajesNotifier;
 
-  ValueNotifier<DocumentSnapshot?> get movilNotifier {
-    _movilListeners++;
-    print(
-        '👂 [PersistentStreamManager] Movil listener added (total: $_movilListeners)');
-    _incrementListener('movil');
-    _logToMonitoreo('MovilListenerCount', _movilListeners);
-    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
-    _logToMonitoreo('MovilReads', _movilReads);
-    _logToMonitoreo('TotalReads', totalReads);
-    _movilNotifier.addListener(() {});
-    _movilNotifier.addListener(() {
-      _decrementListener('movil');
-    });
-    return _movilNotifier;
-  }
+  ValueNotifier<DocumentSnapshot?> get movilNotifier => _movilNotifier;
 
-  ValueNotifier<Map<String, dynamic>?> get sesionesNotifier {
-    _sesionesListeners++;
-    print(
-        '👂 [PersistentStreamManager] Sesiones listener added (total: $_sesionesListeners)');
-    _incrementListener('sesiones');
-    _logToMonitoreo('SesionesListenerCount', _sesionesListeners);
-    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
-    _logToMonitoreo('SesionesReads', _sesionesReads);
-    _logToMonitoreo('TotalReads', totalReads);
-    _sesionesNotifier.addListener(() {});
-    _sesionesNotifier.addListener(() {
-      _decrementListener('sesiones');
-    });
-    return _sesionesNotifier;
-  }
+  ValueNotifier<Map<String, dynamic>?> get sesionesNotifier =>
+      _sesionesNotifier;
 
-  ValueNotifier<List<Map<String, dynamic>>> get subEstadosNotifier {
-    _subEstadosListeners++;
-    print(
-        '👂 [PersistentStreamManager] SubEstados listener added (total: $_subEstadosListeners)');
-    _incrementListener('subEstados');
-    _logToMonitoreo('SubEstadosListenerCount', _subEstadosListeners);
-    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
-    _logToMonitoreo('SubEstadosReads', _subEstadosReads);
-    _logToMonitoreo('TotalReads', totalReads);
-    _subEstadosNotifier.addListener(() {});
-    _subEstadosNotifier.addListener(() {
-      _decrementListener('subEstados');
-    });
-    return _subEstadosNotifier;
-  }
+  ValueNotifier<List<Map<String, dynamic>>> get subEstadosNotifier =>
+      _subEstadosNotifier;
 
-  ValueNotifier<List<Map<String, dynamic>>> get subEstadoMovilesNotifier {
-    _subEstadoMovilesListeners++;
-    print(
-        '👂 [PersistentStreamManager] SubEstadoMoviles listener added (total: $_subEstadoMovilesListeners)');
-    _incrementListener('subEstadoMoviles');
-    _logToMonitoreo(
-        'SubEstadoMovilesListenerCount', _subEstadoMovilesListeners);
-    _logToMonitoreo('TotalWidgetListeners', totalWidgetListeners);
-    _logToMonitoreo('SubEstadoMovilesReads', _subEstadoMovilesReads);
-    _logToMonitoreo('TotalReads', totalReads);
-    _subEstadoMovilesNotifier.addListener(() {});
-    _subEstadoMovilesNotifier.addListener(() {
-      _decrementListener('subEstadoMoviles');
-    });
-    return _subEstadoMovilesNotifier;
-  }
+  ValueNotifier<List<Map<String, dynamic>>> get subEstadoMovilesNotifier =>
+      _subEstadoMovilesNotifier;
 
   ValueNotifier<List<Map<String, dynamic>>>
       get subEstadoFinalizacionPedidosNotifier {
