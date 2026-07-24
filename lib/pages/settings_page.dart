@@ -24,6 +24,8 @@ import '../services/native_log_sync_service.dart';
 import '../services/logout_service.dart';
 import 'package:device_info_plus/device_info_plus.dart'; // 🆕 Para obtener deviceId
 import '../services/ui_prefs.dart'; // 🎨 Toggle de diseño nuevo/clásico
+import 'v2/v2_header.dart'; // 🎨 Cabecera V2 (misma que Mensajes)
+import 'v2/v2_theme.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -1117,17 +1119,34 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Configuración'),
-        backgroundColor: Colors.blueAccent,
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildProfileSection(),
+      backgroundColor: V2Colors.fondo,
+      body: Column(
+        children: [
+          // 🎨 Mismo navbar limpio que Mensajes: volver + título + píldora
+          V2Header(
+            titulo: 'Configuración',
+            subtitulo: 'Ajustes de la aplicación',
+            onBack: () => Navigator.of(context).maybePop(),
+            showActions: false,
+            height: 168,
+            bottomSpace: 34,
+          ),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              transform: Matrix4.translationValues(0, -22, 0),
+              decoration: const BoxDecoration(
+                color: V2Colors.fondo,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildProfileSection(),
               SizedBox(height: 20),
               _buildInfoSection(),
               SizedBox(height: 20),
@@ -1158,11 +1177,15 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
               _buildLogoutButton(),
               SizedBox(height: 10),
-            ],
-          ),
-        ),
-      ),
-    );
+                    ], // inner Column children
+                  ), // inner Column
+                ), // Padding
+              ), // SingleChildScrollView
+            ), // Container
+          ), // Expanded
+        ], // outer Column children (V2Header + Expanded)
+      ), // outer Column (body)
+    ); // Scaffold
   }
 
   Widget _buildMonitoreoButton() {
@@ -1311,20 +1334,29 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Icon(Icons.person, size: 40, color: Colors.white),
             ),
             SizedBox(width: 20),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (nombreUsuario != null)
-                  Text(
-                    nombreUsuario!,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                if (idUsuario != null)
-                  Text(
-                    'ID de Usuario: $idUsuario',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                  ),
-              ],
+            // 🐛 FIX overflow: Expanded para que el nombre largo
+            // ("JULIO - SISTEMAS RIOGAS") no desborde a la derecha.
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (nombreUsuario != null)
+                    Text(
+                      nombreUsuario!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  if (idUsuario != null)
+                    Text(
+                      'ID de Usuario: $idUsuario',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                ],
+              ),
             ),
           ],
         ),

@@ -232,5 +232,10 @@
             <category android:name="android.intent.category.BROWSABLE"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- ☎️ Permite ver el marcador telefónico (llamar a despacho, tel:) -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
     </queries>
 </manifest>

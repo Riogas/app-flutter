@@ -391,22 +391,28 @@ class _MessagePageState extends State<MessagePage> {
 
   // ── Llamar a despacho (constante 170) — funcionalidad preservada ──────────
   Future<void> _llamarDespacho() async {
-    final phoneNumber = await getConstantValue('170') ?? '';
+    final phoneNumber = (await getConstantValue('170') ?? '').trim();
     if (phoneNumber.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Número de teléfono no disponible.')),
+          const SnackBar(content: Text('Número de despacho no disponible.')),
         );
       }
       return;
     }
+    // ☎️ Abrir el marcador directo (sin gate en canLaunchUrl, que en Android
+    // 11+ devolvía false por visibilidad de paquetes → falso "error").
     final Uri callUri = Uri(scheme: 'tel', path: phoneNumber);
-    if (await canLaunchUrl(callUri)) {
-      await launchUrl(callUri);
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo realizar la llamada.')),
-      );
+    try {
+      await launchUrl(callUri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      print('❌ [DESPACHO] No se pudo abrir el marcador: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('No se pudo abrir el marcador telefónico.')),
+        );
+      }
     }
   }
 
