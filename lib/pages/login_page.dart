@@ -3192,15 +3192,60 @@ class _LoginPageState extends State<LoginPage> {
     print("✅ [SESSION] Flag sessionActive seteado a true");
 
     final platform = MethodChannel("background_service");
-    await platform.invokeMethod("startLocationService", {
-      "interval": 3,
-      "movil": movil,
-      "escenario": escenario,
-      "usuario": usuario,
-      "deviceId": "$idTerminal",
-    });
-    print(
-        "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
+
+    // 🏪 Modo restringido: el comercio no se trackea. Se persiste el flag en
+    // las prefs nativas ANTES de cualquier otra cosa, porque
+    // MainActivity.onCreate arranca el FGS de GPS leyendo config.last_movil y
+    // corre ANTES de que exista el engine de Flutter: apagarlo solo desde acá
+    // no alcanza.
+    final restringido = ModoRestringido.activo.value;
+    try {
+      await platform
+          .invokeMethod("saveRestrictedMode", {"restricted": restringido});
+      print("🏪 [MODO_RESTRINGIDO] restricted_mode nativo = $restringido");
+    } catch (e) {
+      print("⚠️ Error guardando restricted_mode nativo: $e");
+    }
+
+    if (restringido) {
+      // El HealthCheckWorker se programa con KEEP y sobrevive reinicios: si
+      // este teléfono lo usó antes un chofer, seguiría reviviendo el FGS de
+      // GPS cada 15 minutos. Hay que cancelarlo explícitamente.
+      try {
+        await platform.invokeMethod("cancelHealthCheck");
+        print("🏪 [MODO_RESTRINGIDO] HealthCheckWorker cancelado");
+      } catch (e) {
+        print("⚠️ Error cancelando HealthCheckWorker: $e");
+      }
+
+      // Keep-alive sin GPS para que el LMK no mate el proceso.
+      try {
+        await platform.invokeMethod("startPromoKeepAlive");
+        print("🏪 [MODO_RESTRINGIDO] PromoKeepAliveService iniciado");
+      } catch (e) {
+        print("⚠️ Error iniciando PromoKeepAliveService: $e");
+      }
+    } else {
+      await platform.invokeMethod("startLocationService", {
+        "interval": 3,
+        "movil": movil,
+        "escenario": escenario,
+        "usuario": usuario,
+        "deviceId": "$idTerminal",
+      });
+      print(
+          "🔄 Servicio de ubicación en segundo plano iniciado con movil=$movil, escenario=$escenario, usuario=$usuario.");
+    }
+
+    // 🏪 Recordar el perfil para el próximo login: el gate de permisos corre
+    // ANTES de ValidarUsuario, así que en el primer login todavía no se sabe
+    // que este usuario es un comercio. usuarioBox sobrevive al logout.
+    try {
+      final userbox = await Hive.openBox('usuarioBox');
+      await userbox.put('ultimoPerfilRestringido', restringido);
+    } catch (e) {
+      print('⚠️ Error guardando ultimoPerfilRestringido: $e');
+    }
 
     await platform.invokeMethod("FcmNotification", {
       "interval": 3,
