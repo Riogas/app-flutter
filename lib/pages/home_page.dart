@@ -13,6 +13,8 @@ import '../services/location_service.dart'; // ðŸ”¹ Importamos LocationServ
 import '../services/riogas_service.dart'; // ðŸ”¹ Importamos LocationService
 import '../services/logout_service.dart'; // ðŸ”¥ Servicio de logout (forced logout)
 import '../services/debug_config_manager.dart'; // ðŸ†• Sistema de logging remoto
+import '../services/modo_restringido.dart'; // 🏪 Perfil comercio (escenario 9998)
+import 'v2/promos_shell.dart'; // 🏪 Shell del modo restringido
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart'; // Import Geolocator for Position
 import 'package:MoveIT/pages/login_page.dart';
@@ -1003,6 +1005,16 @@ class _HomePageState extends State<HomePage>
     }
 
     // âœ… SesiÃ³n verificada - Mostrar UI normal
+    // 🏪 Modo restringido (comercio 9998): shell dedicado de Promociones.
+    // Va ANTES del toggle de diseño a propósito: la preferencia V2/clásico
+    // vive en usuarioBox y sobrevive al logout, así que un dispositivo puede
+    // llegar en shell clásico y le mostraría Pedidos y Mapa al comercio.
+    // Va DESPUÉS del loader de _isVerifyingSession, también a propósito: si
+    // se pusiera arriba, el comercio saltearía la verificación de sesión.
+    if (ModoRestringido.activo.value) {
+      return const PromosShell();
+    }
+
     // 🎨 Toggle de diseño: nuevo (Home V2) o clásico, conmutable en runtime
     return ValueListenableBuilder<bool>(
       valueListenable: UiPrefs.homeV2,
