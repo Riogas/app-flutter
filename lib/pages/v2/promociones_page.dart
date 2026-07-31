@@ -435,13 +435,16 @@ class _PromocionesPageState extends State<PromocionesPage> {
                   messageCountNotifier: widget.messageCountNotifier,
                   onEstadoTap: widget.onEstadoTap,
                   // 🏪 Comercio: header con su nombre (modo home) en vez del
-                  // título de sección, sin píldora y con menú reducido.
+                  // título de sección y sin píldora. El menú del avatar queda
+                  // COMPLETO también para el comercio (Configuración incluida):
+                  // decisión 2026-07-31, hay cosas ahí que le sirven; si algún
+                  // item molesta se ocultará puntualmente más adelante.
                   titulo: widget.modoRestringido ? null : 'Promos',
                   subtitulo: widget.modoRestringido
                       ? null
                       : 'Validá beneficios del cliente antes de consumirlos',
                   mostrarEstado: !widget.modoRestringido,
-                  menuSoloLogout: widget.modoRestringido,
+                  menuSoloLogout: false,
                   height: 168,
                   bottomSpace: 40,
                 ),
