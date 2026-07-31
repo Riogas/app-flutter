@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:MoveIT/services/beneficios_service.dart';
+import 'package:MoveIT/services/riogas_service.dart';
 
 void main() {
   group('BeneficiosService.buildValidarPromoBody', () {
@@ -21,7 +22,6 @@ void main() {
       );
 
       expect(body, {
-        'escenarioid': 9998,
         'usuario': '49618553',
         'DeviceId': 'b00a68bef3451313',
         'Departamento': 'Montevideo',
@@ -39,9 +39,13 @@ void main() {
       });
       // El token NO va acá: lo inyecta RioGasService._post.
       expect(body.containsKey('token'), isFalse);
+      // ⚠️ El build DEPLOYADO del servicio GX (2026-07-31) no declara
+      // escenarioid y GeneXus responde 400 ante propiedades desconocidas.
+      // Cuando GX publique la versión con escenarioid, re-agregarlo acá.
+      expect(body.containsKey('escenarioid'), isFalse);
     });
 
-    test('escenario no numérico → escenarioid 0 y opcionales null → ""', () {
+    test('opcionales null → ""', () {
       final body = BeneficiosService.buildValidarPromoBody(
         escenario: '',
         usuario: 'u',
@@ -50,7 +54,6 @@ void main() {
         idCampana: 0,
       );
 
-      expect(body['escenarioid'], 0);
       expect(body['Departamento'], '');
       expect(body['Localidad'], '');
       expect(body['Latitud'], '');
@@ -59,6 +62,27 @@ void main() {
       expect(body['nombreCliente'], '');
       expect(body['telCliente'], '');
       expect(body['CampoIn1'], '');
+    });
+  });
+
+  group('RioGasService.gxRootFromBaseUrl', () {
+    test('recorta el segmento de servicios en dev y prod', () {
+      expect(
+        RioGasService.gxRootFromBaseUrl('https://sgm.riogas.com.uy/appservices/'),
+        'https://sgm.riogas.com.uy/',
+      );
+      expect(
+        RioGasService.gxRootFromBaseUrl(
+            'https://www.riogas.uy/ica_geos_/appservices/'),
+        'https://www.riogas.uy/ica_geos_/',
+      );
+    });
+
+    test('tolera baseUrl sin barra final', () {
+      expect(
+        RioGasService.gxRootFromBaseUrl('https://sgm.riogas.com.uy/appservices'),
+        'https://sgm.riogas.com.uy/',
+      );
     });
   });
 

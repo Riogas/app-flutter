@@ -741,8 +741,9 @@ class RioGasService {
 
   static Future<Map<String, dynamic>?> _post(
     String endpoint,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    String? baseUrlOverride,
+  }) async {
     try {
       // Process the version value to include only the number
       if (body.containsKey('version')) {
@@ -809,7 +810,7 @@ class RioGasService {
 
       try {
         // Construir la URL completa
-        final fullUrl = '$baseUrl$endpoint';
+        final fullUrl = '${baseUrlOverride ?? baseUrl}$endpoint';
         final finalBody = {...body, 'token': token};
         final bodyJson = jsonEncode(finalBody);
 
@@ -1221,13 +1222,29 @@ class RioGasService {
         endpoint == 'promociones/ValidarPromo';
   }
 
+  /// Raíz de la webapp GeneXus: el [baseUrl] sin su último segmento (el de
+  /// servicios, p.ej. "appservices/"). La API de promociones cuelga de ahí:
+  /// dev  https://sgm.riogas.com.uy/promociones/...
+  /// prod https://www.riogas.uy/ica_geos_/promociones/...
+  static String gxRootFromBaseUrl(String baseUrl) {
+    var url = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    final corte = url.lastIndexOf('/');
+    // No recortar más allá del esquema ("https://")
+    if (corte <= url.indexOf('//') + 1) return '$url/';
+    return url.substring(0, corte + 1);
+  }
+
   /// 🎁 Valida un beneficio de promoción (promociones/ValidarPromo).
   /// Devuelve el JSON crudo o null si no hubo 200. SIN retry offline a
   /// propósito: re-disparar una validación vieja desde la cola no tiene
-  /// sentido de negocio (está en _shouldSkipFailedSave).
+  /// sentido de negocio (está en _shouldSkipFailedSave). El endpoint NO
+  /// cuelga de appservices/ sino de la raíz de la webapp GX.
   static Future<Map<String, dynamic>?> validarPromo(
       Map<String, dynamic> body) {
-    return _post('promociones/ValidarPromo', body);
+    return _post('promociones/ValidarPromo', body,
+        baseUrlOverride: gxRootFromBaseUrl(baseUrl));
   }
 
   static Future<Map<String, dynamic>?> actualizarMoviles(

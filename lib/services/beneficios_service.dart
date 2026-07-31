@@ -112,6 +112,11 @@ class BeneficiosService {
   /// Body de `promociones/ValidarPromo` con las claves y el casing EXACTOS
   /// del contrato (ojo: `Latitud` con mayúscula pero `longitud` sin ella).
   /// El `token` no va acá: lo inyecta `RioGasService._post`.
+  ///
+  /// ⚠️ `escenario` se recibe pero NO viaja: el build deployado del servicio
+  /// GX (2026-07-31, verificado contra el bytecode en sgm) no declara
+  /// `escenarioid` y GeneXus responde 400 ante propiedades desconocidas.
+  /// Cuando GX publique la versión con `escenarioid`, agregarlo al mapa.
   static Map<String, dynamic> buildValidarPromoBody({
     required String escenario,
     required String usuario,
@@ -128,7 +133,6 @@ class BeneficiosService {
     String? campoIn1,
   }) {
     return {
-      'escenarioid': int.tryParse(escenario.trim()) ?? 0,
       'usuario': usuario,
       'DeviceId': deviceId,
       'Departamento': departamento ?? '',
