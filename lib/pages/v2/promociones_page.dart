@@ -73,9 +73,11 @@ class _PromocionesPageState extends State<PromocionesPage> {
   DateTime? _fechaConsumo;
   bool _opcionalesAbiertos = false;
 
-  // 🌍 Ubicación administrativa actual (interna, para la API de validación)
+  // 🌍 Ubicación actual (interna, para la API de validación)
   String? _departamento;
   String? _localidad;
+  String? _latitud;
+  String? _longitud;
 
   @override
   void initState() {
@@ -179,6 +181,10 @@ class _PromocionesPageState extends State<PromocionesPage> {
       p ??= await Geolocator.getCurrentPosition(
           timeLimit: const Duration(seconds: 8));
 
+      // Las coordenadas van a ValidarPromo aunque el reverse geocode falle
+      _latitud = p.latitude.toString();
+      _longitud = p.longitude.toString();
+
       final resp = await http
           .get(Uri.parse(
               'http://nominatim.riogas.uy/reverse?lat=${p.latitude}&lon=${p.longitude}&format=json'))
@@ -214,6 +220,7 @@ class _PromocionesPageState extends State<PromocionesPage> {
       'movil': box.get('movil', defaultValue: '').toString(),
       'usuario': box.get('username', defaultValue: '').toString(),
       'escenario': box.get('escenario', defaultValue: '').toString(),
+      'deviceId': box.get('deviceId', defaultValue: '').toString(),
     };
   }
 
@@ -236,8 +243,11 @@ class _PromocionesPageState extends State<PromocionesPage> {
       movil: ident['movil']!,
       usuario: ident['usuario']!,
       escenario: ident['escenario']!,
+      deviceId: ident['deviceId']!,
       departamento: _departamento,
       localidad: _localidad,
+      latitud: _latitud,
+      longitud: _longitud,
     );
 
     if (!mounted) return;
@@ -464,7 +474,7 @@ class _PromocionesPageState extends State<PromocionesPage> {
                         _consumosDelDiaRow(),
                         const SizedBox(height: 8),
                         const Text(
-                          '⚙️ Modo demostración: validación con servicios simulados',
+                          '⚙️ Validación en línea · PIN y consumo aún simulados',
                           style: TextStyle(
                             color: V2Colors.textoSecundario,
                             fontSize: 11,

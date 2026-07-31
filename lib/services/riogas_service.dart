@@ -1217,7 +1217,17 @@ class RioGasService {
         endpoint == 'RegistrarCierre' ||
         endpoint == 'DescargaPedidos' ||
         endpoint == 'DescargaPedidosV2' ||
-        endpoint == 'ValidarDispositivo';
+        endpoint == 'ValidarDispositivo' ||
+        endpoint == 'promociones/ValidarPromo';
+  }
+
+  /// 🎁 Valida un beneficio de promoción (promociones/ValidarPromo).
+  /// Devuelve el JSON crudo o null si no hubo 200. SIN retry offline a
+  /// propósito: re-disparar una validación vieja desde la cola no tiene
+  /// sentido de negocio (está en _shouldSkipFailedSave).
+  static Future<Map<String, dynamic>?> validarPromo(
+      Map<String, dynamic> body) {
+    return _post('promociones/ValidarPromo', body);
   }
 
   static Future<Map<String, dynamic>?> actualizarMoviles(
