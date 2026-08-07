@@ -46,8 +46,8 @@ void main() {
 
       expect(ProteccionPantalla.bloqueando, isTrue,
           reason: 'el chofer con printScreen=N debe seguir protegido');
-      expect(aplicado, [true],
-          reason: 'no hace falta re-aplicar: nunca dejó de bloquear');
+      expect(aplicado, isNot(contains(false)),
+          reason: 'nunca se le debe soltar el flag a la plataforma');
     });
 
     test('dos pantallas anidadas: recién con la última se libera', () async {
@@ -55,10 +55,12 @@ void main() {
       await ProteccionPantalla.adquirir(); // Escáner encima
       await ProteccionPantalla.liberar(); // cierra el escáner
       expect(ProteccionPantalla.bloqueando, isTrue);
+      expect(aplicado, isNot(contains(false)),
+          reason: 'cerrar el escáner no puede desproteger Promos');
 
       await ProteccionPantalla.liberar(); // sale de Promos
       expect(ProteccionPantalla.bloqueando, isFalse);
-      expect(aplicado, [true, false]);
+      expect(aplicado.last, isFalse);
     });
 
     test('liberar de más no deja el contador en negativo', () async {
@@ -72,10 +74,25 @@ void main() {
   });
 
   group('efectos sobre la plataforma', () {
-    test('no re-aplica si el estado efectivo no cambió', () async {
+    test('configurarBase no re-aplica si el estado efectivo no cambió',
+        () async {
       await ProteccionPantalla.adquirir();
       await ProteccionPantalla.configurarBase(true);
       await ProteccionPantalla.configurarBase(true);
+
+      expect(aplicado, [true]);
+    });
+
+    test(
+        'entrar a una pantalla sensible SIEMPRE empuja el flag, aunque el '
+        'contador diga que ya estaba bloqueando', () async {
+      // En Android el FLAG_SECURE es de la Activity: cualquier código ajeno
+      // puede apagarlo por atrás. Si adquirir() confiara en el cache, la
+      // pantalla sensible se abriría desprotegida y en silencio.
+      await ProteccionPantalla.adquirir(); // Promos
+      aplicado.clear();
+
+      await ProteccionPantalla.adquirir(); // el escáner encima
 
       expect(aplicado, [true]);
     });

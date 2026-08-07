@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -59,21 +61,50 @@ class _EscanerCodigoPageState extends State<EscanerCodigoPage>
   /// pantalla: sin esta guarda se harían varios pop y se cerraría Promos.
   bool _yaDevolvio = false;
 
+  /// Evita que dos consultas de permiso se pisen (por ejemplo, el botón
+  /// "Permitir cámara" y un `resumed` casi simultáneos).
+  bool _consultandoPermiso = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // 🔒 El visor muestra el código del cliente: no se puede capturar.
     ProteccionPantalla.adquirir();
-    _pedirPermiso();
+    _resolverPermiso(pedir: true);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ProteccionPantalla.liberar();
-    _controller?.dispose();
+    final c = _controller;
+    _controller = null;
+    unawaited(_cerrarCamara(c));
     super.dispose();
+  }
+
+  /// Cierra la cámara SIN cortar el arranque a la mitad.
+  ///
+  /// `MobileScanner` dispara `start()` sin await, y el plugin guarda el
+  /// `textureId` en un singleton recién cuando el start nativo vuelve. Si se
+  /// dispone antes de eso, tanto `stop()` como `dispose()` salen temprano
+  /// (todavía no hay textureId), el 'stop' nativo nunca se manda y CameraX
+  /// queda bindeado con un textureId huérfano: el próximo escaneo abre en
+  /// negro para siempre. Por eso se espera a que termine de inicializar.
+  static Future<void> _cerrarCamara(MobileScannerController? c) async {
+    if (c == null) return;
+    try {
+      for (var i = 0; i < 60 && !c.value.isInitialized; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      await c.stop();
+    } catch (_) {
+      // La cámara pudo no haber llegado a arrancar: igual hay que disponer.
+    }
+    try {
+      await c.dispose();
+    } catch (_) {}
   }
 
   @override
@@ -81,32 +112,49 @@ class _EscanerCodigoPageState extends State<EscanerCodigoPage>
     if (state == AppLifecycleState.resumed) {
       // Android puede perder el FLAG_SECURE al volver de background.
       ProteccionPantalla.reaplicar();
-      // Si el usuario fue a Ajustes a conceder el permiso, reintentar.
-      if (_permiso != _EstadoPermiso.concedido) _pedirPermiso();
+      // Si el usuario fue a Ajustes a conceder el permiso, RE-CONSULTAR.
+      // Nunca `request()` acá: le saltaría el diálogo del sistema sin haberlo
+      // pedido y, si lo negara, la cámara quedaría bloqueada hasta Ajustes.
+      if (_permiso != _EstadoPermiso.concedido) _resolverPermiso(pedir: false);
     }
   }
 
-  Future<void> _pedirPermiso() async {
-    var estado = await Permission.camera.status;
-    if (estado.isDenied) estado = await Permission.camera.request();
-    if (!mounted) return;
+  /// [pedir] distingue "mostrar el diálogo del sistema" (acción explícita del
+  /// usuario) de "solo mirar en qué estado quedó el permiso".
+  Future<void> _resolverPermiso({required bool pedir}) async {
+    if (_consultandoPermiso) return;
+    _consultandoPermiso = true;
+    try {
+      var estado = await Permission.camera.status;
+      if (pedir && estado.isDenied) estado = await Permission.camera.request();
+      if (!mounted) return;
 
-    final nuevo = estado.isGranted || estado.isLimited
-        ? _EstadoPermiso.concedido
-        : (estado.isPermanentlyDenied || estado.isRestricted)
-            ? _EstadoPermiso.bloqueado
-            : _EstadoPermiso.denegado;
+      final nuevo = estado.isGranted || estado.isLimited
+          ? _EstadoPermiso.concedido
+          : (estado.isPermanentlyDenied || estado.isRestricted)
+              ? _EstadoPermiso.bloqueado
+              : _EstadoPermiso.denegado;
 
-    if (nuevo == _EstadoPermiso.concedido && _controller == null) {
-      _controller = MobileScannerController(
-        detectionSpeed: DetectionSpeed.noDuplicates,
-        formats: widget.modo == ModoIngresoCodigo.barras
-            ? _formatosBarras
-            : _formatosQr,
-        facing: CameraFacing.back,
-      );
+      if (nuevo == _EstadoPermiso.concedido && _controller == null) {
+        _controller = MobileScannerController(
+          detectionSpeed: DetectionSpeed.noDuplicates,
+          formats: widget.modo == ModoIngresoCodigo.barras
+              ? _formatosBarras
+              : _formatosQr,
+          facing: CameraFacing.back,
+        );
+      }
+      if (nuevo != _permiso) setState(() => _permiso = nuevo);
+    } catch (e) {
+      print('⚠️ [ESCANER] No se pudo resolver el permiso de cámara: $e');
+      // Nunca dejar la pantalla colgada en el spinner: el estado "denegado"
+      // al menos ofrece el botón para reintentar a mano.
+      if (mounted && _permiso == _EstadoPermiso.consultando) {
+        setState(() => _permiso = _EstadoPermiso.denegado);
+      }
+    } finally {
+      _consultandoPermiso = false;
     }
-    if (nuevo != _permiso) setState(() => _permiso = nuevo);
   }
 
   void _onDetect(BarcodeCapture captura) {
@@ -121,7 +169,13 @@ class _EscanerCodigoPageState extends State<EscanerCodigoPage>
       _yaDevolvio = true;
       HapticFeedback.mediumImpact();
       _controller?.stop();
-      if (mounted) Navigator.of(context).pop(codigo);
+      // `isCurrent` es clave: si el usuario ya tocó Atrás, esta ruta está
+      // saliendo pero el State sigue montado y la cámara sigue analizando.
+      // Un pop en esa ventana cerraría la pantalla de ABAJO.
+      final ruta = ModalRoute.of(context);
+      if (mounted && ruta != null && ruta.isCurrent) {
+        Navigator.of(context).pop(codigo);
+      }
       return;
     }
   }
@@ -254,7 +308,9 @@ class _EscanerCodigoPageState extends State<EscanerCodigoPage>
       accion: SizedBox(
         height: 48,
         child: ElevatedButton.icon(
-          onPressed: bloqueado ? openAppSettings : _pedirPermiso,
+          onPressed: bloqueado
+              ? openAppSettings
+              : () => _resolverPermiso(pedir: true),
           style: ElevatedButton.styleFrom(
             backgroundColor: V2Colors.accion,
             foregroundColor: Colors.white,

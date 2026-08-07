@@ -12,8 +12,6 @@ import '../services/riogas_service.dart'; // Import the RioGasService
 import 'package:geolocator/geolocator.dart'; // Import Geolocator for getting current location
 import '../services/location_service.dart'; // Import your location service
 import '../services/pedido_lectura_service.dart'; // 📦 Lógica de LECTURA/DESCARGA compartida con Home V2
-import 'dart:io' show Platform;
-import 'package:screen_protector/screen_protector.dart';
 
 class PendingOrdersPage extends StatefulWidget {
   @override
@@ -51,8 +49,9 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
   void initState() {
     super.initState();
 
-    // ✅ Bloquear capturas (FLAG_SECURE) controlado por printScreen (solo Android)
-    _enableScreenShield();
+    // 🔒 El anti-captura por flag `printScreen` lo aplica ProteccionPantalla
+    // desde main.dart para toda la sesión: repetirlo acá apagaba el
+    // FLAG_SECURE por fuera del servicio y dejaba un listener sin remover.
 
     print('🔧 PendingOrdersPage: initState() called - Instance: ${hashCode}');
     _initializeFirebase();
@@ -126,41 +125,6 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
     // Ya no es necesario inicializar ni sincronizar pedidosBox aquí, la lógica está centralizada en PersistentStreamManager
   }
 
-  Future<void> _enableScreenShield() async {
-    if (!Platform.isAndroid) return;
-
-    final manager = _streamManager;
-
-    Future<void> apply(DocumentSnapshot? doc) async {
-      try {
-        dynamic val;
-        if (doc != null) {
-          try {
-            val = doc.get('printScreen');
-          } catch (_) {
-            final data = doc.data();
-            if (data is Map<String, dynamic>) val = data['printScreen'];
-          }
-        }
-        // 'S' => permitir (OFF), 'N' => bloquear (ON), null/otros => permitir (OFF)
-        final bool shouldBlock = (val == 'N');
-        if (shouldBlock) {
-          await ScreenProtector.preventScreenshotOn();
-          print('🛡️ Screenshot bloqueado (Android)');
-        } else {
-          await ScreenProtector.preventScreenshotOff();
-          print('🛡️ Screenshot permitido (Android)');
-        }
-      } catch (e) {
-        print('❌ Error toggling ScreenProtector: $e');
-      }
-    }
-
-    await apply(manager.movilNotifier.value);
-    manager.movilNotifier.addListener(() {
-      apply(manager.movilNotifier.value);
-    });
-  }
 
   Map<String, Color> colorMap = {
     "Red": Colors.red,

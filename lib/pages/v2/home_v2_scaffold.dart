@@ -62,6 +62,11 @@ class _HomeV2ScaffoldState extends State<HomeV2Scaffold> {
           PromocionesPage(
             messageCountNotifier: widget.messageCountNotifier,
             onEstadoTap: widget.onEstadoTap,
+            // 🔒 El IndexedStack MONTA las tres solapas de entrada: sin esto,
+            // Promos pediría el anti-captura apenas arranca el home y el
+            // chofer no podría sacar una captura de Pedidos o del Mapa nunca
+            // más (anulando el flag printScreen de operaciones).
+            enPantalla: _tab == 2,
           ),
         ],
       ),

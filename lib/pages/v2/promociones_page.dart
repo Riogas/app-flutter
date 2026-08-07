@@ -39,11 +39,19 @@ class PromocionesPage extends StatefulWidget {
   /// sin píldora de móvil, sin mensajes y con el menú del avatar reducido.
   final bool modoRestringido;
 
+  /// 🔒 Si la pantalla está realmente a la vista. Dentro del `IndexedStack`
+  /// del home V2 los tres tabs se construyen juntos, así que estar montada no
+  /// alcanza para pedir el anti-captura: se pediría desde el arranque y
+  /// quedaría bloqueando Pedidos y Mapa también. Default true para los usos
+  /// donde la página ES la pantalla (modo restringido / navegación directa).
+  final bool enPantalla;
+
   const PromocionesPage({
     super.key,
     this.messageCountNotifier,
     this.onEstadoTap,
     this.modoRestringido = false,
+    this.enPantalla = true,
   });
 
   @override
@@ -88,8 +96,11 @@ class _PromocionesPageState extends State<PromocionesPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // 🔒 Datos sensibles en pantalla (códigos de beneficio, datos del
-    // cliente): no se permite screenshot ni grabación mientras esté montada.
-    ProteccionPantalla.adquirir();
+    // cliente): no se permite screenshot ni grabación mientras se la ve.
+    if (widget.enPantalla) {
+      _protegiendo = true;
+      ProteccionPantalla.adquirir();
+    }
     _marcarVistas();
     PromoConsumosStore().init();
     // Refrescar habilitación del botón Validar al tipear
@@ -98,10 +109,30 @@ class _PromocionesPageState extends State<PromocionesPage>
     }
   }
 
+  /// Si esta instancia tiene tomado el anti-captura. Necesario para que el
+  /// contador quede balanceado: se adquiere y libera al entrar/salir del tab,
+  /// no en initState/dispose.
+  bool _protegiendo = false;
+
+  @override
+  void didUpdateWidget(PromocionesPage old) {
+    super.didUpdateWidget(old);
+    if (widget.enPantalla && !_protegiendo) {
+      _protegiendo = true;
+      ProteccionPantalla.adquirir();
+    } else if (!widget.enPantalla && _protegiendo) {
+      _protegiendo = false;
+      ProteccionPantalla.liberar();
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ProteccionPantalla.liberar();
+    if (_protegiendo) {
+      _protegiendo = false;
+      ProteccionPantalla.liberar();
+    }
     _codigoCtrl.dispose();
     _telCtrl.dispose();
     _nombreCtrl.dispose();
@@ -1327,9 +1358,11 @@ class _PromocionesPageState extends State<PromocionesPage>
 
     _codigoCtrl.text = codigo;
     setState(() {
-      // Una lectura nueva reabre el formulario: el resultado anterior ya no
-      // corresponde a este código.
-      if (_fase == _Fase.error) {
+      // Una lectura nueva invalida CUALQUIER resultado anterior, no solo un
+      // error: si quedara la tarjeta verde de la validación previa, el botón
+      // "Consumir" mandaría el código nuevo contra el beneficio del cliente
+      // anterior (y el registro local para anular quedaría cruzado).
+      if (_fase != _Fase.consumido) {
         _fase = _Fase.inicial;
         _mensajeResultado = '';
       }

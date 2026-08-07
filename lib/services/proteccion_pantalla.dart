@@ -43,8 +43,15 @@ class ProteccionPantalla {
   }
 
   /// Entra una pantalla sensible.
+  ///
+  /// Empuja el flag SIEMPRE, sin mirar el cache: en Android el `FLAG_SECURE`
+  /// es de la Activity, así que cualquier código ajeno pudo apagarlo por
+  /// atrás mientras el contador seguía diciendo que estábamos bloqueando.
+  /// Confiar en el cache acá abriría la pantalla sensible desprotegida y en
+  /// silencio; re-aplicar cuesta una llamada al plugin.
   static Future<void> adquirir() async {
     _pantallas++;
+    _ultimoAplicado = null;
     await _sincronizar();
   }
 

@@ -13,8 +13,6 @@ import '../utils/screenBlock.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import '../utils/constantes.dart';
-import 'dart:io' show Platform;
-import 'package:screen_protector/screen_protector.dart';
 import '../services/debug_config_manager.dart'; // 🆕 Debug logging
 
 class OrderDetailPage extends StatefulWidget {
@@ -78,14 +76,15 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   // ✅ Flag para prevenir múltiples llamadas simultáneas de finalización
   bool _isFinalizing = false;
 
-  VoidCallback? _movilShieldListener; // para remover listener
-
   @override
   void initState() {
     super.initState();
 
-    // ✅ Bloquear capturas (FLAG_SECURE) controlado por printScreen (solo Android)
-    _enableScreenShield();
+    // 🔒 El anti-captura por flag `printScreen` lo aplica ProteccionPantalla
+    // desde main.dart, para toda la sesión. Acá se hacía otra vez y por fuera
+    // del servicio: apagaba el FLAG_SECURE de la Activity a espaldas de las
+    // pantallas sensibles (Promociones/escáner) y encima dejaba un listener
+    // colgado por cada pedido abierto.
 
     // 🆕 Verificar y reiniciar servicio de coordenadas si está muerto
     _checkAndRestartLocationService();
@@ -344,51 +343,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
   @override
   void dispose() {
-    // Remueve listener de printScreen
-    if (_movilShieldListener != null) {
-      _persistentStreamManager.movilNotifier
-          .removeListener(_movilShieldListener!);
-      _movilShieldListener = null;
-    }
     _movilSubscription?.cancel();
     _observacionesController.dispose();
     super.dispose();
-  }
-
-  Future<void> _enableScreenShield() async {
-    if (!Platform.isAndroid) return;
-
-    final manager = _persistentStreamManager;
-
-    Future<void> apply(DocumentSnapshot? doc) async {
-      try {
-        dynamic val;
-        if (doc != null) {
-          try {
-            val = doc.get('printScreen');
-          } catch (_) {
-            final data = doc.data();
-            if (data is Map<String, dynamic>) val = data['printScreen'];
-          }
-        }
-        // 'S' => permitir (OFF), 'N' => bloquear (ON), null/otros => permitir (OFF)
-        final bool shouldBlock = (val == 'N');
-        if (shouldBlock) {
-          await ScreenProtector.preventScreenshotOn();
-          print('🛡️ Screenshot bloqueado (Android)');
-        } else {
-          await ScreenProtector.preventScreenshotOff();
-          print('🛡️ Screenshot permitido (Android)');
-        }
-      } catch (e) {
-        print('❌ Error toggling ScreenProtector: $e');
-      }
-    }
-
-    await apply(manager.movilNotifier.value);
-    manager.movilNotifier.addListener(() {
-      apply(manager.movilNotifier.value);
-    });
   }
 
   void _calcularDistanciaDesdeUbicacionCliente() async {
