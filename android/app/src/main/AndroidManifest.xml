@@ -33,6 +33,13 @@
 
     <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
 
+    <!-- 📷 Escaneo del código de la promoción (QR / código de barras).
+         La cámara es opcional: los equipos sin cámara siguen pudiendo usar
+         las promociones de carga manual. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+
     <!-- ✅ Permiso para utilizar datos biometricos -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />

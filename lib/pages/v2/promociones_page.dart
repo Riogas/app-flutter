@@ -10,8 +10,11 @@ import 'package:hive/hive.dart';
 import 'package:http/http.dart' as http;
 
 import '../../services/beneficios_service.dart';
+import '../../services/modo_ingreso_codigo.dart';
 import '../../services/persistent_stream_manager.dart';
 import '../../services/promo_consumos_store.dart';
+import '../../services/proteccion_pantalla.dart';
+import 'escaner_codigo_page.dart';
 import 'v2_data.dart';
 import 'v2_header.dart';
 import 'v2_theme.dart';
@@ -57,7 +60,8 @@ enum _Fase {
   consumido,
 }
 
-class _PromocionesPageState extends State<PromocionesPage> {
+class _PromocionesPageState extends State<PromocionesPage>
+    with WidgetsBindingObserver {
   final _streamManager = PersistentStreamManager();
   final _service = BeneficiosService();
 
@@ -82,6 +86,10 @@ class _PromocionesPageState extends State<PromocionesPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // 🔒 Datos sensibles en pantalla (códigos de beneficio, datos del
+    // cliente): no se permite screenshot ni grabación mientras esté montada.
+    ProteccionPantalla.adquirir();
     _marcarVistas();
     PromoConsumosStore().init();
     // Refrescar habilitación del botón Validar al tipear
@@ -92,11 +100,19 @@ class _PromocionesPageState extends State<PromocionesPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    ProteccionPantalla.liberar();
     _codigoCtrl.dispose();
     _telCtrl.dispose();
     _nombreCtrl.dispose();
     _auxCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Algunos equipos pierden el FLAG_SECURE al volver de background.
+    if (state == AppLifecycleState.resumed) ProteccionPantalla.reaplicar();
   }
 
   /// Apaga el badge del tab (misma caja que antes)
@@ -116,7 +132,22 @@ class _PromocionesPageState extends State<PromocionesPage> {
 
   String _label(String? campo) => (_promo[campo ?? ''] ?? '').toString().trim();
 
-  bool get _tieneCodigo => _label('LabelCodCliente').isNotEmpty;
+  /// 📷 Cómo carga el usuario el código: tecleado, QR o código de barras.
+  ModoIngresoCodigo get _modoCodigo =>
+      ModoIngresoCodigo.desde(_promo[ModoIngresoCodigo.campoFirestore]);
+
+  /// Con escaneo el campo se muestra SIEMPRE: si la promo pide cámara pero
+  /// olvidaron cargar `LabelCodCliente`, ocultarlo dejaría la promo sin forma
+  /// de validarse. Para el modo manual se respeta la regla de siempre.
+  bool get _tieneCodigo =>
+      _label('LabelCodCliente').isNotEmpty || _modoCodigo.esEscaneo;
+
+  /// Label del campo código, con respaldo según el modo.
+  String get _labelCodigo {
+    final l = _label('LabelCodCliente');
+    return l.isNotEmpty ? l : _modoCodigo.labelPorDefecto;
+  }
+
   bool get _tieneTel => _label('LabelCodTelCliente').isNotEmpty;
   bool get _tieneNombre => _label('LabelNomCliente').isNotEmpty;
   bool get _tieneAux => _label('LabelAuxIn1').isNotEmpty;
@@ -1105,13 +1136,18 @@ class _PromocionesPageState extends State<PromocionesPage> {
         _tieneCodigo,
         _codigoReq,
         () => _bloqueCampo(
-              label: _label('LabelCodCliente'),
+              label: _labelCodigo,
               requerido: _codigoReq,
-              campo: _campoTexto(
-                controller: _codigoCtrl,
-                hint: 'Ingresá el código de la promoción',
-                icon: Icons.qr_code_2,
-              ),
+              // 📷 Según `ComoSeIngresaElCodigo`: tecleado o cámara. En ambos
+              // casos el valor termina en `_codigoCtrl`, así que la validación
+              // y el consumo no se enteran de la diferencia.
+              campo: _modoCodigo.esEscaneo
+                  ? _campoEscaneo()
+                  : _campoTexto(
+                      controller: _codigoCtrl,
+                      hint: 'Ingresá el código de la promoción',
+                      icon: Icons.qr_code_2,
+                    ),
             ));
     agregar(
         _tieneTel,
@@ -1265,6 +1301,116 @@ class _PromocionesPageState extends State<PromocionesPage> {
           ),
         ),
       ],
+    );
+  }
+
+  // ── Ingreso del código por cámara (QR / código de barras) ───────────────
+
+  /// Abre el escáner y deja lo leído en `_codigoCtrl`, el mismo lugar donde
+  /// escribe el campo de texto: para el resto de la pantalla es indistinto de
+  /// dónde salió el código.
+  Future<void> _escanearCodigo() async {
+    final modo = _modoCodigo;
+    final codigo = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => EscanerCodigoPage(
+          modo: modo,
+          promo: _label('NombreCombo'),
+        ),
+      ),
+    );
+    if (!mounted || codigo == null) return;
+
+    // Cambiar de promo mientras el escáner estaba abierto invalidaría la
+    // lectura: se descarta en vez de escribirla en la promo equivocada.
+    if (_modoCodigo != modo) return;
+
+    _codigoCtrl.text = codigo;
+    setState(() {
+      // Una lectura nueva reabre el formulario: el resultado anterior ya no
+      // corresponde a este código.
+      if (_fase == _Fase.error) {
+        _fase = _Fase.inicial;
+        _mensajeResultado = '';
+      }
+    });
+  }
+
+  Widget _campoEscaneo() {
+    final modo = _modoCodigo;
+    final leido = _codigoCtrl.text.trim();
+    final icono = modo == ModoIngresoCodigo.barras
+        ? Icons.barcode_reader
+        : Icons.qr_code_scanner;
+
+    if (leido.isEmpty) {
+      return SizedBox(
+        width: double.infinity,
+        height: 54,
+        child: ElevatedButton.icon(
+          onPressed: _escanearCodigo,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: V2Colors.accion,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            textStyle:
+                const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+          ),
+          icon: Icon(icono, size: 22),
+          label: Text(modo.textoBoton),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F8FB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: V2Colors.verde, width: 1.4),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle, color: V2Colors.verde, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Código escaneado',
+                  style: TextStyle(
+                    color: V2Colors.textoSecundario,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  leido,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: V2Colors.textoPrimario,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Escanear de nuevo',
+            onPressed: _escanearCodigo,
+            icon: const Icon(Icons.refresh, color: V2Colors.accion),
+          ),
+        ],
+      ),
     );
   }
 

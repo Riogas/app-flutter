@@ -37,7 +37,7 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'services/location_service.dart'; // 🔹 Importamos LocationService
 import 'services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogSyncService
-import 'package:screen_protector/screen_protector.dart';
+import 'services/proteccion_pantalla.dart'; // 🔒 Anti-captura (flag + pantallas)
 import 'services/modo_restringido.dart'; // 🏪 Perfil comercio (escenario 9998)
 import 'services/remote_logout_listener.dart'; // 🚨 Importar listener de logout remoto
 import 'services/fcm_token_manager.dart'; // 🔑 Importar FCM Token Manager
@@ -164,11 +164,10 @@ Future<void> _setupScreenProtectorByMovilStream() async {
         return; // evita llamadas repetidas
       _screenSecureEnabled = shouldBlock;
 
-      if (shouldBlock) {
-        await ScreenProtector.preventScreenshotOn();
-      } else {
-        await ScreenProtector.preventScreenshotOff();
-      }
+      // 🔒 Vía ProteccionPantalla, no directo al plugin: las pantallas
+      // sensibles (Promociones, escáner) también piden el bloqueo y no deben
+      // pisarse con este flag en ninguno de los dos sentidos.
+      await ProteccionPantalla.configurarBase(shouldBlock);
     } catch (_) {}
   }
 

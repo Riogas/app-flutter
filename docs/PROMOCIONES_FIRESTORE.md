@@ -16,7 +16,8 @@ etc.). La configuración de cada promoción viene de la colección Firestore
 | `FechaDesde` / `FechaHasta` | timestamp | Vigencia; fuera del rango la promo no aparece |
 | `EscenariosHabilitados` | array<string> | `["*"]` = todos; sino solo esos escenarios |
 | `AgenciasHabilitadas` | array<string> | `["*"]` = todas (⚠️ aún no se evalúa: la app no conoce la agencia) |
-| `LabelCodCliente` | string | Label del campo código (ej. "PIN Antel"); vacío/ausente = campo oculto |
+| `LabelCodCliente` | string | Label del campo código (ej. "PIN Antel"); vacío/ausente = campo oculto (salvo que `ComoSeIngresaElCodigo` pida cámara) |
+| `ComoSeIngresaElCodigo` | string | Cómo carga el código el usuario: `Manual` (campo de texto, default), `QR` o `CodigoBarras` (botón que abre la cámara). Ver abajo |
 | `LabelCodTelCliente` | string | Label del campo teléfono; vacío = oculto |
 | `LabelNomCliente` | string | Label del campo nombre; vacío = oculto |
 | `LabelAuxIn1` | string | Label del campo auxiliar/observaciones; vacío = oculto |
@@ -30,6 +31,40 @@ etc.). La configuración de cada promoción viene de la colección Firestore
 **Reglas de renderizado:** un campo se muestra solo si su `Label*` tiene
 texto. Código y teléfono son requeridos por defecto; nombre y auxiliar son
 opcionales por defecto. Los `Req*` explícitos ganan.
+
+## 📷 `ComoSeIngresaElCodigo` — carga manual vs. cámara
+
+| Valor | Qué ve el usuario |
+|---|---|
+| `Manual` (o vacío/ausente/desconocido) | Campo de texto, como siempre |
+| `QR` | Botón **"Escanear código QR"** → cámara con marco cuadrado |
+| `CodigoBarras` | Botón **"Escanear código de barras"** → cámara con marco apaisado (Code128/39/93, Codabar, EAN-8/13, ITF, UPC-A/E) |
+
+El parseo (`lib/services/modo_ingreso_codigo.dart`) es tolerante: ignora
+mayúsculas, acentos, espacios y guiones (`"Código de Barras"`,
+`CODIGO_BARRAS` y `barcode` son todos `CodigoBarras`). **Un valor
+desconocido cae en `Manual`**, para que un error de carga degrade a un campo
+tecleable en vez de dejar la promoción inusable.
+
+Cambia solo *cómo se obtiene* el código: lo escaneado viaja en el mismo
+`CodigoCliente` de `promociones/ValidarPromo`, y la app **no interpreta el
+contenido** (puede ser un número, una URL o un JSON: quien decide si sirve es
+el servicio). Si el modo es de escaneo y falta `LabelCodCliente`, el campo se
+muestra igual con un label por defecto.
+
+Requisitos de dispositivo: permiso de cámara (se pide al abrir el escáner,
+con acceso a los ajustes si quedó denegado para siempre) y una cámara
+trasera. El reconocimiento es **on-device** (MLKit embebido): funciona sin
+datos y no manda la imagen a ningún lado.
+
+## 🔒 Anti-captura
+
+La pantalla de Promociones y el escáner bloquean screenshot y grabación de
+pantalla mientras están abiertos (`FLAG_SECURE` vía
+`lib/services/proteccion_pantalla.dart`), porque muestran códigos de
+beneficio y datos del cliente. Es independiente del flag `printScreen` del
+móvil: ambas fuentes conviven con un contador, así que salir de Promos no
+desprotege al chofer que ya lo tenía activado por configuración.
 
 ## APIs (⚠️ SIMULADAS hoy)
 
