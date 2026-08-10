@@ -13,6 +13,7 @@ import '../../services/beneficios_service.dart';
 import '../../services/modo_ingreso_codigo.dart';
 import '../../services/persistent_stream_manager.dart';
 import '../../services/promo_consumos_store.dart';
+import '../../services/promo_doc.dart';
 import '../../services/proteccion_pantalla.dart';
 import 'escaner_codigo_page.dart';
 import 'v2_data.dart';
@@ -161,7 +162,13 @@ class _PromocionesPageState extends State<PromocionesPage>
   Map<String, dynamic> get _promo =>
       (_promoDoc?.data() as Map<String, dynamic>?) ?? {};
 
-  String _label(String? campo) => (_promo[campo ?? ''] ?? '').toString().trim();
+  /// Los documentos se cargan a mano y la grafía de las claves varía
+  /// (`idInterno` vs `IdInterno`), así que la lectura tolera mayúsculas.
+  String _label(String? campo) => PromoDoc.texto(_promo, campo ?? '');
+
+  /// Id de la campaña en SGM. Si el documento no lo trae, queda en 0 y el
+  /// servicio responde "Esta agencia está incompleta en SGM".
+  int get _idCampana => PromoDoc.idInterno(_promo);
 
   /// 📷 Cómo carga el usuario el código: tecleado, QR o código de barras.
   ModoIngresoCodigo get _modoCodigo =>
@@ -295,8 +302,7 @@ class _PromocionesPageState extends State<PromocionesPage>
 
     final ident = await _identidad();
     final res = await _service.validar(
-      promoIdInterno:
-          int.tryParse(_promo['IdInterno']?.toString() ?? '') ?? 0,
+      promoIdInterno: _idCampana,
       promoNombre: _label('NombreCombo'),
       codigo: _tieneCodigo ? _codigoCtrl.text.trim() : null,
       telefono: _tieneTel ? _telCtrl.text.trim() : null,
@@ -409,8 +415,7 @@ class _PromocionesPageState extends State<PromocionesPage>
 
     final ident = await _identidad();
     final res = await _service.consumir(
-      promoIdInterno:
-          int.tryParse(_promo['IdInterno']?.toString() ?? '') ?? 0,
+      promoIdInterno: _idCampana,
       promoNombre: _label('NombreCombo'),
       codigo: _codigoCtrl.text.trim(),
       telefono: _telCtrl.text.trim(),
@@ -435,8 +440,7 @@ class _PromocionesPageState extends State<PromocionesPage>
     if (res.ok) {
       await PromoConsumosStore().registrar(
         promo: _label('NombreCombo'),
-        idInterno:
-            int.tryParse(_promo['IdInterno']?.toString() ?? '') ?? 0,
+        idInterno: _idCampana,
         codigo: _codigoCtrl.text.trim(),
         telefono: _telCtrl.text.trim(),
         cliente: _nombreCtrl.text.trim(),
