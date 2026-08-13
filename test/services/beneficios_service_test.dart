@@ -36,6 +36,7 @@ void main() {
         'CampoIn2': '',
         'INAux1': '9998',
         'INAux2': '',
+        'movil': 9998,
       });
       // El token NO va acá: lo inyecta RioGasService._post.
       expect(body.containsKey('token'), isFalse);
@@ -43,6 +44,33 @@ void main() {
       // escenarioid y GeneXus responde 400 ante propiedades desconocidas.
       // Cuando GX publique la versión con escenarioid, re-agregarlo acá.
       expect(body.containsKey('escenarioid'), isFalse);
+    });
+
+    test('movil viaja como número, además del INAux1 histórico', () {
+      final body = BeneficiosService.buildValidarPromoBody(
+        escenario: '9998', usuario: 'u', deviceId: 'd', movil: '336',
+        idCampana: 86,
+      );
+      expect(body['movil'], 336);
+      expect(body['INAux1'], '336', reason: 'INAux1 se mantiene como estaba');
+    });
+
+    test('movil tolera el id del documento de Firestore ("Moviles-336")', () {
+      final body = BeneficiosService.buildValidarPromoBody(
+        escenario: '9998', usuario: 'u', deviceId: 'd', movil: 'Moviles-336',
+        idCampana: 86,
+      );
+      expect(body['movil'], 336);
+    });
+
+    test('movil vacío o no numérico → 0', () {
+      for (final m in ['', '  ', 'sin numero']) {
+        final body = BeneficiosService.buildValidarPromoBody(
+          escenario: '9998', usuario: 'u', deviceId: 'd', movil: m,
+          idCampana: 86,
+        );
+        expect(body['movil'], 0, reason: 'movil: "$m"');
+      }
     });
 
     test('opcionales null → ""', () {

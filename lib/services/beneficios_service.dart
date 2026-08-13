@@ -147,8 +147,17 @@ class BeneficiosService {
       'CampoIn2': '',
       'INAux1': movil,
       'INAux2': '',
+      // 🚚 Campo `movil` del contrato (lo declara el servicio desde el build
+      // del 2026-08-13). Va como número; `INAux1` se mantiene con el mismo
+      // dato en texto para no cambiar lo que GeneXus ya venía consumiendo.
+      'movil': _soloDigitos(movil),
     };
   }
+
+  /// El móvil llega como texto y a veces con el prefijo del documento de
+  /// Firestore (`Moviles-336`), así que se queda con los dígitos. 0 si no hay.
+  static int _soloDigitos(String v) =>
+      int.tryParse(v.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
 
   Future<BeneficioValidacion> validar({
     required int promoIdInterno,
