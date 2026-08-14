@@ -256,32 +256,69 @@ class _PromocionesPageState extends State<PromocionesPage>
       _latitud = p.latitude.toString();
       _longitud = p.longitude.toString();
 
-      final resp = await http
-          .get(Uri.parse(
-              'http://nominatim.riogas.uy/reverse?lat=${p.latitude}&lon=${p.longitude}&format=json'))
-          .timeout(const Duration(seconds: 8));
-      if (resp.statusCode != 200) return;
-
-      final data = jsonDecode(resp.body) as Map<String, dynamic>;
-      final addr = (data['address'] as Map<String, dynamic>?) ?? {};
-      final dep = (addr['state'] ?? addr['county'] ?? '').toString();
-      final loc = (addr['city'] ??
-              addr['town'] ??
-              addr['village'] ??
-              addr['municipality'] ??
-              addr['suburb'] ??
-              '')
-          .toString();
-
-      print('🌍 [PROMOS] Ubicación administrativa: $dep / $loc');
-      if (mounted) {
-        setState(() {
-          _departamento = dep;
-          _localidad = loc;
-        });
-      }
+      await _reverseGeocode(p.latitude, p.longitude);
     } catch (e) {
       print('⚠️ [PROMOS] Error obteniendo departamento/localidad: $e');
+    }
+  }
+
+  /// 🌍 Geolocalización inversa contra el Nominatim propio de RioGas:
+  /// actualiza departamento/localidad para las coordenadas dadas.
+  Future<void> _reverseGeocode(double lat, double lon) async {
+    final resp = await http
+        .get(Uri.parse(
+            'http://nominatim.riogas.uy/reverse?lat=$lat&lon=$lon&format=json'))
+        .timeout(const Duration(seconds: 8));
+    if (resp.statusCode != 200) return;
+
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    final addr = (data['address'] as Map<String, dynamic>?) ?? {};
+    final dep = (addr['state'] ?? addr['county'] ?? '').toString();
+    final loc = (addr['city'] ??
+            addr['town'] ??
+            addr['village'] ??
+            addr['municipality'] ??
+            addr['suburb'] ??
+            '')
+        .toString();
+
+    print('🌍 [PROMOS] Ubicación administrativa: $dep / $loc');
+    if (mounted) {
+      setState(() {
+        _departamento = dep;
+        _localidad = loc;
+      });
+    }
+  }
+
+  /// 📍 Fix FRESCO al apretar Consumir: el usuario pudo validar en un lugar
+  /// y consumir en otro, así que acá NO sirve el último conocido — se fuerza
+  /// una lectura nueva del GPS y recién si no responde a tiempo se cae al
+  /// último conocido (y si tampoco hay, quedan las coordenadas de la
+  /// validación). Después refresca departamento/localidad por geoinversa.
+  /// Nunca lanza: sin GPS el consumo sigue igual.
+  Future<void> _capturarGeoFresca() async {
+    try {
+      final p = await Geolocator.getCurrentPosition(
+          timeLimit: const Duration(seconds: 8));
+      _latitud = p.latitude.toString();
+      _longitud = p.longitude.toString();
+      print('📍 [CONSUMIR] Fix fresco: $_latitud, $_longitud '
+          '(±${p.accuracy.toStringAsFixed(0)}m)');
+      try {
+        await _reverseGeocode(p.latitude, p.longitude);
+      } catch (e) {
+        print('⚠️ [CONSUMIR] Geoinversa falló ($e); sigo con dep/loc previos');
+      }
+    } catch (e) {
+      print('⚠️ [CONSUMIR] Sin fix fresco ($e); pruebo último conocido');
+      try {
+        final p = await Geolocator.getLastKnownPosition();
+        if (p != null) {
+          _latitud = p.latitude.toString();
+          _longitud = p.longitude.toString();
+        }
+      } catch (_) {}
     }
   }
 
@@ -419,15 +456,26 @@ class _PromocionesPageState extends State<PromocionesPage>
 
     setState(() => _fase = _Fase.consumiendo);
 
+    // 📍 Coordenadas EXACTAS del momento del consumo (no las de la
+    // validación): fix fresco + geoinversa, con fallbacks. Van en el body
+    // que ya queda armado para el endpoint real.
+    await _capturarGeoFresca();
+
     final ident = await _identidad();
     final res = await _service.consumir(
       promoIdInterno: _idCampana,
       promoNombre: _label('NombreCombo'),
       codigo: _codigoCtrl.text.trim(),
       telefono: _telCtrl.text.trim(),
+      nombre: _nombreCtrl.text.trim(),
       movil: ident['movil']!,
       usuario: ident['usuario']!,
       escenario: ident['escenario']!,
+      deviceId: ident['deviceId']!,
+      departamento: _departamento,
+      localidad: _localidad,
+      latitud: _latitud,
+      longitud: _longitud,
     );
 
     if (!mounted) return;

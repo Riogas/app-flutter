@@ -159,6 +159,49 @@ class BeneficiosService {
   static int _soloDigitos(String v) =>
       int.tryParse(v.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
 
+  /// 🔌 Body BORRADOR de `promociones/ConsumirPromo` — el endpoint AÚN NO
+  /// EXISTE en GeneXus. Espeja el casing raro del contrato de ValidarPromo
+  /// (`Latitud` con mayúscula, `longitud` sin ella) y suma `NroTrn` (la
+  /// transacción que devolvió la validación) para que el server cruce el
+  /// consumo con su validación. `Latitud`/`longitud` acá son las FRESCAS
+  /// capturadas al apretar Consumir, no las de la validación.
+  ///
+  /// ⚠️ ANTES DE ENGANCHAR: ajustar campos y nombres EXACTO al contrato que
+  /// publique GeneXus — GX responde 400 ante propiedades desconocidas (ya
+  /// mordió con `escenarioid` en ValidarPromo).
+  static Map<String, dynamic> buildConsumirPromoBody({
+    required String escenario,
+    required String usuario,
+    required String deviceId,
+    required String movil,
+    required int idCampana,
+    required int nroTrn,
+    String? departamento,
+    String? localidad,
+    String? latitud,
+    String? longitud,
+    String? codigoCliente,
+    String? nombreCliente,
+    String? telCliente,
+  }) {
+    return {
+      'usuario': usuario,
+      'DeviceId': deviceId,
+      'Departamento': departamento ?? '',
+      'Localidad': localidad ?? '',
+      'Latitud': latitud ?? '',
+      'longitud': longitud ?? '',
+      'idCampana': idCampana,
+      'NroTrn': nroTrn,
+      'CodigoCliente': codigoCliente ?? '',
+      'nombreCliente': nombreCliente ?? '',
+      'telCliente': telCliente ?? '',
+      'INAux1': movil,
+      'INAux2': '',
+      'movil': _soloDigitos(movil),
+    };
+  }
+
   Future<BeneficioValidacion> validar({
     required int promoIdInterno,
     required String promoNombre,
@@ -262,11 +305,42 @@ class BeneficiosService {
     required String promoNombre,
     String? codigo,
     String? telefono,
+    String? nombre,
     required String movil,
     required String usuario,
     required String escenario,
+    String? deviceId,
+    // 📍 Ubicación FRESCA capturada al apretar Consumir (la trae la página)
+    String? departamento,
+    String? localidad,
+    String? latitud,
+    String? longitud,
   }) async {
-    // TODO(GeneXus): llamar al endpoint real de consumo del beneficio.
+    // 🔌 El body ya queda armado y logueado en cada consumo, así el enganche
+    // al endpoint real es reemplazar la simulación por las 2 líneas de abajo.
+    final body = buildConsumirPromoBody(
+      escenario: escenario,
+      usuario: usuario,
+      deviceId: deviceId ?? '',
+      movil: movil,
+      idCampana: promoIdInterno,
+      nroTrn: _ultimoNroTrn,
+      departamento: departamento,
+      localidad: localidad,
+      latitud: latitud,
+      longitud: longitud,
+      codigoCliente: codigo,
+      nombreCliente: nombre,
+      telCliente: telefono,
+    );
+    print('🎁 [CONSUMIR] Body listo para promociones/ConsumirPromo '
+        '(endpoint aún no publicado, consumo SIMULADO): $body');
+
+    // TODO(GeneXus): cuando exista el endpoint (nombre a confirmar):
+    //   final resp = await RioGasService.consumirPromo(body);
+    //   → mapear resp a BeneficioConsumo (OK/message/autorización) y borrar
+    //     la simulación de abajo. Revisar antes buildConsumirPromoBody
+    //     contra el contrato publicado (GX da 400 con propiedades de más).
     // Mientras tanto la autorización local referencia el NroTrn REAL que
     // devolvió ValidarPromo, para poder cruzarlo con GeneXus.
     await Future.delayed(const Duration(milliseconds: 1200));

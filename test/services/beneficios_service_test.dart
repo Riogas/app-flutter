@@ -93,6 +93,66 @@ void main() {
     });
   });
 
+  group('BeneficiosService.buildConsumirPromoBody', () {
+    test('espeja el casing del contrato de ValidarPromo y suma NroTrn', () {
+      final body = BeneficiosService.buildConsumirPromoBody(
+        escenario: '9998',
+        usuario: '49618553',
+        deviceId: 'b00a68bef3451313',
+        movil: '9998',
+        idCampana: 17,
+        nroTrn: 4512,
+        departamento: 'Montevideo',
+        localidad: 'Montevideo',
+        latitud: '-34.8701',
+        longitud: '-56.1912',
+        codigoCliente: '692757',
+        nombreCliente: 'Juan Pérez',
+        telCliente: '098753486',
+      );
+
+      expect(body, {
+        'usuario': '49618553',
+        'DeviceId': 'b00a68bef3451313',
+        'Departamento': 'Montevideo',
+        'Localidad': 'Montevideo',
+        'Latitud': '-34.8701',
+        'longitud': '-56.1912',
+        'idCampana': 17,
+        'NroTrn': 4512,
+        'CodigoCliente': '692757',
+        'nombreCliente': 'Juan Pérez',
+        'telCliente': '098753486',
+        'INAux1': '9998',
+        'INAux2': '',
+        'movil': 9998,
+      });
+      // El token NO va acá: lo inyecta RioGasService._post.
+      expect(body.containsKey('token'), isFalse);
+    });
+
+    test('opcionales null → "" y movil no numérico → 0', () {
+      final body = BeneficiosService.buildConsumirPromoBody(
+        escenario: '',
+        usuario: 'u',
+        deviceId: 'd',
+        movil: 'Moviles-336',
+        idCampana: 0,
+        nroTrn: 0,
+      );
+      expect(body['Departamento'], '');
+      expect(body['Localidad'], '');
+      expect(body['Latitud'], '');
+      expect(body['longitud'], '');
+      expect(body['CodigoCliente'], '');
+      expect(body['nombreCliente'], '');
+      expect(body['telCliente'], '');
+      expect(body['NroTrn'], 0);
+      expect(body['movil'], 336);
+      expect(body['INAux1'], 'Moviles-336');
+    });
+  });
+
   group('RioGasService.gxRootFromBaseUrl', () {
     test('recorta el segmento de servicios en dev y prod', () {
       expect(
