@@ -781,6 +781,17 @@ class _PromocionesPageState extends State<PromocionesPage>
                 ),
               ),
             ),
+            if (seleccionado.isNotEmpty && _idCampana > 0) ...[
+              const SizedBox(width: 8),
+              Text(
+                '#$_idCampana',
+                style: const TextStyle(
+                  color: V2Colors.textoSecundario,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
             const Icon(Icons.keyboard_arrow_down,
                 color: V2Colors.textoSecundario),
           ],
@@ -1755,6 +1766,8 @@ class _SelectorPromosSheetState extends State<_SelectorPromosSheet> {
       PromoDoc.texto((d.data() as Map<String, dynamic>?) ?? {}, 'NombreCombo');
   String _desc(DocumentSnapshot d) =>
       PromoDoc.texto((d.data() as Map<String, dynamic>?) ?? {}, 'Descripcion');
+  int _id(DocumentSnapshot d) =>
+      PromoDoc.idInterno((d.data() as Map<String, dynamic>?) ?? {});
 
   Widget _tituloSeccion(String texto) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 2),
@@ -1775,6 +1788,8 @@ class _SelectorPromosSheetState extends State<_SelectorPromosSheet> {
   Widget _tile(DocumentSnapshot d, {bool reciente = false}) {
     final nombre = _nombre(d);
     final desc = _desc(d);
+    final id = _id(d);
+    final seleccionada = widget.seleccionadaId == d.id;
     return ListTile(
       leading: Icon(
         reciente ? Icons.history : Icons.local_offer_outlined,
@@ -1783,8 +1798,25 @@ class _SelectorPromosSheetState extends State<_SelectorPromosSheet> {
       title: Text(nombre,
           style: const TextStyle(fontWeight: FontWeight.w700)),
       subtitle: desc.isNotEmpty && desc != nombre ? Text(desc) : null,
-      trailing: widget.seleccionadaId == d.id
-          ? const Icon(Icons.check_circle, color: V2Colors.verde)
+      trailing: (id > 0 || seleccionada)
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (id > 0)
+                  Text(
+                    '#$id',
+                    style: const TextStyle(
+                      color: V2Colors.textoSecundario,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                if (seleccionada) ...[
+                  const SizedBox(width: 8),
+                  const Icon(Icons.check_circle, color: V2Colors.verde),
+                ],
+              ],
+            )
           : null,
       onTap: () => Navigator.pop(context, d),
     );
@@ -1801,6 +1833,7 @@ class _SelectorPromosSheetState extends State<_SelectorPromosSheet> {
                   filtro: filtro,
                   nombre: _nombre(d),
                   descripcion: _desc(d),
+                  id: _id(d) > 0 ? '${_id(d)}' : '',
                 ))
             .toList(),
         (d) => d.id,

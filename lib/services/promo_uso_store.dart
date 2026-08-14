@@ -106,15 +106,22 @@ class PromoUsoStore {
     return r;
   }
 
-  /// ¿La promo matchea lo tipeado? Filtro vacío matchea todo.
+  /// ¿La promo matchea lo tipeado? Filtro vacío matchea todo. `id` es el
+  /// ID interno de SGM como texto ('' si la promo no lo tiene): se puede
+  /// buscar tipeando el número solo o con el numeral ("86" o "#86").
   static bool coincide({
     required String filtro,
     required String nombre,
     String descripcion = '',
+    String id = '',
   }) {
     final f = normalizar(filtro);
     if (f.isEmpty) return true;
-    return normalizar(nombre).contains(f) ||
-        normalizar(descripcion).contains(f);
+    if (normalizar(nombre).contains(f) ||
+        normalizar(descripcion).contains(f)) {
+      return true;
+    }
+    final fId = f.startsWith('#') ? f.substring(1) : f;
+    return id.isNotEmpty && fId.isNotEmpty && id.contains(fId);
   }
 }

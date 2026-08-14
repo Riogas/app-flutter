@@ -52,6 +52,45 @@ void main() {
         isFalse,
       );
     });
+
+    test('matchea por ID interno, con o sin numeral', () {
+      expect(
+        PromoUsoStore.coincide(filtro: '86', nombre: 'Mides', id: '86'),
+        isTrue,
+      );
+      expect(
+        PromoUsoStore.coincide(filtro: '#86', nombre: 'Mides', id: '86'),
+        isTrue,
+      );
+      expect(
+        PromoUsoStore.coincide(filtro: '8', nombre: 'Mides', id: '86'),
+        isTrue,
+        reason: 'parcial también filtra',
+      );
+      expect(
+        PromoUsoStore.coincide(filtro: '99', nombre: 'Mides', id: '86'),
+        isFalse,
+      );
+    });
+
+    test('el nombre sigue matcheando aunque se pase id', () {
+      expect(
+        PromoUsoStore.coincide(filtro: 'mides', nombre: 'Promo Mides', id: '86'),
+        isTrue,
+      );
+    });
+
+    test('promo sin id (id vacío) no matchea por número', () {
+      expect(
+        PromoUsoStore.coincide(filtro: '86', nombre: 'Promo Antel', id: ''),
+        isFalse,
+      );
+      expect(
+        PromoUsoStore.coincide(filtro: '#', nombre: 'Promo Antel', id: '86'),
+        isFalse,
+        reason: 'numeral solo no matchea todo',
+      );
+    });
   });
 
   group('PromoUsoStore recientes/ordenar', () {
