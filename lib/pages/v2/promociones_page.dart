@@ -14,6 +14,7 @@ import '../../services/modo_ingreso_codigo.dart';
 import '../../services/persistent_stream_manager.dart';
 import '../../services/promo_consumos_store.dart';
 import '../../services/promo_doc.dart';
+import '../../services/promo_uso_store.dart';
 import '../../services/proteccion_pantalla.dart';
 import 'escaner_codigo_page.dart';
 import 'v2_data.dart';
@@ -104,6 +105,7 @@ class _PromocionesPageState extends State<PromocionesPage>
     }
     _marcarVistas();
     PromoConsumosStore().init();
+    PromoUsoStore().init();
     // Refrescar habilitación del botón Validar al tipear
     for (final c in [_codigoCtrl, _telCtrl, _nombreCtrl, _auxCtrl]) {
       c.addListener(() => setState(() {}));
@@ -327,6 +329,10 @@ class _PromocionesPageState extends State<PromocionesPage>
       });
       return;
     }
+
+    // ⭐ Validación OK = uso real: la promo sube a "Últimas usadas" del
+    // selector. Seleccionarla sin validar no cuenta.
+    PromoUsoStore().registrarUso(_promoDoc?.id ?? '');
 
     if (res.requierePin) {
       setState(() {
@@ -732,58 +738,16 @@ class _PromocionesPageState extends State<PromocionesPage>
           : () async {
               final doc = await showModalBottomSheet<DocumentSnapshot>(
                 context: context,
+                // Necesario para que el buscador quede por encima del teclado
+                isScrollControlled: true,
                 backgroundColor: Colors.white,
                 shape: const RoundedRectangleBorder(
                   borderRadius:
                       BorderRadius.vertical(top: Radius.circular(24)),
                 ),
-                builder: (ctx) => SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text(
-                          'Elegí la promoción',
-                          style: TextStyle(
-                            color: V2Colors.textoPrimario,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      Flexible(
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: promos.length,
-                          itemBuilder: (_, i) {
-                            final data =
-                                promos[i].data() as Map<String, dynamic>;
-                            final nombre =
-                                (data['NombreCombo'] ?? '').toString();
-                            final desc =
-                                (data['Descripcion'] ?? '').toString();
-                            return ListTile(
-                              leading: const Icon(Icons.local_offer_outlined,
-                                  color: V2Colors.accion),
-                              title: Text(nombre,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700)),
-                              subtitle: desc.isNotEmpty && desc != nombre
-                                  ? Text(desc)
-                                  : null,
-                              trailing: _promoDoc?.id == promos[i].id
-                                  ? const Icon(Icons.check_circle,
-                                      color: V2Colors.verde)
-                                  : null,
-                              onTap: () => Navigator.pop(ctx, promos[i]),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
+                builder: (ctx) => _SelectorPromosSheet(
+                  promos: promos,
+                  seleccionadaId: _promoDoc?.id,
                 ),
               );
               if (doc != null) _seleccionarPromo(doc);
@@ -1758,6 +1722,193 @@ class _PromocionesPageState extends State<PromocionesPage>
             extra,
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🎯 Bottom sheet selector de promoción: buscador + últimas usadas
+// ─────────────────────────────────────────────────────────────────────────
+class _SelectorPromosSheet extends StatefulWidget {
+  final List<DocumentSnapshot> promos;
+  final String? seleccionadaId;
+
+  const _SelectorPromosSheet({required this.promos, this.seleccionadaId});
+
+  @override
+  State<_SelectorPromosSheet> createState() => _SelectorPromosSheetState();
+}
+
+class _SelectorPromosSheetState extends State<_SelectorPromosSheet> {
+  final _filtroCtrl = TextEditingController();
+  final _usos = PromoUsoStore();
+
+  @override
+  void dispose() {
+    _filtroCtrl.dispose();
+    super.dispose();
+  }
+
+  // Los docs de Promociones se cargan a mano y la grafía de las claves varía
+  String _nombre(DocumentSnapshot d) =>
+      PromoDoc.texto((d.data() as Map<String, dynamic>?) ?? {}, 'NombreCombo');
+  String _desc(DocumentSnapshot d) =>
+      PromoDoc.texto((d.data() as Map<String, dynamic>?) ?? {}, 'Descripcion');
+
+  Widget _tituloSeccion(String texto) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 2),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            texto.toUpperCase(),
+            style: const TextStyle(
+              color: V2Colors.textoSecundario,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ),
+      );
+
+  Widget _tile(DocumentSnapshot d, {bool reciente = false}) {
+    final nombre = _nombre(d);
+    final desc = _desc(d);
+    return ListTile(
+      leading: Icon(
+        reciente ? Icons.history : Icons.local_offer_outlined,
+        color: V2Colors.accion,
+      ),
+      title: Text(nombre,
+          style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: desc.isNotEmpty && desc != nombre ? Text(desc) : null,
+      trailing: widget.seleccionadaId == d.id
+          ? const Icon(Icons.check_circle, color: V2Colors.verde)
+          : null,
+      onTap: () => Navigator.pop(context, d),
+    );
+  }
+
+  List<Widget> _filas() {
+    final filtro = _filtroCtrl.text;
+
+    if (filtro.trim().isNotEmpty) {
+      // Buscando: lista plana filtrada, con las usadas primero
+      final coincidencias = _usos.ordenar(
+        widget.promos
+            .where((d) => PromoUsoStore.coincide(
+                  filtro: filtro,
+                  nombre: _nombre(d),
+                  descripcion: _desc(d),
+                ))
+            .toList(),
+        (d) => d.id,
+      );
+      if (coincidencias.isEmpty) {
+        return [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+            child: Text(
+              'No hay promociones que coincidan con "${filtro.trim()}".',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: V2Colors.textoSecundario),
+            ),
+          ),
+        ];
+      }
+      return coincidencias.map(_tile).toList();
+    }
+
+    // Sin filtro: "Últimas usadas" arriba y después la lista completa (las
+    // recientes se repiten ahí a propósito: que "Todas" siempre esté entera).
+    final recientes = _usos.recientes(widget.promos, (d) => d.id);
+    if (recientes.isEmpty) return widget.promos.map(_tile).toList();
+
+    return [
+      _tituloSeccion('Últimas usadas'),
+      ...recientes.map((d) => _tile(d, reciente: true)),
+      _tituloSeccion('Todas'),
+      ...widget.promos.map(_tile),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    // Con el teclado abierto el sheet sube entero (viewInsets) y el alto se
+    // achica para no pasarse del borde superior de la pantalla.
+    final alturaMax =
+        (mq.size.height * 0.85 - mq.viewInsets.bottom).clamp(300.0, 10000.0);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: alturaMax),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Text(
+                  'Elegí la promoción',
+                  style: TextStyle(
+                    color: V2Colors.textoPrimario,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _filtroCtrl,
+                  onChanged: (_) => setState(() {}),
+                  textInputAction: TextInputAction.search,
+                  style: const TextStyle(fontSize: 15),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar promoción…',
+                    hintStyle:
+                        const TextStyle(color: V2Colors.textoSecundario),
+                    prefixIcon: const Icon(Icons.search,
+                        color: V2Colors.textoSecundario, size: 21),
+                    suffixIcon: _filtroCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close,
+                                color: V2Colors.textoSecundario, size: 20),
+                            onPressed: () =>
+                                setState(() => _filtroCtrl.clear()),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: const Color(0xFFF5F8FB),
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 12),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(
+                          color: V2Colors.celesteClaro, width: 1.4),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(
+                          color: V2Colors.accion, width: 1.6),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: _filas(),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
       ),
     );
   }
