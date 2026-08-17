@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'riogas_service.dart';
 
@@ -105,9 +104,19 @@ class BeneficiosService {
   static const Duration _vigenciaPin = Duration(minutes: 5);
 
   DateTime? _pinEnviadoEn;
-  String? _pinEsperado;
   String _mensajeBeneficio = '';
   int _ultimoNroTrn = 0;
+
+  /// PIN tecleado por el usuario. NO se verifica contra el server acá: no
+  /// existe endpoint para eso, viaja dentro de ConsumirPromo y se valida en
+  /// ese mismo viaje.
+  String _pinIngresado = '';
+
+  // Identidad de la última validación: ReenviarSMS y ConsumirPromo la piden
+  // y se dispararan desde pantallas que no la tienen a mano.
+  String _usuario = '';
+  String _deviceId = '';
+  String _movil = '';
 
   /// Body de `promociones/ValidarPromo` con las claves y el casing EXACTOS
   /// del contrato (ojo: `Latitud` con mayúscula pero `longitud` sin ella).
@@ -159,48 +168,58 @@ class BeneficiosService {
   static int _soloDigitos(String v) =>
       int.tryParse(v.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
 
-  /// 🔌 Body BORRADOR de `promociones/ConsumirPromo` — el endpoint AÚN NO
-  /// EXISTE en GeneXus. Espeja el casing raro del contrato de ValidarPromo
-  /// (`Latitud` con mayúscula, `longitud` sin ella) y suma `NroTrn` (la
-  /// transacción que devolvió la validación) para que el server cruce el
-  /// consumo con su validación. `Latitud`/`longitud` acá son las FRESCAS
-  /// capturadas al apretar Consumir, no las de la validación.
+  /// Body de `promociones/ConsumirPromo`, con los campos EXACTOS del contrato
+  /// publicado (verificado contra el servicio: manda una propiedad de más y
+  /// responde 400).
   ///
-  /// ⚠️ ANTES DE ENGANCHAR: ajustar campos y nombres EXACTO al contrato que
-  /// publique GeneXus — GX responde 400 ante propiedades desconocidas (ya
-  /// mordió con `escenarioid` en ValidarPromo).
+  /// - `PreMduId`: el `NroTrn` que devolvió ValidarPromo — es la
+  ///   pre-registración que este consumo confirma. Por eso acá no viajan
+  ///   campaña, cliente ni teléfono: el server los toma de ella.
+  /// - `PreMduCodSMS`: el PIN que llegó por SMS; vacío si la promo no lo pide.
+  ///   NO hay endpoint para verificarlo antes: se valida en este mismo viaje.
+  /// - `Mdu_MduAutDir`: la dirección del domicilio donde se consume (calle y
+  ///   número que devuelve la geoinversa del Nominatim propio).
+  /// - `CampoIn1`/`CampoIn2`: libres, reservados (el contrato NO tiene dónde
+  ///   poner latitud/longitud, así que las coordenadas no viajan en el consumo
+  ///   — sí en ValidarPromo).
   static Map<String, dynamic> buildConsumirPromoBody({
-    required String escenario,
     required String usuario,
     required String deviceId,
     required String movil,
-    required int idCampana,
-    required int nroTrn,
-    String? departamento,
-    String? localidad,
-    String? latitud,
-    String? longitud,
-    String? codigoCliente,
-    String? nombreCliente,
-    String? telCliente,
+    required int preMduId,
+    String? codSms,
+    String? direccion,
+    String? campoIn1,
+    String? campoIn2,
   }) {
     return {
       'usuario': usuario,
       'DeviceId': deviceId,
-      'Departamento': departamento ?? '',
-      'Localidad': localidad ?? '',
-      'Latitud': latitud ?? '',
-      'longitud': longitud ?? '',
-      'idCampana': idCampana,
-      'NroTrn': nroTrn,
-      'CodigoCliente': codigoCliente ?? '',
-      'nombreCliente': nombreCliente ?? '',
-      'telCliente': telCliente ?? '',
-      'INAux1': movil,
-      'INAux2': '',
       'movil': _soloDigitos(movil),
+      'PreMduId': preMduId,
+      'PreMduCodSMS': codSms ?? '',
+      'Mdu_MduAutDir': _recortar(direccion ?? '', 100),
+      'CampoIn1': campoIn1 ?? '',
+      'CampoIn2': campoIn2 ?? '',
     };
   }
+
+  /// La dirección de Nominatim puede venir larguísima (`display_name` trae
+  /// hasta el país). Se recorta para no pasarse del largo del atributo.
+  static String _recortar(String v, int max) {
+    final t = v.trim();
+    return t.length <= max ? t : t.substring(0, max);
+  }
+
+  /// GeneXus declara `&ok` en minúscula pero serializa `OK` (verificado contra
+  /// ReenviarSMS: `{"OK":99,...}`). Se leen las dos grafías para no depender
+  /// de eso. Convención de la API: 0 = todo bien, cualquier otro = rechazo.
+  static int _okDe(Map<String, dynamic> resp) => BeneficioValidacion._asInt(
+      resp.containsKey('OK') ? resp['OK'] : resp['ok'],
+      fallback: -1);
+
+  static String _mensajeDe(Map<String, dynamic> resp) =>
+      (resp['message'] ?? resp['Message'] ?? '').toString().trim();
 
   Future<BeneficioValidacion> validar({
     required int promoIdInterno,
@@ -239,44 +258,73 @@ class BeneficiosService {
     final res = BeneficioValidacion.fromResponse(resp);
 
     if (res.ok) {
+      _usuario = usuario;
+      _deviceId = deviceId;
+      _movil = movil;
+      _pinIngresado = '';
       _ultimoNroTrn = res.nroTrn;
       // El mensaje del server es el beneficio: se re-muestra tras el PIN
       _mensajeBeneficio = (resp?['message'] ?? '').toString().trim().isNotEmpty
           ? (resp!['message'] as Object).toString().trim()
           : res.mensaje;
       if (res.requierePin) {
-        // TODO(GeneXus): falta el endpoint de verificación del PIN. El SMS
-        // real ya lo manda el server; acá seguimos aceptando 123456.
-        _pinEsperado = '123456';
+        // El server ya mandó el SMS. El PIN se junta acá y se verifica recién
+        // en ConsumirPromo (no hay endpoint que lo valide antes).
         _pinEnviadoEn = DateTime.now();
       }
     }
     return res;
   }
 
-  Future<BeneficioPinResultado> confirmarPin(String pin) async {
-    // TODO(GeneXus): llamar al endpoint real de confirmación de PIN
-    await Future.delayed(const Duration(milliseconds: 900));
-
-    if (_pinEnviadoEn == null ||
-        DateTime.now().difference(_pinEnviadoEn!) > _vigenciaPin) {
+  /// Guarda el PIN tecleado para mandarlo en el consumo.
+  ///
+  /// ⚠️ NO lo verifica: la API no tiene endpoint de confirmación, el código
+  /// viaja en `ConsumirPromo` (`PreMduCodSMS`) y el server lo valida ahí. Si
+  /// está mal, el error aparece al consumir. Acá solo se chequea que estén
+  /// los 6 dígitos, para no gastar un viaje al pedo.
+  Future<BeneficioPinResultado> registrarPin(String pin) async {
+    final limpio = pin.replaceAll(RegExp(r'\D'), '');
+    if (limpio.length != 6) {
       return const BeneficioPinResultado(
         ok: false,
-        expirado: true,
-        mensaje: 'El código expiró. Solicitá uno nuevo.',
+        mensaje: 'Ingresá los 6 dígitos del código.',
       );
     }
-    if (pin == _pinEsperado) {
-      return BeneficioPinResultado(ok: true, mensaje: _mensajeBeneficio);
-    }
-    return const BeneficioPinResultado(
-        ok: false, mensaje: 'El PIN ingresado no es correcto.');
+    _pinIngresado = limpio;
+    return BeneficioPinResultado(ok: true, mensaje: _mensajeBeneficio);
   }
 
-  Future<void> reenviarPin() async {
-    // TODO(GeneXus): llamar al endpoint real de reenvío de SMS
-    await Future.delayed(const Duration(milliseconds: 700));
-    _pinEnviadoEn = DateTime.now();
+  /// ¿Hace cuánto se pidió el SMS? La pantalla lo usa para ofrecer el reenvío.
+  bool get pinVencido =>
+      _pinEnviadoEn != null &&
+      DateTime.now().difference(_pinEnviadoEn!) > _vigenciaPin;
+
+  /// Reenvía el SMS del código (promociones/ReenviarSMS). Endpoint REAL.
+  Future<BeneficioPinResultado> reenviarPin() async {
+    final resp = await RioGasService.reenviarSms({
+      'usuario': _usuario,
+      'DeviceId': _deviceId,
+      'NroTrn': _ultimoNroTrn,
+    });
+
+    if (resp == null) {
+      return const BeneficioPinResultado(
+        ok: false,
+        mensaje: 'No fue posible conectarse al servicio. Intentá nuevamente.',
+      );
+    }
+
+    final ok = _okDe(resp) == 0;
+    final msg = _mensajeDe(resp);
+    if (ok) _pinEnviadoEn = DateTime.now();
+    return BeneficioPinResultado(
+      ok: ok,
+      mensaje: msg.isNotEmpty
+          ? msg
+          : (ok
+              ? 'Te reenviamos el código por SMS.'
+              : 'No se pudo reenviar el código.'),
+    );
   }
 
   /// Anula un consumo dentro de la ventana de anulación.
@@ -300,57 +348,63 @@ class BeneficiosService {
     );
   }
 
+  /// Consume el beneficio (promociones/ConsumirPromo). Endpoint REAL.
+  ///
+  /// Confirma la pre-registración que dejó ValidarPromo (`PreMduId` =
+  /// `NroTrn`), manda el PIN del SMS si la promo lo pedía y la dirección del
+  /// domicilio donde se consume. ⚠️ Es IRREVERSIBLE desde la app: todavía no
+  /// hay endpoint de anulación (la anulación de "Promos del día" es local).
   Future<BeneficioConsumo> consumir({
     required int promoIdInterno,
     required String promoNombre,
     String? codigo,
     String? telefono,
-    String? nombre,
     required String movil,
     required String usuario,
     required String escenario,
     String? deviceId,
-    // 📍 Ubicación FRESCA capturada al apretar Consumir (la trae la página)
-    String? departamento,
-    String? localidad,
-    String? latitud,
-    String? longitud,
+    // 📍 Dirección del domicilio (geoinversa del fix fresco al consumir)
+    String? direccion,
   }) async {
-    // 🔌 El body ya queda armado y logueado en cada consumo, así el enganche
-    // al endpoint real es reemplazar la simulación por las 2 líneas de abajo.
     final body = buildConsumirPromoBody(
-      escenario: escenario,
-      usuario: usuario,
-      deviceId: deviceId ?? '',
-      movil: movil,
-      idCampana: promoIdInterno,
-      nroTrn: _ultimoNroTrn,
-      departamento: departamento,
-      localidad: localidad,
-      latitud: latitud,
-      longitud: longitud,
-      codigoCliente: codigo,
-      nombreCliente: nombre,
-      telCliente: telefono,
+      usuario: usuario.isNotEmpty ? usuario : _usuario,
+      deviceId: (deviceId?.isNotEmpty ?? false) ? deviceId! : _deviceId,
+      movil: movil.isNotEmpty ? movil : _movil,
+      preMduId: _ultimoNroTrn,
+      codSms: _pinIngresado,
+      direccion: direccion,
     );
-    print('🎁 [CONSUMIR] Body listo para promociones/ConsumirPromo '
-        '(endpoint aún no publicado, consumo SIMULADO): $body');
+    print('🎁 [CONSUMIR] POST promociones/ConsumirPromo: $body');
 
-    // TODO(GeneXus): cuando exista el endpoint (nombre a confirmar):
-    //   final resp = await RioGasService.consumirPromo(body);
-    //   → mapear resp a BeneficioConsumo (OK/message/autorización) y borrar
-    //     la simulación de abajo. Revisar antes buildConsumirPromoBody
-    //     contra el contrato publicado (GX da 400 con propiedades de más).
-    // Mientras tanto la autorización local referencia el NroTrn REAL que
-    // devolvió ValidarPromo, para poder cruzarlo con GeneXus.
-    await Future.delayed(const Duration(milliseconds: 1200));
+    final resp = await RioGasService.consumirPromo(body);
+    if (resp == null) {
+      return const BeneficioConsumo(
+        ok: false,
+        mensaje: 'No fue posible conectarse al servicio. Intentá nuevamente.',
+      );
+    }
 
-    final aut = _ultimoNroTrn > 0
-        ? 'TRN-$_ultimoNroTrn'
-        : 'AUT-${100000 + Random().nextInt(899999)}';
+    final ok = _okDe(resp) == 0;
+    final msg = _mensajeDe(resp);
+    if (!ok) {
+      return BeneficioConsumo(
+        ok: false,
+        mensaje: msg.isNotEmpty
+            ? msg
+            : 'No se pudo consumir el beneficio. Intentá nuevamente.',
+      );
+    }
+
+    // La autorización llega en OUTAux1 si el server la manda; si no, se deja
+    // el NroTrn para poder cruzar el consumo con GeneXus.
+    final outAux1 = (resp['OUTAux1'] ?? '').toString().trim();
+    final aut = outAux1.isNotEmpty
+        ? outAux1
+        : (_ultimoNroTrn > 0 ? 'TRN-$_ultimoNroTrn' : '');
+    _pinIngresado = '';
     return BeneficioConsumo(
       ok: true,
-      mensaje: 'El beneficio fue utilizado correctamente.',
+      mensaje: msg.isNotEmpty ? msg : 'El beneficio fue utilizado correctamente.',
       codigoAutorizacion: aut,
       fechaHora: DateTime.now(),
     );

@@ -94,62 +94,72 @@ void main() {
   });
 
   group('BeneficiosService.buildConsumirPromoBody', () {
-    test('espeja el casing del contrato de ValidarPromo y suma NroTrn', () {
+    test('manda EXACTAMENTE los campos del contrato, sin ninguno de más', () {
       final body = BeneficiosService.buildConsumirPromoBody(
-        escenario: '9998',
         usuario: '49618553',
         deviceId: 'b00a68bef3451313',
-        movil: '9998',
-        idCampana: 17,
-        nroTrn: 4512,
-        departamento: 'Montevideo',
-        localidad: 'Montevideo',
-        latitud: '-34.8701',
-        longitud: '-56.1912',
-        codigoCliente: '692757',
-        nombreCliente: 'Juan Pérez',
-        telCliente: '098753486',
+        movil: '336',
+        preMduId: 4512,
+        codSms: '123456',
+        direccion: 'Av. Italia 2345',
       );
 
       expect(body, {
         'usuario': '49618553',
         'DeviceId': 'b00a68bef3451313',
-        'Departamento': 'Montevideo',
-        'Localidad': 'Montevideo',
-        'Latitud': '-34.8701',
-        'longitud': '-56.1912',
-        'idCampana': 17,
-        'NroTrn': 4512,
-        'CodigoCliente': '692757',
-        'nombreCliente': 'Juan Pérez',
-        'telCliente': '098753486',
-        'INAux1': '9998',
-        'INAux2': '',
-        'movil': 9998,
+        'movil': 336,
+        'PreMduId': 4512,
+        'PreMduCodSMS': '123456',
+        'Mdu_MduAutDir': 'Av. Italia 2345',
+        'CampoIn1': '',
+        'CampoIn2': '',
       });
       // El token NO va acá: lo inyecta RioGasService._post.
       expect(body.containsKey('token'), isFalse);
+      // GeneXus responde 400 ante propiedades desconocidas (verificado contra
+      // el servicio): nada de lo que pedía ValidarPromo puede colarse acá.
+      for (final ajeno in [
+        'escenarioid',
+        'idCampana',
+        'CodigoCliente',
+        'telCliente',
+        'nombreCliente',
+        'NroTrn',
+        'Latitud',
+        'longitud',
+        'Departamento',
+        'Localidad',
+        'INAux1',
+        'INAux2',
+      ]) {
+        expect(body.containsKey(ajeno), isFalse, reason: 'sobra "$ajeno"');
+      }
     });
 
-    test('opcionales null → "" y movil no numérico → 0', () {
+    test('sin PIN ni dirección los campos van vacíos, no nulos', () {
       final body = BeneficiosService.buildConsumirPromoBody(
-        escenario: '',
         usuario: 'u',
         deviceId: 'd',
         movil: 'Moviles-336',
-        idCampana: 0,
-        nroTrn: 0,
+        preMduId: 0,
       );
-      expect(body['Departamento'], '');
-      expect(body['Localidad'], '');
-      expect(body['Latitud'], '');
-      expect(body['longitud'], '');
-      expect(body['CodigoCliente'], '');
-      expect(body['nombreCliente'], '');
-      expect(body['telCliente'], '');
-      expect(body['NroTrn'], 0);
-      expect(body['movil'], 336);
-      expect(body['INAux1'], 'Moviles-336');
+      expect(body['PreMduCodSMS'], '');
+      expect(body['Mdu_MduAutDir'], '');
+      expect(body['movil'], 336, reason: 'tolera el id del doc de Firestore');
+      expect(body['PreMduId'], 0);
+    });
+
+    test('la dirección se recorta a 100 caracteres', () {
+      final larga = 'Avenida Muy Larga ' * 20; // 360 chars
+      final body = BeneficiosService.buildConsumirPromoBody(
+        usuario: 'u',
+        deviceId: 'd',
+        movil: '1',
+        preMduId: 1,
+        direccion: larga,
+      );
+      expect((body['Mdu_MduAutDir'] as String).length, 100);
+      expect(body['Mdu_MduAutDir'], larga.trim().substring(0, 100));
     });
   });
 

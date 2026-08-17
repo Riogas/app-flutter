@@ -93,6 +93,11 @@ class _PromocionesPageState extends State<PromocionesPage>
   String? _latitud;
   String? _longitud;
 
+  /// 🏠 Calle y número del punto donde se está consumiendo. Va en
+  /// `Mdu_MduAutDir` de ConsumirPromo (el contrato del consumo no tiene
+  /// campos de latitud/longitud: viaja la dirección, no las coordenadas).
+  String? _direccion;
+
   @override
   void initState() {
     super.initState();
@@ -282,11 +287,21 @@ class _PromocionesPageState extends State<PromocionesPage>
             '')
         .toString();
 
-    print('🌍 [PROMOS] Ubicación administrativa: $dep / $loc');
+    // 🏠 Calle y número para `Mdu_MduAutDir` del consumo. Si Nominatim no
+    // resolvió la calle queda el display_name completo (lo recorta el
+    // servicio antes de mandarlo).
+    final calle = (addr['road'] ?? '').toString().trim();
+    final nro = (addr['house_number'] ?? '').toString().trim();
+    final dir = calle.isNotEmpty
+        ? (nro.isNotEmpty ? '$calle $nro' : calle)
+        : (data['display_name'] ?? '').toString().trim();
+
+    print('🌍 [PROMOS] Ubicación administrativa: $dep / $loc — dir: "$dir"');
     if (mounted) {
       setState(() {
         _departamento = dep;
         _localidad = loc;
+        if (dir.isNotEmpty) _direccion = dir;
       });
     }
   }
@@ -456,9 +471,8 @@ class _PromocionesPageState extends State<PromocionesPage>
 
     setState(() => _fase = _Fase.consumiendo);
 
-    // 📍 Coordenadas EXACTAS del momento del consumo (no las de la
-    // validación): fix fresco + geoinversa, con fallbacks. Van en el body
-    // que ya queda armado para el endpoint real.
+    // 📍 Fix FRESCO del momento del consumo (no el de la validación) para
+    // resolver la dirección exacta del domicilio, que es lo que viaja.
     await _capturarGeoFresca();
 
     final ident = await _identidad();
@@ -467,15 +481,11 @@ class _PromocionesPageState extends State<PromocionesPage>
       promoNombre: _label('NombreCombo'),
       codigo: _codigoCtrl.text.trim(),
       telefono: _telCtrl.text.trim(),
-      nombre: _nombreCtrl.text.trim(),
       movil: ident['movil']!,
       usuario: ident['usuario']!,
       escenario: ident['escenario']!,
       deviceId: ident['deviceId']!,
-      departamento: _departamento,
-      localidad: _localidad,
-      latitud: _latitud,
-      longitud: _longitud,
+      direccion: _direccion,
     );
 
     if (!mounted) return;
@@ -2086,7 +2096,9 @@ class _PinSheetState extends State<_PinSheet> {
       _mensajeError = '';
     });
 
-    final res = await BeneficiosService().confirmarPin(_pin);
+    // El PIN NO se verifica acá: la API no tiene endpoint para eso. Se guarda
+    // y viaja en ConsumirPromo, que lo valida en ese mismo viaje.
+    final res = await BeneficiosService().registrarPin(_pin);
     if (!mounted) return;
 
     if (res.ok) {
@@ -2107,8 +2119,19 @@ class _PinSheetState extends State<_PinSheet> {
   }
 
   Future<void> _reenviar() async {
-    await BeneficiosService().reenviarPin();
+    final res = await BeneficiosService().reenviarPin();
     if (!mounted) return;
+
+    if (!res.ok) {
+      // El server rechazó el reenvío: se muestra su motivo y NO se arranca la
+      // cuenta regresiva (si no, el botón queda bloqueado sin haber reenviado).
+      setState(() {
+        _error = true;
+        _mensajeError = res.mensaje;
+      });
+      return;
+    }
+
     for (final c in _ctrls) {
       c.clear();
     }
@@ -2119,7 +2142,7 @@ class _PinSheetState extends State<_PinSheet> {
     });
     _iniciarCuentaReenvio();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Código reenviado por SMS')),
+      SnackBar(content: Text(res.mensaje)),
     );
   }
 

@@ -1220,7 +1220,8 @@ class RioGasService {
         endpoint == 'DescargaPedidosV2' ||
         endpoint == 'ValidarDispositivo' ||
         endpoint == 'promociones/ValidarPromo' ||
-        endpoint == 'promociones/ConsumirPromo';
+        endpoint == 'promociones/ConsumirPromo' ||
+        endpoint == 'promociones/ReenviarSMS';
   }
 
   /// Raíz de la webapp GeneXus: el [baseUrl] sin su último segmento (el de
@@ -1248,14 +1249,19 @@ class RioGasService {
         baseUrlOverride: gxRootFromBaseUrl(baseUrl));
   }
 
-  /// 🔌 Consume un beneficio (promociones/ConsumirPromo). PREPARADO PERO SIN
-  /// USO: el endpoint todavía NO existe en GeneXus (el nombre es tentativo,
-  /// confirmarlo al publicarse). BeneficiosService.consumir() ya arma el body
-  /// con las coordenadas frescas — enganchar es llamar esto desde ahí.
-  /// Misma raíz y misma política sin retry offline que ValidarPromo.
+  /// 🎁 Consume un beneficio (promociones/ConsumirPromo). Misma raíz y misma
+  /// política sin retry offline que ValidarPromo: re-disparar un consumo viejo
+  /// desde la cola sería consumir dos veces.
   static Future<Map<String, dynamic>?> consumirPromo(
       Map<String, dynamic> body) {
     return _post('promociones/ConsumirPromo', body,
+        baseUrlOverride: gxRootFromBaseUrl(baseUrl));
+  }
+
+  /// 📩 Reenvía el SMS con el código de la promoción
+  /// (promociones/ReenviarSMS). Sin retry offline por lo mismo.
+  static Future<Map<String, dynamic>?> reenviarSms(Map<String, dynamic> body) {
+    return _post('promociones/ReenviarSMS', body,
         baseUrlOverride: gxRootFromBaseUrl(baseUrl));
   }
 
