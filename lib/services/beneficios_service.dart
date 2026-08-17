@@ -91,19 +91,18 @@ class BeneficioConsumo {
 /// 🎁 Servicio de validación/consumo de beneficios de promociones
 /// (Antel, Claro, OCA Metros, etc.).
 ///
-/// `validar()` pega al endpoint REAL `promociones/ValidarPromo` (GeneXus).
-/// ⚠️ Siguen SIMULADOS hasta que existan sus endpoints: la confirmación del
-/// PIN por SMS (el server ya manda el SMS cuando ReqValidacionSMS=='S', pero
-/// no hay endpoint para verificar el PIN — acá se acepta `123456`), el
-/// reenvío del SMS, el consumo y la anulación.
+/// `validar()`, `consumir()` y `reenviarPin()` pegan a los endpoints REALES
+/// de GeneXus (`promociones/ValidarPromo`, `ConsumirPromo` y `ReenviarSMS`).
+///
+/// El PIN por SMS NO tiene endpoint de confirmación: `registrarPin()` solo lo
+/// guarda y lo valida el server dentro del consumo (`PreMduCodSMS`).
+/// ⚠️ `anular()` SIGUE SIMULADO — no existe endpoint, así que la anulación
+/// queda solo en el teléfono mientras el server mantiene el consumo hecho.
 class BeneficiosService {
   BeneficiosService._();
   static final BeneficiosService _instance = BeneficiosService._();
   factory BeneficiosService() => _instance;
 
-  static const Duration _vigenciaPin = Duration(minutes: 5);
-
-  DateTime? _pinEnviadoEn;
   String _mensajeBeneficio = '';
   int _ultimoNroTrn = 0;
 
@@ -263,15 +262,12 @@ class BeneficiosService {
       _movil = movil;
       _pinIngresado = '';
       _ultimoNroTrn = res.nroTrn;
-      // El mensaje del server es el beneficio: se re-muestra tras el PIN
+      // El mensaje del server es el beneficio: se re-muestra tras el PIN.
+      // Si la promo pide SMS el server ya lo mandó; el código se junta en la
+      // pantalla y se verifica recién en ConsumirPromo.
       _mensajeBeneficio = (resp?['message'] ?? '').toString().trim().isNotEmpty
           ? (resp!['message'] as Object).toString().trim()
           : res.mensaje;
-      if (res.requierePin) {
-        // El server ya mandó el SMS. El PIN se junta acá y se verifica recién
-        // en ConsumirPromo (no hay endpoint que lo valide antes).
-        _pinEnviadoEn = DateTime.now();
-      }
     }
     return res;
   }
@@ -294,11 +290,6 @@ class BeneficiosService {
     return BeneficioPinResultado(ok: true, mensaje: _mensajeBeneficio);
   }
 
-  /// ¿Hace cuánto se pidió el SMS? La pantalla lo usa para ofrecer el reenvío.
-  bool get pinVencido =>
-      _pinEnviadoEn != null &&
-      DateTime.now().difference(_pinEnviadoEn!) > _vigenciaPin;
-
   /// Reenvía el SMS del código (promociones/ReenviarSMS). Endpoint REAL.
   Future<BeneficioPinResultado> reenviarPin() async {
     final resp = await RioGasService.reenviarSms({
@@ -316,7 +307,6 @@ class BeneficiosService {
 
     final ok = _okDe(resp) == 0;
     final msg = _mensajeDe(resp);
-    if (ok) _pinEnviadoEn = DateTime.now();
     return BeneficioPinResultado(
       ok: ok,
       mensaje: msg.isNotEmpty
