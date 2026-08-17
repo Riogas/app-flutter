@@ -66,23 +66,39 @@ beneficio y datos del cliente. Es independiente del flag `printScreen` del
 móvil: ambas fuentes conviven con un contador, así que salir de Promos no
 desprotege al chofer que ya lo tenía activado por configuración.
 
-## APIs (⚠️ SIMULADAS hoy)
+## APIs GeneXus
 
-`lib/services/beneficios_service.dart` define el contrato — `validar()`,
-`confirmarPin()`, `reenviarPin()`, `consumir()` — con implementación
-simulada hasta que existan los endpoints GeneXus (marcados con
-`TODO(GeneXus)`). Reglas de la simulación para demos:
+Los tres endpoints cuelgan de la **raíz de la webapp GX**, no de
+`appservices/` (la app la deriva con `RioGasService.gxRootFromBaseUrl`):
+dev `https://sgm.riogas.com.uy/promociones/...`. El `token` lo inyecta
+`RioGasService._post`; ninguno reintenta desde la cola offline.
 
-| Código ingresado | Resultado |
-|---|---|
-| `0000` | "El código ingresado no es válido." |
-| `1111` | "El cliente no tiene beneficios disponibles..." |
-| `2222` | "El beneficio ya fue utilizado anteriormente." |
-| `9999` | "No fue posible conectarse al servicio..." |
-| Empieza con `9` | Requiere PIN por SMS (el PIN correcto es **123456**) |
-| Cualquier otro | Beneficio directo: "20% de descuento en la compra." |
+⚠️ **GeneXus responde 400 ante cualquier propiedad desconocida**, así que
+los bodies van exactos (pasó con `escenarioid`, que el build deployado no
+declara). `ok` se lee tolerante a mayúsculas: la firma lo declara en
+minúscula pero el servicio devuelve `OK`. Convención: **0 = todo bien**,
+cualquier otro valor es rechazo y `message` trae el motivo.
 
-El consumo siempre devuelve OK con un código de autorización `AUT-XXXXXX`.
+| Endpoint | In | Out |
+|---|---|---|
+| `ValidarPromo` | usuario, DeviceId, Departamento, Localidad, **Latitud**, **longitud**, idCampana, CodigoCliente, nombreCliente, telCliente, CampoIn1/2, INAux1/2, movil | OK, message, ReqValidacionSMS, LabelSMS, NroTrn, OUTAux1/2 |
+| `ConsumirPromo` | usuario, DeviceId, movil, **PreMduId**, **PreMduCodSMS**, **Mdu_MduAutDir**, CampoIn1/2 | OK, message, OUTAux1/2 |
+| `ReenviarSMS` | usuario, DeviceId, NroTrn | OK, message |
+
+- **`PreMduId` es el `NroTrn` de ValidarPromo**: el consumo confirma esa
+  pre-registración, por eso no repite campaña, cliente ni teléfono.
+- **`PreMduCodSMS`** es el PIN del SMS. **No hay endpoint que lo valide
+  antes**: se junta en la pantalla (`registrarPin`) y lo verifica el server
+  dentro del consumo, así que un PIN equivocado se descubre al consumir.
+- **`Mdu_MduAutDir`** es la dirección del domicilio: al apretar Consumir se
+  toma un fix GPS fresco y se resuelve calle y número por geoinversa contra
+  el Nominatim propio (se recorta a 100 caracteres). El contrato del consumo
+  **no tiene latitud/longitud** — las coordenadas viajan solo en la
+  validación.
+
+**Sigue simulada la anulación** (`anular()`): no existe endpoint, así que
+"Promos del día" marca el consumo como anulado **solo en el teléfono**
+mientras el servidor lo mantiene consumido.
 
 ## Flujo en la app
 
@@ -92,6 +108,9 @@ El consumo siempre devuelve OK con un código de autorización `AUT-XXXXXX`.
    auto-avance, pegado, reenvío con cuenta regresiva y expiración 5 min) /
    error amigable.
 3. **Consumir** (solo tras validación OK) → modal de confirmación con
-   promoción/cliente/beneficio → tarjeta verde "Beneficio consumido" con
+   promoción/cliente/beneficio → fix GPS fresco + geoinversa para la
+   dirección → `ConsumirPromo` → tarjeta verde "Beneficio consumido" con
    autorización y fecha; el formulario queda bloqueado hasta
    "Nueva validación" (evita consumos duplicados).
+   ⚠️ **El consumo es irreversible desde la app** mientras no exista el
+   endpoint de anulación.
