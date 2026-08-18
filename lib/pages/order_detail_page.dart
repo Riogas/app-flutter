@@ -496,6 +496,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         background: #fff8e2; border-left: 3px solid #f2c315;
         font-size: 13px; color: #5b4708; overflow-wrap: anywhere;
       }
+      .detalle {
+        margin-top: 8px; padding-top: 8px; border-top: 1px solid #eef3f7;
+        font-size: 12.5px; color: var(--text2); overflow-wrap: anywhere;
+      }
       .tot-lb { font-size: 12px; color: var(--text2); text-align: right; }
       .tot-vl { font-size: 21px; font-weight: 700; color: #0877c9; text-align: right; white-space: nowrap; }
       .extra { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 13.5px; }
@@ -529,7 +533,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         phone: '<path d="M6 3.5h3l1.6 4-2 1.4a12 12 0 0 0 5.5 5.5l1.4-2 4 1.6v3a1.6 1.6 0 0 1-1.8 1.6C10.6 18.2 5.8 13.4 4.4 5.3A1.6 1.6 0 0 1 6 3.5z"/>',
         cal: '<rect x="3.5" y="5" width="17" height="15" rx="2.4"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/>',
         nav: '<path d="M12 3 20 20l-8-4-8 4z"/>',
-        info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'
+        info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+        check: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.3 2.3 4.7-5"/>'
       };
 
       function svg(d) {
@@ -619,6 +624,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       var desde = tomar(['desde hora', 'desde', 'hora desde']);
       var hasta = tomar(['hasta', 'hasta hora', 'hora hasta']);
       var obsPedido = tomar(['obs pedido', 'observaciones del pedido']);
+      var asignado = tomar(['asignado', 'hora asignado', 'asignacion']);
+      var finalizado = tomar(['finalizado', 'hora finalizado', 'entregado']);
+      var estadoPed = tomar(['estado del pedido', 'estado']);
       var productos = todos(['producto', 'productos', 'articulo', 'descripcion']);
       var cantidades = todos(['cantidad', 'cant']);
       var cliente = tomar(['cliente', 'nombre', 'razon social']);
@@ -674,10 +682,20 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
       var hecho = 0;
 
+      // El backend repite la observación de la dirección DENTRO del texto de
+      // la dirección ("... - Obs Dir: CASA VERDE") y además como fila "Obs".
+      // Se recorta del texto y se muestra una sola vez, como nota.
+      var dirTxt = val(direccion);
+      var mObs = dirTxt.match(/^(.*?)\\s*-?\\s*Obs\\.?\\s*Dir\\s*:\\s*(.+)\$/i);
+      if (mObs) {
+        dirTxt = mObs[1].replace(/[\\s,\\-]+\$/, '').trim();
+        if (!obsDir || vacio(val(obsDir))) obsDir = { v: mObs[2].trim() };
+      }
+
       // ENTREGA
-      if (!vacio(val(direccion)) || aWaze || aMaps) {
+      if (!vacio(dirTxt) || aWaze || aMaps) {
         var c1 = card(I.pin, 'Entrega');
-        if (!vacio(val(direccion))) c1.appendChild(el('div', 'addr', val(direccion)));
+        if (!vacio(dirTxt)) c1.appendChild(el('div', 'addr', dirTxt));
         var refs = [];
         if (esquina && !vacio(val(esquina))) refs.push('Esquina: ' + val(esquina));
         if (esquina2 && !vacio(val(esquina2))) refs.push('y ' + val(esquina2));
@@ -694,7 +712,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       }
 
       // SERVICIO Y HORARIO
-      if (!vacio(val(servicio)) || !vacio(val(fecha)) || !vacio(val(desde))) {
+      if (!vacio(val(servicio)) || !vacio(val(fecha)) || !vacio(val(desde)) ||
+          (asignado && !vacio(val(asignado))) || (finalizado && !vacio(val(finalizado)))) {
         var c2 = card(I.clock, 'Servicio y horario');
         if (!vacio(val(servicio))) c2.appendChild(el('div', 'main-val', val(servicio)));
         var ch = el('div', 'chips');
@@ -704,6 +723,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         else if (!vacio(val(desde))) rango = 'desde ' + val(desde);
         else if (!vacio(val(hasta))) rango = 'hasta ' + val(hasta);
         if (rango) ch.appendChild(chip(I.clock, 'Horario', rango));
+        if (asignado && !vacio(val(asignado))) ch.appendChild(chip(I.user, 'Asignado', val(asignado)));
+        if (finalizado && !vacio(val(finalizado))) ch.appendChild(chip(I.check, 'Finalizado', val(finalizado)));
+        if (estadoPed && !vacio(val(estadoPed))) ch.appendChild(chip(I.info, 'Estado', val(estadoPed)));
         if (ch.children.length) c2.appendChild(ch);
         if (obsPedido && !vacio(val(obsPedido))) c2.appendChild(nota(val(obsPedido)));
         app.appendChild(c2); hecho++;
@@ -766,7 +788,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           r2.appendChild(t);
         }
         c5.appendChild(r2);
-        if (obsPago && !vacio(val(obsPago))) c5.appendChild(nota(val(obsPago)));
+        if (obsPago && !vacio(val(obsPago))) c5.appendChild(el('div', 'detalle', val(obsPago)));
         app.appendChild(c5); hecho++;
       }
 
