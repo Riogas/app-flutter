@@ -80,11 +80,16 @@ class BeneficioConsumo {
   final String? codigoAutorizacion;
   final DateTime? fechaHora;
 
+  /// `Mdu_MDUID` que devuelve ConsumirPromo: identifica el consumo grabado
+  /// en SGM y es lo que pide AnularPromo. 0 si el server no lo mandó.
+  final int mduId;
+
   const BeneficioConsumo({
     required this.ok,
     required this.mensaje,
     this.codigoAutorizacion,
     this.fechaHora,
+    this.mduId = 0,
   });
 }
 
@@ -96,8 +101,8 @@ class BeneficioConsumo {
 ///
 /// El PIN por SMS NO tiene endpoint de confirmación: `registrarPin()` solo lo
 /// guarda y lo valida el server dentro del consumo (`PreMduCodSMS`).
-/// ⚠️ `anular()` SIGUE SIMULADO — no existe endpoint, así que la anulación
-/// queda solo en el teléfono mientras el server mantiene el consumo hecho.
+/// `anular()` pega a `promociones/AnularPromo` con el `Mdu_MDUID` que devolvió
+/// el consumo; un consumo sin ese id (anterior al cambio) no se puede anular.
 class BeneficiosService {
   BeneficiosService._();
   static final BeneficiosService _instance = BeneficiosService._();
@@ -227,6 +232,35 @@ class BeneficiosService {
   static String _mensajeDe(Map<String, dynamic> resp) =>
       (resp['message'] ?? resp['Message'] ?? '').toString().trim();
 
+  static int _mduIdDe(Map<String, dynamic> resp) {
+    for (final k in ['Mdu_MDUID', 'Mdu_MduId', 'MduId', 'MDUID']) {
+      if (resp.containsKey(k)) {
+        return BeneficioValidacion._asInt(resp[k], fallback: 0);
+      }
+    }
+    return 0;
+  }
+
+  /// Body de `promociones/AnularPromo` con los campos exactos del contrato:
+  /// `Mdu_MduId` es el id que devolvió ConsumirPromo (`Mdu_MDUID`).
+  static Map<String, dynamic> buildAnularPromoBody({
+    required String usuario,
+    required String deviceId,
+    required String movil,
+    required int mduId,
+    String? inAux1,
+    String? inAux2,
+  }) {
+    return {
+      'usuario': usuario,
+      'DeviceId': deviceId,
+      'movil': _soloDigitos(movil),
+      'Mdu_MduId': mduId,
+      'inAux1': inAux1 ?? '',
+      'inAux2': inAux2 ?? '',
+    };
+  }
+
   Future<BeneficioValidacion> validar({
     required int promoIdInterno,
     required String promoNombre,
@@ -324,24 +358,55 @@ class BeneficiosService {
     );
   }
 
-  /// Anula un consumo dentro de la ventana de anulación.
-  /// ⚠️ SIMULADO — cuando exista el endpoint GeneXus, además de marcar la
-  /// anulación local debe viajar al backend con la autorización.
+  /// Anula un consumo (promociones/AnularPromo). Endpoint REAL.
+  ///
+  /// Requiere el `Mdu_MDUID` que devolvió ConsumirPromo. Un consumo grabado
+  /// antes de que el server devolviera ese id (mduId 0) NO se puede anular
+  /// desde la app: se avisa en vez de mentir con un OK local.
   Future<BeneficioConsumo> anular({
     required String autorizacion,
+    required int mduId,
     required int promoIdInterno,
     required String promoNombre,
     required String movil,
     required String usuario,
     required String escenario,
+    String? deviceId,
   }) async {
-    // TODO(GeneXus): llamar al endpoint real de anulación del consumo
-    await Future.delayed(const Duration(milliseconds: 1000));
+    if (mduId <= 0) {
+      return const BeneficioConsumo(
+        ok: false,
+        mensaje:
+            'Este consumo no tiene identificador en SGM y no se puede anular desde la app. Comunicate con Riogas.',
+      );
+    }
+    final body = buildAnularPromoBody(
+      usuario: usuario.isNotEmpty ? usuario : _usuario,
+      deviceId: (deviceId?.isNotEmpty ?? false) ? deviceId! : _deviceId,
+      movil: movil.isNotEmpty ? movil : _movil,
+      mduId: mduId,
+    );
+    print('🎁 [ANULAR] POST promociones/AnularPromo: $body');
+
+    final resp = await RioGasService.anularPromo(body);
+    if (resp == null) {
+      return const BeneficioConsumo(
+        ok: false,
+        mensaje: 'No fue posible conectarse al servicio. Intentá nuevamente.',
+      );
+    }
+    final ok = _okDe(resp) == 0;
+    final msg = _mensajeDe(resp);
     return BeneficioConsumo(
-      ok: true,
-      mensaje: 'El consumo fue anulado correctamente.',
+      ok: ok,
+      mensaje: msg.isNotEmpty
+          ? msg
+          : (ok
+              ? 'El consumo fue anulado correctamente.'
+              : 'No se pudo anular el consumo.'),
       codigoAutorizacion: autorizacion,
       fechaHora: DateTime.now(),
+      mduId: mduId,
     );
   }
 
@@ -392,18 +457,24 @@ class BeneficiosService {
       );
     }
 
-    // La autorización llega en OUTAux1 si el server la manda; si no, se deja
-    // el NroTrn para poder cruzar el consumo con GeneXus.
+    // `Mdu_MDUID` = id del consumo grabado en SGM (lo pide AnularPromo). El
+    // servicio lo serializa con esa grafía; se lee tolerante por las dudas.
+    final mduId = _mduIdDe(resp);
+    // La autorización visible: OUTAux1 si el server la manda; si no, el id
+    // del consumo; y como último recurso el NroTrn de la validación.
     final outAux1 = (resp['OUTAux1'] ?? '').toString().trim();
     final aut = outAux1.isNotEmpty
         ? outAux1
-        : (_ultimoNroTrn > 0 ? 'TRN-$_ultimoNroTrn' : '');
+        : (mduId > 0
+            ? 'MDU-$mduId'
+            : (_ultimoNroTrn > 0 ? 'TRN-$_ultimoNroTrn' : ''));
     _pinIngresado = '';
     return BeneficioConsumo(
       ok: true,
       mensaje: msg.isNotEmpty ? msg : 'El beneficio fue utilizado correctamente.',
       codigoAutorizacion: aut,
       fechaHora: DateTime.now(),
+      mduId: mduId,
     );
   }
 }

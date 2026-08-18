@@ -15,6 +15,10 @@ class PromoConsumo {
   final bool anulada;
   final DateTime? fechaAnulacion;
 
+  /// Id del consumo en SGM (`Mdu_MDUID` de ConsumirPromo). Lo pide
+  /// AnularPromo; 0 en consumos previos a que el server lo devolviera.
+  final int mduId;
+
   const PromoConsumo({
     required this.id,
     required this.promo,
@@ -27,6 +31,7 @@ class PromoConsumo {
     required this.fechaHora,
     this.anulada = false,
     this.fechaAnulacion,
+    this.mduId = 0,
   });
 
   Map<String, dynamic> toMap() => {
@@ -40,6 +45,7 @@ class PromoConsumo {
         'fechaHora': fechaHora.toIso8601String(),
         'anulada': anulada,
         'fechaAnulacion': fechaAnulacion?.toIso8601String(),
+        'mduId': mduId,
       };
 
   static PromoConsumo fromMap(String id, Map<dynamic, dynamic> m) {
@@ -58,6 +64,7 @@ class PromoConsumo {
       fechaAnulacion: m['fechaAnulacion'] != null
           ? DateTime.tryParse(m['fechaAnulacion'].toString())
           : null,
+      mduId: int.tryParse(m['mduId']?.toString() ?? '') ?? 0,
     );
   }
 }
@@ -132,6 +139,7 @@ class PromoConsumosStore {
     required String beneficio,
     required String autorizacion,
     DateTime? fechaHora,
+    int mduId = 0,
   }) async {
     try {
       final box = await _box();
@@ -149,6 +157,7 @@ class PromoConsumosStore {
           beneficio: beneficio,
           autorizacion: autorizacion,
           fechaHora: ahora,
+          mduId: mduId,
         ).toMap(),
       );
       await _recargar();

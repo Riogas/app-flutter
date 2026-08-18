@@ -1221,7 +1221,8 @@ class RioGasService {
         endpoint == 'ValidarDispositivo' ||
         endpoint == 'promociones/ValidarPromo' ||
         endpoint == 'promociones/ConsumirPromo' ||
-        endpoint == 'promociones/ReenviarSMS';
+        endpoint == 'promociones/ReenviarSMS' ||
+        endpoint == 'promociones/AnularPromo';
   }
 
   /// Raíz de la webapp GeneXus: el [baseUrl] sin su último segmento (el de
@@ -1255,6 +1256,13 @@ class RioGasService {
   static Future<Map<String, dynamic>?> consumirPromo(
       Map<String, dynamic> body) {
     return _post('promociones/ConsumirPromo', body,
+        baseUrlOverride: gxRootFromBaseUrl(baseUrl));
+  }
+
+  /// ↩️ Anula un consumo (promociones/AnularPromo). Sin retry offline:
+  /// re-disparar una anulación vieja desde la cola no tiene sentido.
+  static Future<Map<String, dynamic>?> anularPromo(Map<String, dynamic> body) {
+    return _post('promociones/AnularPromo', body,
         baseUrlOverride: gxRootFromBaseUrl(baseUrl));
   }
 

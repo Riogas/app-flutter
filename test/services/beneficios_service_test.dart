@@ -179,6 +179,26 @@ void main() {
     });
   });
 
+  group('BeneficiosService.buildAnularPromoBody', () {
+    test('manda EXACTAMENTE los campos del contrato de AnularPromo', () {
+      final body = BeneficiosService.buildAnularPromoBody(
+        usuario: '49618553',
+        deviceId: 'b00a68bef3451313',
+        movil: 'Moviles-336',
+        mduId: 4512,
+      );
+      expect(body, {
+        'usuario': '49618553',
+        'DeviceId': 'b00a68bef3451313',
+        'movil': 336,
+        'Mdu_MduId': 4512,
+        'inAux1': '',
+        'inAux2': '',
+      });
+      expect(body.containsKey('token'), isFalse);
+    });
+  });
+
   group('RioGasService.gxRootFromBaseUrl', () {
     test('recorta el segmento de servicios en dev y prod', () {
       expect(

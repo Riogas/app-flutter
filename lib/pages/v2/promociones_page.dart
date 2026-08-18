@@ -511,6 +511,7 @@ class _PromocionesPageState extends State<PromocionesPage>
         beneficio: _mensajeResultado,
         autorizacion: res.codigoAutorizacion ?? '',
         fechaHora: res.fechaHora,
+        mduId: res.mduId,
       );
     }
   }
@@ -1167,11 +1168,13 @@ class _PromocionesPageState extends State<PromocionesPage>
     final ident = await _identidad();
     final res = await _service.anular(
       autorizacion: c.autorizacion,
+      mduId: c.mduId,
       promoIdInterno: c.idInterno,
       promoNombre: c.promo,
       movil: ident['movil']!,
       usuario: ident['usuario']!,
       escenario: ident['escenario']!,
+      deviceId: ident['deviceId']!,
     );
 
     if (res.ok) {
