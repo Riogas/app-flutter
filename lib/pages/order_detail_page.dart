@@ -425,65 +425,65 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         background: var(--bg);
         color: var(--text);
         font-family: Inter, Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
-        font-size: 15px;
-        line-height: 1.45;
+        font-size: 14.5px;
+        line-height: 1.4;
         overflow-x: hidden;
         -webkit-text-size-adjust: 100%;
       }
-      body { padding: 12px 12px calc(14px + env(safe-area-inset-bottom)); }
+      body { padding: 8px 10px calc(10px + env(safe-area-inset-bottom)); }
       .card {
         background: var(--card);
         border: 1px solid rgba(20,70,110,.06);
-        border-radius: 16px;
-        box-shadow: 0 3px 10px rgba(15,55,85,.05), 0 1px 2px rgba(15,55,85,.04);
-        padding: 11px 13px;
-        margin-bottom: 9px;
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(15,55,85,.05), 0 1px 2px rgba(15,55,85,.04);
+        padding: 8px 11px 9px;
+        margin-bottom: 6px;
       }
       .card:last-child { margin-bottom: 0; }
-      .head { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+      .head { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
       .ico {
-        width: 32px; height: 32px; border-radius: 50%;
+        width: 26px; height: 26px; border-radius: 50%;
         background: var(--soft); color: var(--blue);
         display: flex; align-items: center; justify-content: center;
-        flex: 0 0 32px;
+        flex: 0 0 26px;
       }
-      .ico svg { width: 18px; height: 18px; }
+      .ico svg { width: 15px; height: 15px; }
       .title {
-        font-size: 12.5px; font-weight: 700; color: var(--blue);
+        font-size: 12px; font-weight: 700; color: var(--blue);
         letter-spacing: .02em;
       }
       .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
       .grow { flex: 1; min-width: 0; }
       .addr {
-        font-size: 16px; font-weight: 700; line-height: 1.3;
+        font-size: 15.5px; font-weight: 700; line-height: 1.25;
         color: #142c45; overflow-wrap: anywhere;
       }
-      .sub { font-size: 13px; color: var(--text2); overflow-wrap: anywhere; margin-top: 2px; }
+      .sub { font-size: 12.5px; color: var(--text2); overflow-wrap: anywhere; margin-top: 1px; line-height: 1.35; }
       .strong { font-weight: 600; color: var(--text); }
       .main-val {
         font-size: 15px; font-weight: 600; color: var(--text);
         overflow-wrap: anywhere;
       }
-      .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+      .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
       .chip {
-        background: #f2f7fc; border-radius: 10px; padding: 6px 10px;
-        display: flex; align-items: center; gap: 6px; min-width: 0;
+        background: #f2f7fc; border-radius: 9px; padding: 4px 9px;
+        display: flex; align-items: center; gap: 5px; min-width: 0;
       }
       .chip svg { width: 14px; height: 14px; color: var(--blue); flex: 0 0 14px; }
-      .chip-lb { font-size: 11px; color: var(--text2); display: block; line-height: 1.2; }
-      .chip-vl { font-size: 13.5px; font-weight: 600; color: var(--text); line-height: 1.25; }
+      .chip-lb { font-size: 10.5px; color: var(--text2); display: block; line-height: 1.15; }
+      .chip-vl { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.2; }
       .badge {
         background: var(--soft); color: #0875c9; font-weight: 600;
-        border-radius: 10px; padding: 5px 9px; font-size: 13px;
+        border-radius: 9px; padding: 4px 8px; font-size: 12.5px;
         white-space: nowrap; flex: 0 0 auto;
       }
-      .prod { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; }
+      .prod { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; }
       .prod + .prod { border-top: 1px solid #eef3f7; }
-      .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+      .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; }
       .maps a, a.act {
-        height: 38px; padding: 0 12px; border-radius: 10px;
+        height: 36px; padding: 0 10px; border-radius: 9px;
         border: 1px solid #168de2; background: #fff; color: #0875c9;
-        font-size: 13.5px; font-weight: 600; text-decoration: none;
+        font-size: 13px; font-weight: 600; text-decoration: none;
         display: flex; align-items: center; justify-content: center; gap: 6px;
         min-width: 0;
       }
@@ -499,16 +499,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       .maps a span, a.act span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .maps a:active, a.act:active { transform: scale(.98); background: var(--soft); }
       .nota {
-        margin-top: 8px; padding: 7px 10px; border-radius: 10px;
+        margin-top: 6px; padding: 5px 9px; border-radius: 8px;
         background: #fff8e2; border-left: 3px solid #f2c315;
-        font-size: 13px; color: #5b4708; overflow-wrap: anywhere;
+        font-size: 12.5px; color: #5b4708; overflow-wrap: anywhere; line-height: 1.35;
       }
       .detalle {
-        margin-top: 8px; padding-top: 8px; border-top: 1px solid #eef3f7;
-        font-size: 12.5px; color: var(--text2); overflow-wrap: anywhere;
+        margin-top: 6px; padding-top: 6px; border-top: 1px solid #eef3f7;
+        font-size: 12px; color: var(--text2); overflow-wrap: anywhere; line-height: 1.35;
       }
-      .tot-lb { font-size: 12px; color: var(--text2); text-align: right; }
-      .tot-vl { font-size: 21px; font-weight: 700; color: #0877c9; text-align: right; white-space: nowrap; }
+      .tot-lb { font-size: 11px; color: var(--text2); text-align: right; line-height: 1.1; }
+      .tot-vl { font-size: 19px; font-weight: 700; color: #0877c9; text-align: right; white-space: nowrap; line-height: 1.1; }
       .extra { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 13.5px; }
       .extra + .extra { border-top: 1px solid #eef3f7; }
       .extra .k { color: var(--text2); flex: 0 0 auto; }
@@ -1657,7 +1657,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 16, 12),
+          padding: const EdgeInsets.fromLTRB(8, 4, 14, 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -1670,8 +1670,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   height: 44,
                   alignment: Alignment.center,
                   child: Container(
-                    width: 38,
-                    height: 38,
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.16),
                       shape: BoxShape.circle,
@@ -1691,12 +1691,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       'Detalle del pedido',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        height: 1.15,
+                        height: 1.1,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Row(
                       children: [
                         Flexible(
@@ -1705,7 +1705,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.82),
-                              fontSize: 13,
+                              fontSize: 12.5,
                               height: 1.1,
                             ),
                           ),
@@ -1757,25 +1757,25 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               child: SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  padding: const EdgeInsets.fromLTRB(12, 7, 12, 8),
                   child: SizedBox(
-                    height: 52,
+                    height: 46,
                     child: ElevatedButton.icon(
                       icon: Icon(Icons.check, color: Colors.white),
                       label: Text(
                         'Finalizar pedido',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        minimumSize: Size(double.infinity, 52),
+                        minimumSize: Size(double.infinity, 46),
                         backgroundColor: const Color(0xFF82C63F),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(26),
+                          borderRadius: BorderRadius.circular(23),
                         ),
                       ),
                       onPressed: _iniciarFlujoFinalizacion,
