@@ -488,6 +488,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         min-width: 0;
       }
       a.act { display: inline-flex; max-width: 100%; }
+      .maps a.act { display: flex; }
+      /* Hasta ~400px el número no entra en un tercio: el teléfono ocupa su
+         propia fila a todo el ancho y Waze/Maps se reparten la de abajo. */
+      @media (max-width: 400px) {
+        .maps { grid-template-columns: 1fr 1fr !important; }
+        .maps a.act { grid-column: 1 / -1; }
+      }
       .maps a svg, a.act svg { width: 16px; height: 16px; flex: 0 0 16px; }
       .maps a span, a.act span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .maps a:active, a.act:active { transform: scale(.98); background: var(--soft); }
@@ -692,8 +699,23 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         if (!obsDir || vacio(val(obsDir))) obsDir = { v: mObs[2].trim() };
       }
 
+      // Botón de llamar: va ARRIBA, junto a la dirección, porque es lo que el
+      // repartidor necesita al instante. Se conserva el <a> original si vino.
+      var botonTel = null;
+      var numero = val(tel);
+      if (aTel) {
+        aTel.className = 'act';
+        botonMapa(aTel, I.phone, txt(aTel) || numero || 'Llamar');
+        botonTel = aTel;
+      } else if (!vacio(numero)) {
+        botonTel = document.createElement('a');
+        botonTel.className = 'act';
+        botonTel.setAttribute('href', 'tel:' + numero.replace(/[^0-9+]/g, ''));
+        botonMapa(botonTel, I.phone, numero);
+      }
+
       // ENTREGA
-      if (!vacio(dirTxt) || aWaze || aMaps) {
+      if (!vacio(dirTxt) || aWaze || aMaps || botonTel) {
         var c1 = card(I.pin, 'Entrega');
         if (!vacio(dirTxt)) c1.appendChild(el('div', 'addr', dirTxt));
         var refs = [];
@@ -701,11 +723,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         if (esquina2 && !vacio(val(esquina2))) refs.push('y ' + val(esquina2));
         if (refs.length) c1.appendChild(el('div', 'sub', refs.join(' ')));
         if (obsDir && !vacio(val(obsDir))) c1.appendChild(nota(val(obsDir)));
-        if (aWaze || aMaps) {
+        if (aWaze || aMaps || botonTel) {
           var g = el('div', 'maps');
+          if (botonTel) g.appendChild(botonTel);
           if (aWaze) g.appendChild(botonMapa(aWaze, I.nav, 'Waze'));
           if (aMaps) g.appendChild(botonMapa(aMaps, I.pin, 'Maps'));
-          if (!aWaze || !aMaps) g.style.gridTemplateColumns = '1fr';
+          var n = g.children.length;
+          g.style.gridTemplateColumns = n === 1 ? '1fr' : (n === 2 ? '1fr 1fr' : '1.35fr 1fr 1fr');
           c1.appendChild(g);
         }
         app.appendChild(c1); hecho++;
@@ -752,25 +776,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         app.appendChild(c3); hecho++;
       }
 
-      // CLIENTE
-      if (!vacio(val(cliente)) || !vacio(val(tel)) || aTel) {
-        var c4 = card(I.user, 'Cliente y contacto');
-        var r = el('div', 'row');
-        if (!vacio(val(cliente))) r.appendChild(el('div', 'grow main-val', val(cliente)));
-        else r.appendChild(el('div', 'grow'));
-        var numero = val(tel);
-        if (aTel) {
-          aTel.className = 'act';
-          botonMapa(aTel, I.phone, txt(aTel) || numero || 'Llamar');
-          r.appendChild(aTel);
-        } else if (!vacio(numero)) {
-          var a = document.createElement('a');
-          a.className = 'act';
-          a.setAttribute('href', 'tel:' + numero.replace(/[^0-9+]/g, ''));
-          botonMapa(a, I.phone, numero);
-          r.appendChild(a);
-        }
-        c4.appendChild(r);
+      // CLIENTE (nombre y observaciones; el teléfono ya va arriba, en Entrega)
+      if (!vacio(val(cliente)) || (obsCliente && !vacio(val(obsCliente)))) {
+        var c4 = card(I.user, 'Cliente');
+        if (!vacio(val(cliente))) c4.appendChild(el('div', 'main-val', val(cliente)));
         if (obsCliente && !vacio(val(obsCliente))) c4.appendChild(nota(val(obsCliente)));
         app.appendChild(c4); hecho++;
       }
