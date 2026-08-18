@@ -9,7 +9,6 @@ import 'package:hive/hive.dart';
 import '../services/riogas_service.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importa para manejar URLs
 import 'package:MoveIT/pages/home_page.dart';
-import '../utils/screenBlock.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import '../utils/constantes.dart';
@@ -388,39 +387,419 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _controller.runJavaScript(css);
   }
 
+  /// 🎨 Envuelve el detalle que manda el backend y lo reconstruye como cards.
+  ///
+  /// El backend entrega HTML legacy (una tabla de pares etiqueta/valor). Acá
+  /// NO se reescribe ese contenido: se lee, se agrupa por secciones y se
+  /// vuelve a dibujar. Los enlaces de Waze/Maps/teléfono se **mueven** al
+  /// layout nuevo (no se copian), así conservan intactos su `href`, sus
+  /// atributos y cualquier handler; el `NavigationDelegate` los sigue
+  /// interceptando igual que antes.
+  ///
+  /// Si el HTML llegara con otra forma y no se reconoce ningún dato, se
+  /// muestra el original con un estilo mínimo legible en vez de una pantalla
+  /// vacía.
   String _getHtmlWithViewport(String content) {
     return '''
-  <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        html, body {
-          margin: 0;
-          padding: 0;
-          width: 100vw;
-          overflow-x: hidden;
-          box-sizing: border-box;
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <style>
+      :root {
+        --navy: #08385f;
+        --blue: #087cc1;
+        --bright: #1598eb;
+        --bg: #f4f7fa;
+        --card: #ffffff;
+        --text: #152e47;
+        --text2: #627589;
+        --soft: #eaf5ff;
+        --border: #dfe8ef;
+        --success: #82c63f;
+      }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body {
+        margin: 0; padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+        overflow-x: hidden;
+        -webkit-text-size-adjust: 100%;
+      }
+      body { padding: 12px 12px calc(14px + env(safe-area-inset-bottom)); }
+      .card {
+        background: var(--card);
+        border: 1px solid rgba(20,70,110,.06);
+        border-radius: 16px;
+        box-shadow: 0 3px 10px rgba(15,55,85,.05), 0 1px 2px rgba(15,55,85,.04);
+        padding: 11px 13px;
+        margin-bottom: 9px;
+      }
+      .card:last-child { margin-bottom: 0; }
+      .head { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+      .ico {
+        width: 32px; height: 32px; border-radius: 50%;
+        background: var(--soft); color: var(--blue);
+        display: flex; align-items: center; justify-content: center;
+        flex: 0 0 32px;
+      }
+      .ico svg { width: 18px; height: 18px; }
+      .title {
+        font-size: 12.5px; font-weight: 700; color: var(--blue);
+        letter-spacing: .02em;
+      }
+      .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .grow { flex: 1; min-width: 0; }
+      .addr {
+        font-size: 16px; font-weight: 700; line-height: 1.3;
+        color: #142c45; overflow-wrap: anywhere;
+      }
+      .sub { font-size: 13px; color: var(--text2); overflow-wrap: anywhere; margin-top: 2px; }
+      .strong { font-weight: 600; color: var(--text); }
+      .main-val {
+        font-size: 15px; font-weight: 600; color: var(--text);
+        overflow-wrap: anywhere;
+      }
+      .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+      .chip {
+        background: #f2f7fc; border-radius: 10px; padding: 6px 10px;
+        display: flex; align-items: center; gap: 6px; min-width: 0;
+      }
+      .chip svg { width: 14px; height: 14px; color: var(--blue); flex: 0 0 14px; }
+      .chip-lb { font-size: 11px; color: var(--text2); display: block; line-height: 1.2; }
+      .chip-vl { font-size: 13.5px; font-weight: 600; color: var(--text); line-height: 1.25; }
+      .badge {
+        background: var(--soft); color: #0875c9; font-weight: 600;
+        border-radius: 10px; padding: 5px 9px; font-size: 13px;
+        white-space: nowrap; flex: 0 0 auto;
+      }
+      .prod { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; }
+      .prod + .prod { border-top: 1px solid #eef3f7; }
+      .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+      .maps a, a.act {
+        height: 38px; padding: 0 12px; border-radius: 10px;
+        border: 1px solid #168de2; background: #fff; color: #0875c9;
+        font-size: 13.5px; font-weight: 600; text-decoration: none;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        min-width: 0;
+      }
+      a.act { display: inline-flex; max-width: 100%; }
+      .maps a svg, a.act svg { width: 16px; height: 16px; flex: 0 0 16px; }
+      .maps a span, a.act span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .maps a:active, a.act:active { transform: scale(.98); background: var(--soft); }
+      .nota {
+        margin-top: 8px; padding: 7px 10px; border-radius: 10px;
+        background: #fff8e2; border-left: 3px solid #f2c315;
+        font-size: 13px; color: #5b4708; overflow-wrap: anywhere;
+      }
+      .tot-lb { font-size: 12px; color: var(--text2); text-align: right; }
+      .tot-vl { font-size: 21px; font-weight: 700; color: #0877c9; text-align: right; white-space: nowrap; }
+      .extra { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 13.5px; }
+      .extra + .extra { border-top: 1px solid #eef3f7; }
+      .extra .k { color: var(--text2); flex: 0 0 auto; }
+      .extra .v { color: var(--text); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+      .legacy { background: #fff; border-radius: 16px; padding: 12px; font-size: 14px; }
+      .legacy table { width: 100%; border-collapse: collapse; }
+      .legacy td, .legacy th { padding: 4px 6px; text-align: left; }
+      #legacy[hidden] { display: none; }
+      @media (max-width: 340px) {
+        .row { flex-wrap: wrap; }
+        .tot-lb, .tot-vl { text-align: left; }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app"></main>
+    <div id="legacy" class="legacy" hidden>$content</div>
+    <script>
+    (function () {
+      var src = document.getElementById('legacy');
+      var app = document.getElementById('app');
+
+      var I = {
+        pin: '<path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>',
+        clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+        box: '<path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z"/><path d="M3 8.5 12 13l9-4.5M12 13v7"/>',
+        user: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+        card: '<rect x="2.5" y="5" width="19" height="14" rx="2.6"/><path d="M2.5 10h19"/>',
+        phone: '<path d="M6 3.5h3l1.6 4-2 1.4a12 12 0 0 0 5.5 5.5l1.4-2 4 1.6v3a1.6 1.6 0 0 1-1.8 1.6C10.6 18.2 5.8 13.4 4.4 5.3A1.6 1.6 0 0 1 6 3.5z"/>',
+        cal: '<rect x="3.5" y="5" width="17" height="15" rx="2.4"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/>',
+        nav: '<path d="M12 3 20 20l-8-4-8 4z"/>',
+        info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'
+      };
+
+      function svg(d) {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+               'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+      }
+      function el(tag, cls, txt) {
+        var n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (txt !== undefined && txt !== null) n.textContent = txt;
+        return n;
+      }
+      function norm(s) {
+        var t = (s || '').replace(/\\u00a0/g, ' ').trim();
+        if (t.normalize) t = t.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+        return t.toLowerCase().replace(/[\\s:.]+\$/, '').replace(/\\s+/g, ' ').trim();
+      }
+      function txt(node) {
+        return (node ? (node.textContent || '') : '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
+      }
+      function vacio(v) {
+        var t = (v || '').trim();
+        return t === '' || t === '-' || t === '--' || t === 'null' || t === 'undefined';
+      }
+
+      // ---- 1. Enlaces funcionales: se MUEVEN, nunca se recrean ----
+      var aWaze = src.querySelector('a[href*="waze"]');
+      var aMaps = src.querySelector('a[href*="google.com/maps"], a[href*="maps.google"], a[href*="maps.app"]');
+      var aTel = src.querySelector('a[href^="tel:"]');
+
+      // ---- 2. Pares etiqueta/valor del HTML legacy ----
+      var pares = [];
+      var usados = [];
+      Array.prototype.forEach.call(src.querySelectorAll('tr'), function (tr) {
+        var celdas = tr.querySelectorAll('td, th');
+        // El backend mete DOS pares en una misma fila (p. ej. "Total \$" y
+        // "F.Pago"), así que se recorre de a dos celdas en vez de tomar solo
+        // la primera pareja.
+        if (celdas.length >= 2 && celdas.length % 2 === 0) {
+          for (var i = 0; i + 1 < celdas.length; i += 2) {
+            pares.push({ k: norm(txt(celdas[i])), v: txt(celdas[i + 1]), nodo: celdas[i + 1] });
+          }
+        } else if (celdas.length >= 2) {
+          pares.push({ k: norm(txt(celdas[0])), v: txt(celdas[1]), nodo: celdas[1] });
+        } else if (celdas.length === 1) {
+          var t = txt(celdas[0]);
+          var m = t.match(/^([^:]{2,30}):\\s*(.*)\$/);
+          if (m) pares.push({ k: norm(m[1]), v: m[2].trim(), nodo: celdas[0] });
         }
-        * {
-          box-sizing: border-box !important;
+      });
+      if (!pares.length) {
+        Array.prototype.forEach.call(src.querySelectorAll('p, div, li, span'), function (n) {
+          if (n.children.length) return;
+          var t = txt(n);
+          var m = t.match(/^([^:]{2,30}):\\s*(.+)\$/);
+          if (m) pares.push({ k: norm(m[1]), v: m[2].trim(), nodo: n });
+        });
+      }
+
+      function tomar(claves) {
+        for (var i = 0; i < pares.length; i++) {
+          if (usados.indexOf(i) !== -1) continue;
+          for (var j = 0; j < claves.length; j++) {
+            if (pares[i].k === claves[j]) { usados.push(i); return pares[i]; }
+          }
         }
-        div, section, article, main, p {
-          margin: 10 !important;
-          padding: 0 !important;
-          width: 100% !important;
+        return null;
+      }
+      function todos(claves) {
+        var out = [];
+        for (var i = 0; i < pares.length; i++) {
+          if (usados.indexOf(i) !== -1) continue;
+          for (var j = 0; j < claves.length; j++) {
+            if (pares[i].k === claves[j]) { usados.push(i); out.push(pares[i]); break; }
+          }
         }
-        img, iframe {
-          max-width: 100%;
-          height: auto;
-          display: block;
+        return out;
+      }
+      function val(p) { return p ? p.v : ''; }
+
+      var direccion = tomar(['direccion', 'dir']);
+      var esquina = tomar(['esquina1', 'esquina', 'esquina 1']);
+      var esquina2 = tomar(['esquina2', 'esquina 2']);
+      var obsDir = tomar(['obs', 'observaciones']);
+      var servicio = tomar(['servicio', 'tipo de servicio']);
+      var fecha = tomar(['fecha']);
+      var desde = tomar(['desde hora', 'desde', 'hora desde']);
+      var hasta = tomar(['hasta', 'hasta hora', 'hora hasta']);
+      var obsPedido = tomar(['obs pedido', 'observaciones del pedido']);
+      var productos = todos(['producto', 'productos', 'articulo', 'descripcion']);
+      var cantidades = todos(['cantidad', 'cant']);
+      var cliente = tomar(['cliente', 'nombre', 'razon social']);
+      var tel = tomar(['tel', 'telefono', 'celular', 'contacto']);
+      var obsCliente = tomar(['obs cliente', 'observaciones del cliente']);
+      var total = tomar(['total \$', 'total', 'importe', 'monto']);
+      var pago = tomar(['f.pago', 'fpago', 'forma de pago', 'f pago', 'pago']);
+      var obsPago = tomar(['obs fpago', 'obs f.pago', 'obs pago']);
+      tomar(['pedido', 'nro', 'nro pedido', 'numero de pedido']); // ya va en el header
+      tomar(['mapas', 'mapa', 'navegacion']);              // los enlaces ya se movieron
+
+      function card(icono, titulo) {
+        var c = el('section', 'card');
+        var h = el('div', 'head');
+        var i = el('div', 'ico');
+        i.innerHTML = svg(icono);
+        h.appendChild(i);
+        h.appendChild(el('div', 'title', titulo));
+        c.appendChild(h);
+        return c;
+      }
+      function chip(icono, rotulo, valor) {
+        var c = el('div', 'chip');
+        var i = document.createElement('span');
+        i.innerHTML = svg(icono);
+        c.appendChild(i.firstChild);
+        var w = el('div', 'grow');
+        w.appendChild(el('span', 'chip-lb', rotulo));
+        w.appendChild(el('div', 'chip-vl', valor));
+        c.appendChild(w);
+        return c;
+      }
+      function nota(texto) {
+        var n = el('div', 'nota');
+        n.appendChild(el('span', null, texto));
+        return n;
+      }
+      /// El backend manda producto y cantidad en el MISMO texto
+      /// ("GLP Envasado de 13 Kg, Cantidad:2"), así que se separan acá.
+      function partirProducto(v) {
+        var m = v.match(/^(.*?),?\\s*cantidad\\s*:\\s*(.*)\$/i);
+        if (m) return { nombre: m[1].replace(/,\\s*\$/, '').trim(), cant: m[2].trim() };
+        return { nombre: v.trim(), cant: '' };
+      }
+      function botonMapa(a, icono, rotulo) {
+        a.textContent = '';
+        var i = document.createElement('span');
+        i.innerHTML = svg(icono);
+        a.appendChild(i.firstChild);
+        a.appendChild(el('span', null, rotulo));
+        return a;
+      }
+
+      var hecho = 0;
+
+      // ENTREGA
+      if (!vacio(val(direccion)) || aWaze || aMaps) {
+        var c1 = card(I.pin, 'Entrega');
+        if (!vacio(val(direccion))) c1.appendChild(el('div', 'addr', val(direccion)));
+        var refs = [];
+        if (esquina && !vacio(val(esquina))) refs.push('Esquina: ' + val(esquina));
+        if (esquina2 && !vacio(val(esquina2))) refs.push('y ' + val(esquina2));
+        if (refs.length) c1.appendChild(el('div', 'sub', refs.join(' ')));
+        if (obsDir && !vacio(val(obsDir))) c1.appendChild(nota(val(obsDir)));
+        if (aWaze || aMaps) {
+          var g = el('div', 'maps');
+          if (aWaze) g.appendChild(botonMapa(aWaze, I.nav, 'Waze'));
+          if (aMaps) g.appendChild(botonMapa(aMaps, I.pin, 'Maps'));
+          if (!aWaze || !aMaps) g.style.gridTemplateColumns = '1fr';
+          c1.appendChild(g);
         }
-      </style>
-    </head>
-    <body>
-      $content
-    </body>
-  </html>
-  ''';
+        app.appendChild(c1); hecho++;
+      }
+
+      // SERVICIO Y HORARIO
+      if (!vacio(val(servicio)) || !vacio(val(fecha)) || !vacio(val(desde))) {
+        var c2 = card(I.clock, 'Servicio y horario');
+        if (!vacio(val(servicio))) c2.appendChild(el('div', 'main-val', val(servicio)));
+        var ch = el('div', 'chips');
+        if (!vacio(val(fecha))) ch.appendChild(chip(I.cal, 'Fecha', val(fecha)));
+        var rango = '';
+        if (!vacio(val(desde)) && !vacio(val(hasta))) rango = val(desde) + ' - ' + val(hasta);
+        else if (!vacio(val(desde))) rango = 'desde ' + val(desde);
+        else if (!vacio(val(hasta))) rango = 'hasta ' + val(hasta);
+        if (rango) ch.appendChild(chip(I.clock, 'Horario', rango));
+        if (ch.children.length) c2.appendChild(ch);
+        if (obsPedido && !vacio(val(obsPedido))) c2.appendChild(nota(val(obsPedido)));
+        app.appendChild(c2); hecho++;
+      }
+
+      // PRODUCTO(S)
+      var items = [];
+      productos.forEach(function (p, idx) {
+        var d = partirProducto(p.v);
+        if (!d.cant && cantidades[idx] && !vacio(cantidades[idx].v)) d.cant = cantidades[idx].v;
+        if (!vacio(d.nombre)) items.push(d);
+      });
+      if (items.length) {
+        var c3 = card(I.box, items.length > 1 ? 'Productos' : 'Producto');
+        items.forEach(function (d) {
+          var f = el('div', 'prod');
+          f.appendChild(el('div', 'grow main-val', d.nombre));
+          if (!vacio(d.cant)) {
+            f.appendChild(el('span', 'badge',
+              items.length > 1 ? 'x' + d.cant : 'Cantidad: ' + d.cant));
+          }
+          c3.appendChild(f);
+        });
+        app.appendChild(c3); hecho++;
+      }
+
+      // CLIENTE
+      if (!vacio(val(cliente)) || !vacio(val(tel)) || aTel) {
+        var c4 = card(I.user, 'Cliente y contacto');
+        var r = el('div', 'row');
+        if (!vacio(val(cliente))) r.appendChild(el('div', 'grow main-val', val(cliente)));
+        else r.appendChild(el('div', 'grow'));
+        var numero = val(tel);
+        if (aTel) {
+          aTel.className = 'act';
+          botonMapa(aTel, I.phone, txt(aTel) || numero || 'Llamar');
+          r.appendChild(aTel);
+        } else if (!vacio(numero)) {
+          var a = document.createElement('a');
+          a.className = 'act';
+          a.setAttribute('href', 'tel:' + numero.replace(/[^0-9+]/g, ''));
+          botonMapa(a, I.phone, numero);
+          r.appendChild(a);
+        }
+        c4.appendChild(r);
+        if (obsCliente && !vacio(val(obsCliente))) c4.appendChild(nota(val(obsCliente)));
+        app.appendChild(c4); hecho++;
+      }
+
+      // PAGO
+      if (!vacio(val(pago)) || !vacio(val(total))) {
+        var c5 = card(I.card, 'Pago');
+        var r2 = el('div', 'row');
+        r2.appendChild(el('div', 'grow main-val', vacio(val(pago)) ? '' : val(pago)));
+        if (!vacio(val(total))) {
+          var t = el('div');
+          t.appendChild(el('div', 'tot-lb', 'Total'));
+          var n = val(total).replace(/\\s+/g, '');
+          t.appendChild(el('div', 'tot-vl', n.charAt(0) === '\$' ? n : '\$ ' + n));
+          r2.appendChild(t);
+        }
+        c5.appendChild(r2);
+        if (obsPago && !vacio(val(obsPago))) c5.appendChild(nota(val(obsPago)));
+        app.appendChild(c5); hecho++;
+      }
+
+      // CUALQUIER OTRO DATO QUE MANDE EL BACKEND (no se pierde nada)
+      var sobrantes = [];
+      for (var i = 0; i < pares.length; i++) {
+        if (usados.indexOf(i) !== -1) continue;
+        if (vacio(pares[i].v) || !pares[i].k) continue;
+        sobrantes.push(pares[i]);
+      }
+      if (sobrantes.length) {
+        var c6 = card(I.info, 'Otros datos');
+        sobrantes.forEach(function (p) {
+          var f = el('div', 'extra');
+          var k = p.k.charAt(0).toUpperCase() + p.k.slice(1);
+          f.appendChild(el('span', 'k', k));
+          f.appendChild(el('span', 'v', p.v));
+          c6.appendChild(f);
+        });
+        app.appendChild(c6); hecho++;
+      }
+
+      // Sin nada reconocible: se muestra el original antes que una pantalla vacía
+      if (!hecho) {
+        src.hidden = false;
+      } else {
+        src.parentNode.removeChild(src);
+      }
+    })();
+    </script>
+  </body>
+</html>
+''';
   }
 
   void _showPaymentModal(BuildContext context) {
@@ -1208,25 +1587,169 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     }
   }
 
+  /// Etiqueta y color del estado del pedido. `EstadoNro` 1 = pendiente y
+  /// 2 = entregado (mismo criterio que V2Data); cualquier otro valor se
+  /// muestra tal cual en gris en vez de inventarle un nombre.
+  ({String texto, Color fondo, Color texto2}) get _estadoBadge {
+    switch (widget.estadoNro) {
+      case 1:
+        return (
+          texto: 'Pendiente',
+          fondo: const Color(0xFFF2C315),
+          texto2: const Color(0xFF4A3A00)
+        );
+      case 2:
+        return (
+          texto: 'Entregado',
+          fondo: const Color(0xFF82C63F),
+          texto2: const Color(0xFF12340A)
+        );
+      default:
+        return (
+          texto: 'Estado ${widget.estadoNro}',
+          fondo: const Color(0xFFCBD8E4),
+          texto2: const Color(0xFF23384C)
+        );
+    }
+  }
+
+  Widget _buildHeader() {
+    final badge = _estadoBadge;
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF073B66), Color(0xFF087CC1)],
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 16, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Área táctil de 44px aunque el círculo se vea de 38
+              InkWell(
+                onTap: () => Navigator.of(context).pop(),
+                customBorder: const CircleBorder(),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.16),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.arrow_back,
+                        color: Colors.white, size: 21),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Detalle del pedido',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        height: 1.15,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Pedido #${widget.codPedido}',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.82),
+                              fontSize: 13,
+                              height: 1.1,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: badge.fondo,
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Text(
+                            badge.texto,
+                            style: TextStyle(
+                              color: badge.texto2,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              height: 1.1,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Detalle')),
+      backgroundColor: const Color(0xFFF4F7FA),
       body: Column(
         children: [
+          _buildHeader(),
           Expanded(child: WebViewWidget(controller: _controller)),
           if (widget.estadoNro == 1) // Show button only if estadoNro is 1
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: ElevatedButton.icon(
-                  icon: Icon(Icons.check, color: Colors.white),
-                  label: Text('Finalizar Pedido'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: Size(double.infinity, 50), // Full width button
-                    backgroundColor: Colors.lightGreen,
+            Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF4F7FA),
+                border: Border(top: BorderSide(color: Color(0xFFE3EAF1))),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  child: SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      icon: Icon(Icons.check, color: Colors.white),
+                      label: Text(
+                        'Finalizar pedido',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: Size(double.infinity, 52),
+                        backgroundColor: const Color(0xFF82C63F),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(26),
+                        ),
+                      ),
+                      onPressed: _iniciarFlujoFinalizacion,
+                    ),
                   ),
-                  onPressed: _iniciarFlujoFinalizacion,
                 ),
               ),
             ),
