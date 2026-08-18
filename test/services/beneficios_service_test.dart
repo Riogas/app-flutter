@@ -34,6 +34,7 @@ void main() {
         'telCliente': '099123456',
         'CampoIn1': 'aux',
         'CampoIn2': '',
+        'PreMduPedId': 0,
         'INAux1': '9998',
         'INAux2': '',
         'movil': 9998,
@@ -44,6 +45,21 @@ void main() {
       // escenarioid y GeneXus responde 400 ante propiedades desconocidas.
       // Cuando GX publique la versión con escenarioid, re-agregarlo acá.
       expect(body.containsKey('escenarioid'), isFalse);
+    });
+
+    test('PreMduPedId viaja en 0 por defecto y acepta el pedido cuando lo haya',
+        () {
+      final sinPedido = BeneficiosService.buildValidarPromoBody(
+        escenario: '9998', usuario: 'u', deviceId: 'd', movil: '336',
+        idCampana: 86,
+      );
+      expect(sinPedido['PreMduPedId'], 0);
+
+      final conPedido = BeneficiosService.buildValidarPromoBody(
+        escenario: '9998', usuario: 'u', deviceId: 'd', movil: '336',
+        idCampana: 86, pedidoId: 45123,
+      );
+      expect(conPedido['PreMduPedId'], 45123);
     });
 
     test('movil viaja como número, además del INAux1 histórico', () {

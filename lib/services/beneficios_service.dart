@@ -139,6 +139,7 @@ class BeneficiosService {
     String? nombreCliente,
     String? telCliente,
     String? campoIn1,
+    int pedidoId = 0,
   }) {
     return {
       'usuario': usuario,
@@ -153,6 +154,12 @@ class BeneficiosService {
       'telCliente': telCliente ?? '',
       'CampoIn1': campoIn1 ?? '',
       'CampoIn2': '',
+      // 📦 Pedido al que se asocia la promoción. Va en 0 hasta que se defina
+      // de dónde sale el id (decisión pendiente con GeneXus): en el perfil
+      // comercio no hay pedido, y en el del chofer habría que tomar el que
+      // está en curso. `pedidoId` queda como parámetro para engancharlo sin
+      // tocar el resto del cuerpo.
+      'PreMduPedId': pedidoId,
       'INAux1': movil,
       'INAux2': '',
       // 🚚 Campo `movil` del contrato (lo declara el servicio desde el build
