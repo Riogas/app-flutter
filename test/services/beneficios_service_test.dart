@@ -34,7 +34,6 @@ void main() {
         'telCliente': '099123456',
         'CampoIn1': 'aux',
         'CampoIn2': '',
-        'PreMduPedId': 0,
         'INAux1': '9998',
         'INAux2': '',
         'movil': 9998,
@@ -47,13 +46,14 @@ void main() {
       expect(body.containsKey('escenarioid'), isFalse);
     });
 
-    test('PreMduPedId viaja en 0 por defecto y acepta el pedido cuando lo haya',
-        () {
+    test('PreMduPedId solo viaja cuando hay un pedido de verdad', () {
+      // El servicio todavía no declara el campo y GeneXus responde 400 ante
+      // propiedades desconocidas: sin pedido NO se manda (0 es su default).
       final sinPedido = BeneficiosService.buildValidarPromoBody(
         escenario: '9998', usuario: 'u', deviceId: 'd', movil: '336',
         idCampana: 86,
       );
-      expect(sinPedido['PreMduPedId'], 0);
+      expect(sinPedido.containsKey('PreMduPedId'), isFalse);
 
       final conPedido = BeneficiosService.buildValidarPromoBody(
         escenario: '9998', usuario: 'u', deviceId: 'd', movil: '336',
@@ -191,11 +191,15 @@ void main() {
         'usuario': '49618553',
         'DeviceId': 'b00a68bef3451313',
         'movil': 336,
-        'Mdu_MduId': 4512,
-        'inAux1': '',
-        'inAux2': '',
+        'Mdu_MDUID': 4512,
+        'INAux1': '',
+        'INAux2': '',
       });
       expect(body.containsKey('token'), isFalse);
+      // La firma del contrato dice `Mdu_MduId`/`inAux1`, pero el servicio
+      // REAL solo acepta esta grafía: con la otra devuelve 400 (verificado).
+      expect(body.containsKey('Mdu_MduId'), isFalse);
+      expect(body.containsKey('inAux1'), isFalse);
     });
   });
 

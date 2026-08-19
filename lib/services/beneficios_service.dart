@@ -163,12 +163,15 @@ class BeneficiosService {
       'telCliente': telCliente ?? '',
       'CampoIn1': campoIn1 ?? '',
       'CampoIn2': '',
-      // 📦 Pedido al que se asocia la promoción. Va en 0 hasta que se defina
-      // de dónde sale el id (decisión pendiente con GeneXus): en el perfil
-      // comercio no hay pedido, y en el del chofer habría que tomar el que
-      // está en curso. `pedidoId` queda como parámetro para engancharlo sin
-      // tocar el resto del cuerpo.
-      'PreMduPedId': pedidoId,
+      // 📦 Pedido al que se asocia la promoción.
+      //
+      // Solo se manda cuando hay un pedido de verdad. El servicio TODAVÍA no
+      // declara este campo (verificado: con él responde 400, y GeneXus
+      // rechaza propiedades desconocidas), así que mandarlo en 0 rompería
+      // todas las validaciones. Y mandar 0 es idéntico a no mandarlo, porque
+      // GX inicializa los numéricos en 0. Cuando lo publiquen y se defina de
+      // dónde sale el id, empieza a viajar solo.
+      if (pedidoId != 0) 'PreMduPedId': pedidoId,
       'INAux1': movil,
       'INAux2': '',
       // 🚚 Campo `movil` del contrato (lo declara el servicio desde el build
@@ -245,8 +248,11 @@ class BeneficiosService {
     return 0;
   }
 
-  /// Body de `promociones/AnularPromo` con los campos exactos del contrato:
-  /// `Mdu_MduId` es el id que devolvió ConsumirPromo (`Mdu_MDUID`).
+  /// Body de `promociones/AnularPromo`.
+  ///
+  /// ⚠️ Las claves son `Mdu_MDUID` e `INAux1`/`INAux2`, NO las del texto de
+  /// la firma (`Mdu_MduId`, `inAux1`): verificado contra el servicio, con esa
+  /// otra grafía responde 400. Es el mismo nombre que devuelve ConsumirPromo.
   static Map<String, dynamic> buildAnularPromoBody({
     required String usuario,
     required String deviceId,
@@ -259,9 +265,9 @@ class BeneficiosService {
       'usuario': usuario,
       'DeviceId': deviceId,
       'movil': _soloDigitos(movil),
-      'Mdu_MduId': mduId,
-      'inAux1': inAux1 ?? '',
-      'inAux2': inAux2 ?? '',
+      'Mdu_MDUID': mduId,
+      'INAux1': inAux1 ?? '',
+      'INAux2': inAux2 ?? '',
     };
   }
 
