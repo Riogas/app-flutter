@@ -84,12 +84,16 @@ class BeneficioConsumo {
   /// en SGM y es lo que pide AnularPromo. 0 si el server no lo mandó.
   final int mduId;
 
+  /// Pre-registración que originó el consumo (`NroTrn` de ValidarPromo).
+  final int preMduId;
+
   const BeneficioConsumo({
     required this.ok,
     required this.mensaje,
     this.codigoAutorizacion,
     this.fechaHora,
     this.mduId = 0,
+    this.preMduId = 0,
   });
 }
 
@@ -164,7 +168,7 @@ class BeneficiosService {
       // comercio no hay pedido, y en el del chofer habría que tomar el que
       // está en curso. `pedidoId` queda como parámetro para engancharlo sin
       // tocar el resto del cuerpo.
-      'PreMduPedId': pedidoId,
+      'PreMduPedid': pedidoId,
       'INAux1': movil,
       'INAux2': '',
       // 🚚 Campo `movil` del contrato (lo declara el servicio desde el build
@@ -475,6 +479,7 @@ class BeneficiosService {
       codigoAutorizacion: aut,
       fechaHora: DateTime.now(),
       mduId: mduId,
+      preMduId: _ultimoNroTrn,
     );
   }
 }

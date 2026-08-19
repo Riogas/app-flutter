@@ -6,7 +6,12 @@ class PromoConsumo {
   final String id;
   final String promo;
   final int idInterno;
-  final String codigo;
+
+  /// ⚠️ El código del cupón NO se guarda entero: solo esta máscara, que es
+  /// lo único que se muestra. Después de validar el código no tiene ningún
+  /// uso (no viaja al consumo ni a la anulación), así que no hay motivo para
+  /// tenerlo en el teléfono.
+  final String codigoMascara;
   final String telefono;
   final String cliente;
   final String beneficio;
@@ -19,11 +24,16 @@ class PromoConsumo {
   /// AnularPromo; 0 en consumos previos a que el server lo devolviera.
   final int mduId;
 
+  /// Pre-registración que originó el consumo (`NroTrn` de ValidarPromo, que
+  /// viaja como `PreMduId` al consumir). No hace falta para anular, pero es
+  /// el único hilo para rastrear qué validación generó este consumo.
+  final int preMduId;
+
   const PromoConsumo({
     required this.id,
     required this.promo,
     required this.idInterno,
-    required this.codigo,
+    required this.codigoMascara,
     required this.telefono,
     required this.cliente,
     required this.beneficio,
@@ -32,12 +42,13 @@ class PromoConsumo {
     this.anulada = false,
     this.fechaAnulacion,
     this.mduId = 0,
+    this.preMduId = 0,
   });
 
   Map<String, dynamic> toMap() => {
         'promo': promo,
         'idInterno': idInterno,
-        'codigo': codigo,
+        'codigoMascara': codigoMascara,
         'telefono': telefono,
         'cliente': cliente,
         'beneficio': beneficio,
@@ -46,6 +57,7 @@ class PromoConsumo {
         'anulada': anulada,
         'fechaAnulacion': fechaAnulacion?.toIso8601String(),
         'mduId': mduId,
+        'preMduId': preMduId,
       };
 
   static PromoConsumo fromMap(String id, Map<dynamic, dynamic> m) {
@@ -53,7 +65,11 @@ class PromoConsumo {
       id: id,
       promo: (m['promo'] ?? '').toString(),
       idInterno: int.tryParse(m['idInterno']?.toString() ?? '') ?? 0,
-      codigo: (m['codigo'] ?? '').toString(),
+      // Registros viejos guardaban el código entero en 'codigo': se enmascara
+      // al leerlos (y init() los reescribe enmascarados).
+      codigoMascara: (m['codigoMascara'] ?? '').toString().isNotEmpty
+          ? m['codigoMascara'].toString()
+          : PromoConsumosStore.enmascarar((m['codigo'] ?? '').toString()),
       telefono: (m['telefono'] ?? '').toString(),
       cliente: (m['cliente'] ?? '').toString(),
       beneficio: (m['beneficio'] ?? '').toString(),
@@ -65,6 +81,7 @@ class PromoConsumo {
           ? DateTime.tryParse(m['fechaAnulacion'].toString())
           : null,
       mduId: int.tryParse(m['mduId']?.toString() ?? '') ?? 0,
+      preMduId: int.tryParse(m['preMduId']?.toString() ?? '') ?? 0,
     );
   }
 }
@@ -83,8 +100,22 @@ class PromoConsumosStore {
   /// ⏳ Ventana durante la cual un consumo se puede anular
   static const Duration ventanaAnulacion = Duration(minutes: 30);
 
-  /// Retención local de registros (solo se muestran los del día)
+  /// Retención local de registros
   static const Duration _retencion = Duration(days: 7);
+
+  /// Enmascara el código del cupón para poder mostrarlo sin exponerlo.
+  ///
+  /// La cantidad de caracteres visibles es PROPORCIONAL al largo: hay
+  /// campañas con códigos de 3 o 4 caracteres (`A018`, `1004`), y ahí
+  /// "mostrar los últimos 4" sería mostrarlo entero. Nunca se revela más de
+  /// la mitad, con un tope de 4.
+  static String enmascarar(String codigo) {
+    final c = codigo.trim();
+    if (c.isEmpty) return '';
+    final visibles = c.length <= 3 ? 1 : (c.length ~/ 2).clamp(1, 4);
+    final puntos = (c.length - visibles).clamp(1, 4);
+    return '${'•' * puntos}${c.substring(c.length - visibles)}';
+  }
 
   final ValueNotifier<List<PromoConsumo>> consumos =
       ValueNotifier(const []);
@@ -111,6 +142,19 @@ class PromoConsumosStore {
         }
       }
       await box.deleteAll(aBorrar);
+      // Los registros viejos guardaban el código entero: se reescriben
+      // enmascarados para que deje de estar en el teléfono.
+      for (final key in box.keys) {
+        final m = box.get(key);
+        if (m is Map && (m['codigo']?.toString().isNotEmpty ?? false)) {
+          final limpio = Map<String, dynamic>.from(m);
+          limpio['codigoMascara'] = (m['codigoMascara']?.toString().isNotEmpty ?? false)
+              ? m['codigoMascara'].toString()
+              : enmascarar(m['codigo'].toString());
+          limpio.remove('codigo');
+          await box.put(key, limpio);
+        }
+      }
       await _recargar();
       print('🧾 [CONSUMOS] Store inicializado (${consumos.value.length})');
     } catch (e) {
@@ -140,6 +184,7 @@ class PromoConsumosStore {
     required String autorizacion,
     DateTime? fechaHora,
     int mduId = 0,
+    int preMduId = 0,
   }) async {
     try {
       final box = await _box();
@@ -151,13 +196,15 @@ class PromoConsumosStore {
           id: id,
           promo: promo,
           idInterno: idInterno,
-          codigo: codigo,
+          // Solo la máscara: el código entero no se guarda nunca.
+          codigoMascara: enmascarar(codigo),
           telefono: telefono,
           cliente: cliente,
           beneficio: beneficio,
           autorizacion: autorizacion,
           fechaHora: ahora,
           mduId: mduId,
+          preMduId: preMduId,
         ).toMap(),
       );
       await _recargar();
@@ -185,16 +232,26 @@ class PromoConsumosStore {
     }
   }
 
-  /// Consumos del día (más recientes primero)
-  List<PromoConsumo> get delDia {
+  /// Consumos visibles en "Promos del día" (más recientes primero).
+  ///
+  /// Son los de hoy MÁS cualquiera que todavía esté dentro de su ventana de
+  /// anulación. Ese agregado tapa el corte de medianoche: un consumo hecho
+  /// 23:50 desaparecía a las 00:00 con la ventana todavía abierta, y quedaba
+  /// sin forma de anularse desde la app.
+  List<PromoConsumo> get visibles {
     final ahora = DateTime.now();
     return consumos.value
         .where((c) =>
-            c.fechaHora.year == ahora.year &&
-            c.fechaHora.month == ahora.month &&
-            c.fechaHora.day == ahora.day)
+            (c.fechaHora.year == ahora.year &&
+                c.fechaHora.month == ahora.month &&
+                c.fechaHora.day == ahora.day) ||
+            puedeAnular(c))
         .toList();
   }
+
+  @Deprecated('Usar `visibles`: delDia perdía los consumos de fin del día '
+      'que seguían siendo anulables después de medianoche.')
+  List<PromoConsumo> get delDia => visibles;
 
   /// ¿Sigue dentro de la ventana de anulación?
   bool puedeAnular(PromoConsumo c) =>

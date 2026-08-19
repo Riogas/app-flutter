@@ -512,6 +512,7 @@ class _PromocionesPageState extends State<PromocionesPage>
         autorizacion: res.codigoAutorizacion ?? '',
         fechaHora: res.fechaHora,
         mduId: res.mduId,
+        preMduId: res.preMduId,
       );
     }
   }
@@ -865,9 +866,9 @@ class _PromocionesPageState extends State<PromocionesPage>
     return ValueListenableBuilder<List<PromoConsumo>>(
       valueListenable: PromoConsumosStore().consumos,
       builder: (context, _, __) {
-        final delDia = PromoConsumosStore().delDia;
+        final visibles = PromoConsumosStore().visibles;
         final anulables =
-            delDia.where(PromoConsumosStore().puedeAnular).length;
+            visibles.where(PromoConsumosStore().puedeAnular).length;
         return V2Card(
           padding: EdgeInsets.zero,
           child: InkWell(
@@ -894,9 +895,9 @@ class _PromocionesPageState extends State<PromocionesPage>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          delDia.isEmpty
+                          visibles.isEmpty
                               ? 'Promos del día'
-                              : 'Promos del día (${delDia.length})',
+                              : 'Promos del día (${visibles.length})',
                           style: const TextStyle(
                             color: V2Colors.textoPrimario,
                             fontSize: 14.5,
@@ -904,7 +905,7 @@ class _PromocionesPageState extends State<PromocionesPage>
                           ),
                         ),
                         Text(
-                          delDia.isEmpty
+                          visibles.isEmpty
                               ? 'Todavía no consumiste beneficios hoy'
                               : anulables > 0
                                   ? '$anulables ${anulables == 1 ? 'anulable' : 'anulables'} por tiempo limitado'
@@ -961,7 +962,7 @@ class _PromocionesPageState extends State<PromocionesPage>
           refresco ??= Timer.periodic(const Duration(seconds: 30), (_) {
             if (ctx2.mounted) setSheet(() {});
           });
-          final delDia = PromoConsumosStore().delDia;
+          final visibles = PromoConsumosStore().visibles;
           return SafeArea(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -986,7 +987,7 @@ class _PromocionesPageState extends State<PromocionesPage>
                     ),
                   ),
                 ),
-                if (delDia.isEmpty)
+                if (visibles.isEmpty)
                   const Padding(
                     padding: EdgeInsets.fromLTRB(24, 12, 24, 32),
                     child: Text(
@@ -1002,11 +1003,11 @@ class _PromocionesPageState extends State<PromocionesPage>
                     child: ListView.separated(
                       shrinkWrap: true,
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      itemCount: delDia.length,
+                      itemCount: visibles.length,
                       separatorBuilder: (_, __) =>
                           const SizedBox(height: 8),
                       itemBuilder: (_, i) =>
-                          _consumoTile(delDia[i], setSheet),
+                          _consumoTile(visibles[i], setSheet),
                     ),
                   ),
               ],
@@ -1085,6 +1086,9 @@ class _PromocionesPageState extends State<PromocionesPage>
           Text(
             [
               if (c.autorizacion.isNotEmpty) 'Aut: ${c.autorizacion}',
+              // Solo la máscara del código: alcanza para reconocer cuál fue
+              // sin exponerlo (el código entero ya no se guarda).
+              if (c.codigoMascara.isNotEmpty) 'Cód: ${c.codigoMascara}',
               if (c.telefono.isNotEmpty) 'Tel: ${c.telefono}',
               if (c.cliente.isNotEmpty) c.cliente,
             ].join(' · '),
