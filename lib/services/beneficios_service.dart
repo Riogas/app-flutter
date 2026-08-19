@@ -168,7 +168,7 @@ class BeneficiosService {
       // comercio no hay pedido, y en el del chofer habría que tomar el que
       // está en curso. `pedidoId` queda como parámetro para engancharlo sin
       // tocar el resto del cuerpo.
-      'PreMduPedid': pedidoId,
+      'PreMduPedId': pedidoId,
       'INAux1': movil,
       'INAux2': '',
       // 🚚 Campo `movil` del contrato (lo declara el servicio desde el build
