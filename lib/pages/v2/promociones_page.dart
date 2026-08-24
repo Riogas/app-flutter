@@ -606,7 +606,7 @@ class _PromocionesPageState extends State<PromocionesPage>
                         _consumosDelDiaRow(),
                         const SizedBox(height: 8),
                         const Text(
-                          '⚙️ Validación en línea · PIN y consumo aún simulados',
+                          '⚙️ Validación, consumo y anulación en línea',
                           style: TextStyle(
                             color: V2Colors.textoSecundario,
                             fontSize: 11,
