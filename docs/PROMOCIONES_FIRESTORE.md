@@ -84,33 +84,76 @@ cualquier otro valor es rechazo y `message` trae el motivo.
 | `ValidarPromo` | usuario, DeviceId, Departamento, Localidad, **Latitud**, **longitud**, idCampana, CodigoCliente, nombreCliente, telCliente, CampoIn1/2, INAux1/2, movil | OK, message, ReqValidacionSMS, LabelSMS, NroTrn, OUTAux1/2 |
 | `ConsumirPromo` | usuario, DeviceId, movil, **PreMduId**, **PreMduCodSMS**, **Mdu_MduAutDir**, CampoIn1/2 | OK, message, OUTAux1/2 |
 | `ReenviarSMS` | usuario, DeviceId, NroTrn | OK, message |
+| `AnularPromo` | usuario, DeviceId, movil, **Mdu_MDUID**, INAux1/2 | OK, message, OUTAux1/2 |
 
 - **`PreMduId` es el `NroTrn` de ValidarPromo**: el consumo confirma esa
   pre-registración, por eso no repite campaña, cliente ni teléfono.
-- **`PreMduCodSMS`** es el PIN del SMS. **No hay endpoint que lo valide
-  antes**: se junta en la pantalla (`registrarPin`) y lo verifica el server
-  dentro del consumo, así que un PIN equivocado se descubre al consumir.
+- **`PreMduCodSMS`** es el PIN del SMS. No hay endpoint que lo confirme
+  aparte, pero **tampoco hace falta: `ValidarPromo` devuelve el PIN en
+  `OUTAux1`** y es exactamente el que recibe el cliente. Verificado contra un
+  celular real: respuesta `OUTAux1:"9169"` ⇄ SMS *"Para validar la promo debe
+  proporcionar al personal de Riogas el siguiente PIN: 9169."*. Por eso
+  `registrarPin()` lo compara en el momento y el error sale ahí.
+  - **El PIN es de 4 dígitos.** La pantalla igual toma el largo de `OUTAux1`,
+    así que si mañana lo cambian acompaña sola (`kLargoPinPorDefecto` = 4 es
+    solo el respaldo para cuando `OUTAux1` viene vacío).
+  - **El SMS va al `telCliente` que manda la app**, no al teléfono guardado en
+    el cupón (comprobado mandando el del propio equipo).
+  - **`ReenviarSMS` reenvía el MISMO código**, no genera uno nuevo (se ve en
+    el SMS: cambia el número emisor, el PIN no). Por eso la comparación local
+    sigue siendo válida después de reenviar.
+  - Ante un PIN equivocado el consumo responde **`OK:98 "No se pudo localizar
+    la validación, vuelva a realizarla nuevamente."`** — un mensaje que hace
+    pensar que se perdió la validación. No es así: la pre-registración sigue
+    viva y **no hay límite de reintentos** (3 PIN errados y el correcto
+    después consumió igual).
 - **`Mdu_MduAutDir`** es la dirección del domicilio: al apretar Consumir se
   toma un fix GPS fresco y se resuelve calle y número por geoinversa contra
   el Nominatim propio (se recorta a 100 caracteres). El contrato del consumo
   **no tiene latitud/longitud** — las coordenadas viajan solo en la
   validación.
 
-**Sigue simulada la anulación** (`anular()`): no existe endpoint, así que
-"Promos del día" marca el consumo como anulado **solo en el teléfono**
-mientras el servidor lo mantiene consumido.
+**La anulación es real** (`AnularPromo` con el `Mdu_MDUID` que devolvió el
+consumo). Un consumo sin ese id no se puede anular desde la app.
+
+🔴 **Bug abierto del lado GeneXus: los consumos con SMS no se pueden
+anular.** En las campañas con `ReqValidacionSMS:'S'`, `ConsumirPromo` no
+devuelve el `Mdu_MDUID` real sino un contador que arranca en 1 (`"1"`, `"2"`,
+… en consumos sucesivos), y `AnularPromo` con ese id responde **HTTP 500**.
+Aislado contra una campaña sin SMS en la misma corrida: devolvió
+`Mdu_MDUID:"1372570"` y anuló con `OK:0 "Anulacion completada"`.
+
+⚠️ **Gotcha de ambiente**: la elección "Desarrollo" del login la hace
+`AppEnvironment.setEnvironmentForSession()` y **no persiste** —
+`AppEnvironment.initialize()` arranca siempre en producción. Al reiniciar la
+app la sesión sobrevive pero los requests se van a `www.riogas.uy/ica_geos_/`,
+donde estos endpoints **no existen**: dan 404 y la pantalla dice "No fue
+posible conectarse al servicio", sin ninguna pista del ambiente. Se corrige
+volviendo a loguear (o desde el switch de Configuración).
 
 ## Flujo en la app
 
 1. Combo de promociones (vigentes + escenario habilitado) → campos dinámicos.
 2. **Validar** (deshabilitado hasta completar los requeridos) → resultado:
-   beneficio directo / requiere PIN (abre bottom sheet de 6 casillas con
-   auto-avance, pegado, reenvío con cuenta regresiva y expiración 5 min) /
-   error amigable.
-3. **Consumir** (solo tras validación OK) → modal de confirmación con
-   promoción/cliente/beneficio → fix GPS fresco + geoinversa para la
+   beneficio directo / requiere PIN (bottom sheet con una casilla por dígito
+   del PIN — 4 hoy, tomadas del largo de `OUTAux1` — con auto-avance, pegado,
+   y reenvío con cuenta regresiva) / error amigable.
+   - El PIN se **compara contra `OUTAux1` al confirmarlo**: si no coincide, la
+     pantalla no se cierra, limpia las casillas y avisa *"El PIN no coincide
+     con el que se envió por SMS"*. Al **segundo intento fallido se habilita
+     el reenvío** sin esperar la cuenta regresiva.
+   - Si `OUTAux1` viniera vacío no se puede comparar: se acepta el largo
+     esperado y decide el server en el consumo (y ahí el mensaje confuso del
+     `OK:98` se acompaña con una aclaración sobre el PIN).
+3. **Consumir** (solo tras validación OK) → modal de confirmación con el
+   **teléfono del cliente y, si se cargó, el nombre** (nada más: la promoción
+   y el beneficio ya están a la vista detrás) → fix GPS fresco + geoinversa para la
    dirección → `ConsumirPromo` → tarjeta verde "Beneficio consumido" con
    autorización y fecha; el formulario queda bloqueado hasta
    "Nueva validación" (evita consumos duplicados).
-   ⚠️ **El consumo es irreversible desde la app** mientras no exista el
-   endpoint de anulación.
+   En **Promos del día** cada consumo muestra el chip **"Confirmado"** (verde)
+   y el botón **"Anular promo"**. La ventana de anulación NO se muestra: el
+   contador invitaba a tratar la anulación como parte del flujo normal.
+   ⚠️ El consumo se puede anular desde "Promos del día" dentro de la ventana
+   configurada — **salvo los de campañas con SMS**, por el bug del
+   `Mdu_MDUID` descrito arriba.

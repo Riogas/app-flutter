@@ -203,6 +203,27 @@ void main() {
     });
   });
 
+  group('BeneficiosService.registrarPin', () {
+    // Sin validación previa el servicio no tiene con qué comparar: solo
+    // controla el largo y deja que el consumo decida.
+    test('rechaza un largo distinto al esperado', () async {
+      final r = await BeneficiosService().registrarPin('123');
+      expect(r.ok, isFalse);
+      expect(r.mensaje, contains('4'));
+    });
+
+    test('acepta los 4 dígitos cuando no hay código con qué comparar',
+        () async {
+      final r = await BeneficiosService().registrarPin('1234');
+      expect(r.ok, isTrue);
+    });
+
+    test('ignora separadores y espacios', () async {
+      final r = await BeneficiosService().registrarPin('1 2-3 4');
+      expect(r.ok, isTrue);
+    });
+  });
+
   group('RioGasService.gxRootFromBaseUrl', () {
     test('recorta el segmento de servicios en dev y prod', () {
       expect(
@@ -290,6 +311,55 @@ void main() {
       final r = BeneficioValidacion.fromResponse({'OK': 1, 'message': ''});
       expect(r.ok, isFalse);
       expect(r.mensaje.trim(), isNotEmpty);
+    });
+
+    test('OUTAux1 trae el PIN del SMS y define el largo a pedir', () {
+      // Verificado contra un celular real: el SMS dice "...el siguiente PIN:
+      // 9169." y OUTAux1 vale exactamente "9169".
+      final r = BeneficioValidacion.fromResponse({
+        'OK': 0,
+        'message': 'El código equivale a \$ 150.00 de descuento.',
+        'ReqValidacionSMS': 'S',
+        'LabelSMS': 'Cod.SMS Cliente: ',
+        'NroTrn': '83',
+        'OUTAux1': '9169',
+      });
+      expect(r.requierePin, isTrue);
+      expect(r.codigoSms, '9169');
+      expect(r.largoPin, 4);
+    });
+
+    test('sin SMS el código no se guarda aunque OUTAux1 traiga algo', () {
+      final r = BeneficioValidacion.fromResponse({
+        'OK': 0,
+        'message': 'ok',
+        'ReqValidacionSMS': 'N',
+        'OUTAux1': '1234',
+      });
+      expect(r.codigoSms, isEmpty);
+      expect(r.largoPin, kLargoPinPorDefecto);
+    });
+
+    test('OUTAux1 vacío → largo por defecto, sin poder comparar', () {
+      final r = BeneficioValidacion.fromResponse({
+        'OK': 0,
+        'message': 'ok',
+        'ReqValidacionSMS': 'S',
+        'OUTAux1': '',
+      });
+      expect(r.requierePin, isTrue);
+      expect(r.codigoSms, isEmpty);
+      expect(r.largoPin, 4);
+    });
+
+    test('un PIN más largo mueve el largo pedido, no está fijo en 4', () {
+      final r = BeneficioValidacion.fromResponse({
+        'OK': 0,
+        'message': 'ok',
+        'ReqValidacionSMS': 'S',
+        'OUTAux1': '918273',
+      });
+      expect(r.largoPin, 6);
     });
 
     test('campos ausentes o con tipos raros no explotan', () {

@@ -409,7 +409,10 @@ class _PromocionesPageState extends State<PromocionesPage>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _PinSheet(telefono: _telCtrl.text.trim()),
+      builder: (_) => _PinSheet(
+        telefono: _telCtrl.text.trim(),
+        largo: _service.largoPinEsperado,
+      ),
     );
 
     if (!mounted || res == null) return; // canceló: sigue pendiente de PIN
@@ -431,10 +434,6 @@ class _PromocionesPageState extends State<PromocionesPage>
         ? _label('LabelBotonConsumir')
         : 'Consumir beneficio';
 
-    final cliente = _nombreCtrl.text.trim().isNotEmpty
-        ? _nombreCtrl.text.trim()
-        : _telCtrl.text.trim();
-
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -445,10 +444,14 @@ class _PromocionesPageState extends State<PromocionesPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('¿Confirmás que querés consumir este beneficio?'),
-            const SizedBox(height: 14),
-            _lineaConfirm('Promoción', _label('NombreCombo')),
-            if (cliente.isNotEmpty) _lineaConfirm('Cliente', cliente),
-            _lineaConfirm('Beneficio', _mensajeResultado),
+            // Solo los datos del cliente: la promoción y el beneficio ya
+            // están a la vista en la pantalla de atrás y llenaban el modal.
+            if (_telCtrl.text.trim().isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _lineaConfirm('Teléfono', _telCtrl.text.trim()),
+            ],
+            if (_nombreCtrl.text.trim().isNotEmpty)
+              _lineaConfirm('Nombre', _nombreCtrl.text.trim()),
           ],
         ),
         actions: [
@@ -1022,7 +1025,6 @@ class _PromocionesPageState extends State<PromocionesPage>
   Widget _consumoTile(PromoConsumo c, StateSetter setSheet) {
     final store = PromoConsumosStore();
     final anulable = store.puedeAnular(c);
-    final minutos = store.minutosParaAnular(c);
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1032,9 +1034,7 @@ class _PromocionesPageState extends State<PromocionesPage>
         border: Border.all(
           color: c.anulada
               ? V2Colors.textoSecundario.withOpacity(0.25)
-              : anulable
-                  ? V2Colors.naranja.withOpacity(0.5)
-                  : V2Colors.celesteClaro,
+              : V2Colors.celesteClaro,
           width: 1.4,
         ),
       ),
@@ -1064,12 +1064,13 @@ class _PromocionesPageState extends State<PromocionesPage>
                   ),
                 ),
               ),
+              // Consumido es consumido: el chip dice eso y nada más. Mostrar
+              // los minutos que quedan para anular invitaba a usar la
+              // anulación como si fuera parte del flujo normal.
               if (c.anulada)
                 _chipEstado('Anulada', V2Colors.textoSecundario)
-              else if (anulable)
-                _chipEstado('Anulable ${minutos}m', V2Colors.naranja)
               else
-                _chipEstado('Confirmada', V2Colors.verde),
+                _chipEstado('Confirmado', V2Colors.verde),
             ],
           ),
           const SizedBox(height: 6),
@@ -1115,7 +1116,7 @@ class _PromocionesPageState extends State<PromocionesPage>
                   ),
                 ),
                 icon: const Icon(Icons.undo, size: 18),
-                label: const Text('Anular consumo'),
+                label: const Text('Anular promo'),
               ),
             ),
           ],
@@ -1148,7 +1149,7 @@ class _PromocionesPageState extends State<PromocionesPage>
       builder: (ctx) => AlertDialog(
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Anular consumo'),
+        title: const Text('Anular promo'),
         content: Text(
             '¿Anular el beneficio de ${c.promo} (${c.autorizacion.isNotEmpty ? c.autorizacion : V2Data.fmtHora(c.fechaHora)})?\n\nEsta acción no se puede deshacer.'),
         actions: [
@@ -2018,22 +2019,32 @@ class _SelectorPromosSheetState extends State<_SelectorPromosSheet> {
 class _PinSheet extends StatefulWidget {
   final String telefono;
 
-  const _PinSheet({required this.telefono});
+  /// Cantidad de casillas. Sale del largo del código que mandó el server
+  /// (hoy 4); no está fijo para que un cambio de largo no rompa la pantalla.
+  final int largo;
+
+  const _PinSheet({required this.telefono, this.largo = kLargoPinPorDefecto});
 
   @override
   State<_PinSheet> createState() => _PinSheetState();
 }
 
 class _PinSheetState extends State<_PinSheet> {
-  final List<TextEditingController> _ctrls =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _nodes = List.generate(6, (_) => FocusNode());
+  late final int _largo = widget.largo.clamp(3, 8);
+  late final List<TextEditingController> _ctrls =
+      List.generate(_largo, (_) => TextEditingController());
+  late final List<FocusNode> _nodes = List.generate(_largo, (_) => FocusNode());
 
   bool _error = false;
   bool _confirmando = false;
   String _mensajeError = '';
   int _reenvioEn = 30;
   Timer? _reenvioTimer;
+
+  /// Intentos fallidos: al segundo se habilita el reenvío sin esperar la
+  /// cuenta regresiva (si el PIN no coincide, lo más probable es que el
+  /// cliente no tenga el SMS a mano).
+  int _fallidos = 0;
 
   @override
   void initState() {
@@ -2078,18 +2089,18 @@ class _PinSheetState extends State<_PinSheet> {
     if (v.length > 1) {
       // 📋 Pegado del código completo
       final digitos = v.replaceAll(RegExp(r'\D'), '');
-      for (int j = 0; j < 6; j++) {
+      for (int j = 0; j < _largo; j++) {
         _ctrls[j].text = j < digitos.length ? digitos[j] : '';
       }
-      if (digitos.length >= 6) {
-        _nodes[5].requestFocus();
+      if (digitos.length >= _largo) {
+        _nodes[_largo - 1].requestFocus();
       } else if (digitos.isNotEmpty) {
-        _nodes[digitos.length.clamp(0, 5)].requestFocus();
+        _nodes[digitos.length.clamp(0, _largo - 1)].requestFocus();
       }
       setState(() {});
       return;
     }
-    if (v.isNotEmpty && i < 5) {
+    if (v.isNotEmpty && i < _largo - 1) {
       _nodes[i + 1].requestFocus();
     } else if (v.isEmpty && i > 0) {
       _nodes[i - 1].requestFocus();
@@ -2103,8 +2114,8 @@ class _PinSheetState extends State<_PinSheet> {
       _mensajeError = '';
     });
 
-    // El PIN NO se verifica acá: la API no tiene endpoint para eso. Se guarda
-    // y viaja en ConsumirPromo, que lo valida en ese mismo viaje.
+    // Se compara contra el código que ValidarPromo devolvió en OUTAux1: es el
+    // mismo que le llegó al cliente por SMS. Igual viaja en ConsumirPromo.
     final res = await BeneficiosService().registrarPin(_pin);
     if (!mounted) return;
 
@@ -2113,12 +2124,19 @@ class _PinSheetState extends State<_PinSheet> {
       return;
     }
 
+    // PIN mal: se queda en la pantalla, se limpia y se puede reintentar o
+    // pedir el reenvío. Nunca se pasa a consumir con un código equivocado.
+    for (final c in _ctrls) {
+      c.clear();
+    }
+    _nodes[0].requestFocus();
     setState(() {
       _confirmando = false;
       _error = true;
+      _fallidos++;
       _mensajeError = res.mensaje;
-      if (res.expirado) {
-        // expiró: se puede reenviar
+      if (res.expirado || _fallidos >= 2) {
+        // Expiró, o ya erró dos veces: que pueda reenviar sin esperar.
         _reenvioEn = 0;
         _reenvioTimer?.cancel();
       }
@@ -2146,6 +2164,7 @@ class _PinSheetState extends State<_PinSheet> {
     setState(() {
       _error = false;
       _mensajeError = '';
+      _fallidos = 0;
     });
     _iniciarCuentaReenvio();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2197,8 +2216,9 @@ class _PinSheetState extends State<_PinSheet> {
               Text.rich(
                 TextSpan(
                   children: [
-                    const TextSpan(
-                        text: 'Ingresá el PIN enviado por SMS al teléfono '),
+                    TextSpan(
+                        text: 'Ingresá el PIN de $_largo dígitos que se envió '
+                            'por SMS al teléfono '),
                     TextSpan(
                       text: _telParcial,
                       style: const TextStyle(
@@ -2216,17 +2236,20 @@ class _PinSheetState extends State<_PinSheet> {
               ),
               const SizedBox(height: 20),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(6, (i) {
-                  return SizedBox(
-                    width: 46,
-                    height: 56,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(_largo, (i) {
+                  return Padding(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: _largo <= 4 ? 7 : 4),
+                    child: SizedBox(
+                    width: _largo <= 4 ? 58 : 46,
+                    height: 58,
                     child: TextField(
                       controller: _ctrls[i],
                       focusNode: _nodes[i],
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
-                      maxLength: i == 0 ? 6 : 1, // el 1º admite pegado completo
+                      maxLength: i == 0 ? _largo : 1, // el 1º admite pegado completo
                       onChanged: (v) => _onChanged(i, v),
                       style: const TextStyle(
                         fontSize: 22,
@@ -2257,6 +2280,7 @@ class _PinSheetState extends State<_PinSheet> {
                         ),
                       ),
                     ),
+                  ),
                   );
                 }),
               ),
@@ -2273,8 +2297,11 @@ class _PinSheetState extends State<_PinSheet> {
                 ),
               ],
               const SizedBox(height: 10),
+              // Nada de "expira en 5 minutos": es mentira. Se consumió una
+              // validación del día anterior sin problema (OK:0), así que el
+              // código no vence en ese plazo y prometerlo asusta al vendedor.
               const Text(
-                'El código expira en 5 minutos',
+                'Si el cliente no lo recibió, podés reenviarlo',
                 style: TextStyle(
                   color: V2Colors.textoSecundario,
                   fontSize: 12,
@@ -2323,7 +2350,7 @@ class _PinSheetState extends State<_PinSheet> {
                     child: SizedBox(
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _pin.length == 6 && !_confirmando
+                        onPressed: _pin.length == _largo && !_confirmando
                             ? _confirmar
                             : null,
                         style: ElevatedButton.styleFrom(

@@ -2,6 +2,10 @@ import 'dart:async';
 
 import 'riogas_service.dart';
 
+/// Largo del PIN por SMS cuando el server no manda el código en `OUTAux1`.
+/// Hoy la API genera códigos de 4 dígitos (verificado contra el SMS real).
+const int kLargoPinPorDefecto = 4;
+
 /// Resultado de validar un beneficio contra la API de la promoción
 class BeneficioValidacion {
   final bool ok;
@@ -9,12 +13,25 @@ class BeneficioValidacion {
   final String mensaje; // string dinámico devuelto por la API (beneficio o error)
   final int nroTrn; // NroTrn devuelto por promociones/ValidarPromo (0 si no vino)
 
+  /// PIN que el servicio mandó por SMS al cliente, tal como lo devuelve en
+  /// `OUTAux1`. Verificado contra un celular real: el SMS que llega dice
+  /// exactamente este número ("...el siguiente PIN: 9169." ⇄ OUTAux1 "9169").
+  /// Vacío si la promo no pide SMS o si el server dejara de mandarlo.
+  final String codigoSms;
+
   const BeneficioValidacion({
     required this.ok,
     this.requierePin = false,
     required this.mensaje,
     this.nroTrn = 0,
+    this.codigoSms = '',
   });
+
+  /// Cuántos dígitos pedirle al usuario. Sale del largo real del código que
+  /// mandó el server, así que si mañana pasan a 5 o 6 la pantalla acompaña
+  /// sola. [kLargoPinPorDefecto] cuando no vino (no se puede adivinar).
+  int get largoPin =>
+      codigoSms.isNotEmpty ? codigoSms.length : kLargoPinPorDefecto;
 
   /// Mapea la respuesta cruda de `promociones/ValidarPromo`.
   ///
@@ -52,6 +69,9 @@ class BeneficioValidacion {
       requierePin: requierePin,
       mensaje: mensaje,
       nroTrn: _asInt(resp['NroTrn'], fallback: 0),
+      codigoSms: requierePin
+          ? (resp['OUTAux1'] ?? '').toString().replaceAll(RegExp(r'\D'), '')
+          : '',
     );
   }
 
@@ -115,10 +135,20 @@ class BeneficiosService {
   String _mensajeBeneficio = '';
   int _ultimoNroTrn = 0;
 
-  /// PIN tecleado por el usuario. NO se verifica contra el server acá: no
-  /// existe endpoint para eso, viaja dentro de ConsumirPromo y se valida en
-  /// ese mismo viaje.
+  /// PIN tecleado por el usuario, ya verificado contra [_codigoSmsEsperado].
+  /// Igual viaja en ConsumirPromo (`PreMduCodSMS`): el server es la autoridad,
+  /// esto es solo para no mandarlo mal y comerse un rechazo confuso.
   String _pinIngresado = '';
+
+  /// PIN que ValidarPromo dijo haber mandado por SMS (`OUTAux1`). Es el mismo
+  /// número que le llega al cliente, así que la pantalla puede avisar al toque
+  /// si tecleó mal en vez de esperar al consumo. Vacío = no se puede chequear.
+  String _codigoSmsEsperado = '';
+
+  /// Largo que la pantalla del PIN tiene que pedir.
+  int get largoPinEsperado => _codigoSmsEsperado.isNotEmpty
+      ? _codigoSmsEsperado.length
+      : kLargoPinPorDefecto;
 
   // Identidad de la última validación: ReenviarSMS y ConsumirPromo la piden
   // y se dispararan desde pantallas que no la tienen a mano.
@@ -312,6 +342,7 @@ class BeneficiosService {
       _deviceId = deviceId;
       _movil = movil;
       _pinIngresado = '';
+      _codigoSmsEsperado = res.codigoSms;
       _ultimoNroTrn = res.nroTrn;
       // El mensaje del server es el beneficio: se re-muestra tras el PIN.
       // Si la promo pide SMS el server ya lo mandó; el código se junta en la
@@ -323,18 +354,32 @@ class BeneficiosService {
     return res;
   }
 
-  /// Guarda el PIN tecleado para mandarlo en el consumo.
+  /// Verifica el PIN tecleado y lo deja listo para el consumo.
   ///
-  /// ⚠️ NO lo verifica: la API no tiene endpoint de confirmación, el código
-  /// viaja en `ConsumirPromo` (`PreMduCodSMS`) y el server lo valida ahí. Si
-  /// está mal, el error aparece al consumir. Acá solo se chequea que estén
-  /// los 6 dígitos, para no gastar un viaje al pedo.
+  /// No hay endpoint de confirmación, pero tampoco hace falta: ValidarPromo
+  /// devuelve el código en `OUTAux1` y es exactamente el que recibe el cliente
+  /// por SMS (comprobado contra un celular real). Así el error sale acá, con
+  /// el texto correcto, en vez de aparecer recién al consumir disfrazado de
+  /// "No se pudo localizar la validación" (lo que responde el server ante un
+  /// PIN equivocado, y que hace pensar que la validación se perdió).
+  ///
+  /// El PIN igual viaja en `ConsumirPromo` (`PreMduCodSMS`): el server sigue
+  /// siendo la autoridad. Si `OUTAux1` viniera vacío no se puede comparar, así
+  /// que se acepta el largo esperado y decide el consumo.
   Future<BeneficioPinResultado> registrarPin(String pin) async {
     final limpio = pin.replaceAll(RegExp(r'\D'), '');
-    if (limpio.length != 6) {
+    final largo = largoPinEsperado;
+    if (limpio.length != largo) {
+      return BeneficioPinResultado(
+        ok: false,
+        mensaje: 'Ingresá los $largo dígitos del código.',
+      );
+    }
+    if (_codigoSmsEsperado.isNotEmpty && limpio != _codigoSmsEsperado) {
       return const BeneficioPinResultado(
         ok: false,
-        mensaje: 'Ingresá los 6 dígitos del código.',
+        mensaje: 'El PIN no coincide con el que se envió por SMS. '
+            'Revisalo con el cliente o reenviá el código.',
       );
     }
     _pinIngresado = limpio;
@@ -457,8 +502,17 @@ class BeneficiosService {
     }
 
     final ok = _okDe(resp) == 0;
-    final msg = _mensajeDe(resp);
+    var msg = _mensajeDe(resp);
     if (!ok) {
+      // Ante un PIN equivocado el server contesta "No se pudo localizar la
+      // validación", que hace pensar que se perdió la validación. Cuando el
+      // PIN no se pudo verificar contra OUTAux1 se aclara la otra posibilidad.
+      if (_pinIngresado.isNotEmpty && _codigoSmsEsperado.isEmpty) {
+        const aclaracion =
+            'Verificá que el PIN del SMS sea el correcto: el servicio '
+            'responde lo mismo cuando el código no coincide.';
+        msg = msg.isNotEmpty ? '$msg\n\n$aclaracion' : aclaracion;
+      }
       return BeneficioConsumo(
         ok: false,
         mensaje: msg.isNotEmpty
@@ -479,6 +533,7 @@ class BeneficiosService {
             ? 'MDU-$mduId'
             : (_ultimoNroTrn > 0 ? 'TRN-$_ultimoNroTrn' : ''));
     _pinIngresado = '';
+    _codigoSmsEsperado = '';
     return BeneficioConsumo(
       ok: true,
       mensaje: msg.isNotEmpty ? msg : 'El beneficio fue utilizado correctamente.',
