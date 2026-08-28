@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'firebase_service.dart';
+import 'promo_doc.dart';
 import 'package:hive/hive.dart';
 import 'logout_service.dart';
 import 'navigation_service.dart';
@@ -362,45 +363,28 @@ class PersistentStreamManager {
     _initialized = false;
   }
 
+  /// Último lote crudo de la colección `Promociones`. Se guarda porque el
+  /// filtro depende TAMBIÉN de la agencia, que llega por otro stream (el del
+  /// móvil) y puede llegar después: sin esto, la agencia que aparece tarde no
+  /// tendría cómo re-filtrar lo ya emitido.
+  List<DocumentSnapshot> _promosCrudas = const [];
+
+  /// Agencia a la que pertenece el móvil logueado. Vacío = todavía no se sabe
+  /// (los filtros por agencia se saltean, ver `PromoDoc.habilitadaPara`).
+  String _agenciaId = '';
+
   /// 🎁 Initialize persistent Promociones listener (rediseño Home V2)
   /// Colección real `Promociones` (config GeneXus de beneficios).
   /// Filtra client-side: Estado=='A', vigencia FechaDesde/FechaHasta
-  /// (Timestamps) y EscenariosHabilitados ('*' = todos).
-  /// Nota: AgenciasHabilitadas no se evalúa aún (la app no conoce la agencia).
+  /// (Timestamps) y las tres listas de alcance (escenarios / agencias
+  /// habilitadas / agencias NO habilitadas), ver `PromoDoc.habilitadaPara`.
   Future<void> _initializePromocionesListener() async {
     try {
-      final escenarioStr =
-          Hive.box('sessionBox').get('escenario', defaultValue: '0').toString();
-
       _promocionesSubscription =
           _firebaseService.getPromocionesStream().listen(
         (List<DocumentSnapshot> promos) {
-          final ahora = DateTime.now();
-
-          final vigentes = promos.where((doc) {
-            final data = doc.data() as Map<String, dynamic>?;
-            if (data == null) return false;
-            if (data['Estado'] != 'A') return false;
-            final desde = data['FechaDesde'];
-            if (desde is Timestamp && ahora.isBefore(desde.toDate())) {
-              return false;
-            }
-            final hasta = data['FechaHasta'];
-            if (hasta is Timestamp && ahora.isAfter(hasta.toDate())) {
-              return false;
-            }
-            final escenarios = data['EscenariosHabilitados'];
-            if (escenarios is List && escenarios.isNotEmpty) {
-              final habilitado = escenarios.any((e) =>
-                  e.toString() == '*' || e.toString() == escenarioStr);
-              if (!habilitado) return false;
-            }
-            return true;
-          }).toList();
-
-          print(
-              '🎁 [PersistentStreamManager] Promociones vigentes: ${vigentes.length}/${promos.length}');
-          _promocionesNotifier.value = vigentes;
+          _promosCrudas = promos;
+          _filtrarPromociones();
         },
         onError: (error) {
           print(
@@ -416,6 +400,33 @@ class PersistentStreamManager {
     }
   }
 
+  /// Aplica al último lote de promociones el estado (activa + vigente) y el
+  /// alcance (escenario + agencia). Se llama cuando cambia CUALQUIERA de las
+  /// dos entradas: la colección de promos o la agencia del móvil.
+  void _filtrarPromociones() {
+    final escenarioStr =
+        Hive.box('sessionBox').get('escenario', defaultValue: '0').toString();
+    final ahora = DateTime.now();
+
+    final vigentes = _promosCrudas.where((doc) {
+      final data = doc.data() as Map<String, dynamic>?;
+      if (data == null) return false;
+      if (data['Estado'] != 'A') return false;
+      final desde = data['FechaDesde'];
+      if (desde is Timestamp && ahora.isBefore(desde.toDate())) return false;
+      final hasta = data['FechaHasta'];
+      if (hasta is Timestamp && ahora.isAfter(hasta.toDate())) return false;
+      return PromoDoc.habilitadaPara(data,
+          escenario: escenarioStr, agencia: _agenciaId);
+    }).toList();
+
+    print('🎁 [PersistentStreamManager] Promociones vigentes: '
+        '${vigentes.length}/${_promosCrudas.length} '
+        '(escenario $escenarioStr, agencia '
+        '${_agenciaId.isEmpty ? "desconocida" : _agenciaId})');
+    _promocionesNotifier.value = vigentes;
+  }
+
   /// Initialize persistent Movil listener
   Future<void> _initializeMovilListener() async {
     try {
@@ -425,6 +436,16 @@ class PersistentStreamManager {
           print(
               '🚗 [PersistentStreamManager] Movil updated (reads: $_movilReads)');
           _movilNotifier.value = movil;
+
+          // La agencia del móvil manda en qué promos se ven. Llega por acá
+          // (no está en la respuesta del login), así que al aparecer o
+          // cambiar hay que re-filtrar lo que ya emitió el stream de promos.
+          final data = movil?.data() as Map<String, dynamic>?;
+          final agencia = (data?['EFleteraId'] ?? '').toString().trim();
+          if (agencia != _agenciaId) {
+            _agenciaId = agencia;
+            _filtrarPromociones();
+          }
           // Log to Hive every time the read counter changes
           _logToMonitoreo('MovilReads', _movilReads);
           _logToMonitoreo('TotalReads', totalReads);

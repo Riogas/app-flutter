@@ -66,4 +66,103 @@ void main() {
       expect(PromoDoc.idInterno({'idInterno': null}), 0);
     });
   });
+
+  group('PromoDoc.habilitadaPara', () {
+    // Valores REALES de la colección: 26 de 27 promos traen ['*'] en
+    // habilitadas y ['99999999'] en NO habilitadas (centinela de "ninguna").
+    Map<String, dynamic> promo({
+      dynamic esc = const ['*'],
+      dynamic ok = const ['*'],
+      dynamic no = const ['99999999'],
+    }) =>
+        {
+          'EscenariosHabilitados': esc,
+          'AgenciasHabilitadas': ok,
+          'AgenciasNOHabilitadas': no,
+        };
+
+    test('la promo abierta ("*" en todo) se ve siempre', () {
+      expect(
+          PromoDoc.habilitadaPara(promo(), escenario: '1000', agencia: '1'),
+          isTrue);
+    });
+
+    test('escenario que no está en la lista la oculta', () {
+      final p = promo(esc: ['9998']);
+      expect(PromoDoc.habilitadaPara(p, escenario: '1000', agencia: '1'),
+          isFalse);
+      expect(PromoDoc.habilitadaPara(p, escenario: '9998', agencia: '1'),
+          isTrue);
+    });
+
+    test('solo la agencia habilitada la ve (caso real de la promo 53)', () {
+      // MERCEDES: AgenciasHabilitadas ['10000141','113'].
+      final p = promo(ok: ['10000141', '113']);
+      expect(PromoDoc.habilitadaPara(p, escenario: '1000', agencia: '113'),
+          isTrue);
+      expect(PromoDoc.habilitadaPara(p, escenario: '1000', agencia: '1'),
+          isFalse, reason: 'RIOGAS PLANTA no es Mercedes');
+    });
+
+    test('estar en NO habilitadas gana sobre el "*" de habilitadas', () {
+      final p = promo(no: ['7']);
+      expect(PromoDoc.habilitadaPara(p, escenario: '1000', agencia: '7'),
+          isFalse);
+      expect(PromoDoc.habilitadaPara(p, escenario: '1000', agencia: '8'),
+          isTrue);
+    });
+
+    test('los centinelas de la carga no bloquean a nadie', () {
+      for (final n in [
+        ['99999999'],
+        [''],
+        <String>[],
+      ]) {
+        expect(PromoDoc.habilitadaPara(promo(no: n),
+            escenario: '1000', agencia: '1'), isTrue,
+            reason: 'NO habilitadas: $n');
+      }
+    });
+
+    test('sin agencia conocida NO se esconde nada por agencia', () {
+      // El doc del móvil todavía no llegó: mostrar de más es preferible a
+      // dejar la pantalla vacía sin que nadie entienda por qué.
+      final p = promo(ok: ['113'], no: ['1']);
+      expect(PromoDoc.habilitadaPara(p, escenario: '1000', agencia: ''),
+          isTrue);
+      expect(PromoDoc.habilitadaPara(p, escenario: '1000', agencia: '  '),
+          isTrue);
+    });
+
+    test('el escenario SÍ se aplica aunque no se sepa la agencia', () {
+      expect(
+          PromoDoc.habilitadaPara(promo(esc: ['9998']),
+              escenario: '1000', agencia: ''),
+          isFalse);
+    });
+
+    test('listas ausentes o vacías dejan pasar (promo mal cargada se ve)', () {
+      expect(PromoDoc.habilitadaPara(<String, dynamic>{},
+          escenario: '1000', agencia: '1'), isTrue);
+      expect(
+          PromoDoc.habilitadaPara(promo(esc: <String>[], ok: <String>[]),
+              escenario: '1000', agencia: '1'),
+          isTrue);
+    });
+
+    test('tolera que la lista venga como texto separado por comas', () {
+      final p = promo(esc: '1000, 9998', ok: '113;10000141');
+      expect(PromoDoc.habilitadaPara(p, escenario: '9998', agencia: '113'),
+          isTrue);
+      expect(PromoDoc.habilitadaPara(p, escenario: '2000', agencia: '113'),
+          isFalse);
+      expect(PromoDoc.habilitadaPara(p, escenario: '1000', agencia: '7'),
+          isFalse);
+    });
+
+    test('PromoDoc.lista descarta vacíos y recorta', () {
+      expect(PromoDoc.lista({'x': [' 1 ', '', '  ', '2']}, 'x'), ['1', '2']);
+      expect(PromoDoc.lista(<String, dynamic>{}, 'x'), isEmpty);
+    });
+  });
 }
