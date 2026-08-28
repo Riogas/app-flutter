@@ -14,12 +14,37 @@ import 'dart:async';
 import '../utils/constantes.dart';
 import '../services/debug_config_manager.dart'; // 🆕 Debug logging
 
+/// Etiquetas HTML que el detalle que manda GeneXus usa de verdad.
+const _etiquetasReales =
+    'html|head|meta|body|table|thead|tbody|tfoot|tr|th|td|caption|col|colgroup|'
+    'a|b|strong|i|em|u|s|br|hr|p|div|span|center|img|font|small|big|sub|sup|'
+    'ul|ol|li|dl|dt|dd|h1|h2|h3|h4|h5|h6|pre|code|style|title|link|script';
+
+/// El backend mete texto con `<` sin escapar dentro de las celdas — el caso
+/// real es la autorización de la tarjeta:
+/// `<<ASOFUNPOR: AUT-1322469 $1341.00 #1(Tarj.7207)>>`. El WebView lo parsea
+/// como una etiqueta desconocida y se traga TODO el contenido: en pantalla
+/// quedaba un `<>` suelto. Acá se escapa cualquier `<` que no abra una
+/// etiqueta real, así ese texto se ve como lo que es.
+String escaparPseudoEtiquetas(String html) => html.replaceAll(
+      // String cruda en la parte con escapes: '\s' dentro de una común
+      // se colapsa a 's' y el patrón queda roto sin avisar.
+      RegExp('<(?!/?(' + _etiquetasReales + r')[\s/>]|!|\?)',
+        caseSensitive: false),
+      '&lt;',
+    );
+
+
 class OrderDetailPage extends StatefulWidget {
   final String detalleHtml;
   final int estadoNro;
   final double totalPedido; // Add this parameter
   final int codPedido;
   final String pedidoTipo;
+
+  /// Tipo de servicio del pedido ("URGENTE", "NOCTURNO", …). Va en el header,
+  /// al lado del número: es lo primero que el repartidor necesita ubicar.
+  final String servicioNombre;
   final GeoPoint? ubicacion;
 
   /// 🧭 true = abre directo el flujo de finalización al entrar
@@ -32,6 +57,7 @@ class OrderDetailPage extends StatefulWidget {
     required this.totalPedido, // Initialize it
     required this.codPedido,
     required this.pedidoTipo,
+    this.servicioNombre = '',
     this.ubicacion,
     this.autoFinalize = false,
   });
@@ -127,7 +153,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           },
         ),
       )
-      ..loadHtmlString(_getHtmlWithViewport(widget.detalleHtml));
+      ..loadHtmlString(_getHtmlWithViewport(escaparPseudoEtiquetas(widget.detalleHtml)));
 
     // Ya no se necesita escuchar el stream manualmente, se usará ValueNotifier
     _calcularDistanciaDesdeUbicacionCliente(); // llamada a función
@@ -400,6 +426,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   /// muestra el original con un estilo mínimo legible en vez de una pantalla
   /// vacía.
   String _getHtmlWithViewport(String content) {
+    final servicioEnHeader = widget.servicioNombre.trim().isNotEmpty;
     return '''
 <!DOCTYPE html>
 <html lang="es">
@@ -477,7 +504,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         border-radius: 9px; padding: 4px 8px; font-size: 12.5px;
         white-space: nowrap; flex: 0 0 auto;
       }
+      /* Cliente y Producto comparten renglón: son dos datos cortos y juntos
+         ahorran una tarjeta entera de alto. */
+      .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; align-items: stretch; }
+      .duo > .card { margin-bottom: 0; }
+      @media (max-width: 300px) { .duo { grid-template-columns: 1fr; } }
       .prod { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; }
+      .duo .prod { flex-wrap: wrap; gap: 4px; }
       .prod + .prod { border-top: 1px solid #eef3f7; }
       .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; }
       .maps a, a.act {
@@ -527,6 +560,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     <main id="app"></main>
     <div id="legacy" class="legacy" hidden>$content</div>
     <script>
+    var SERVICIO_EN_HEADER = $servicioEnHeader;
     (function () {
       var src = document.getElementById('legacy');
       var app = document.getElementById('app');
@@ -641,7 +675,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       var obsCliente = tomar(['obs cliente', 'observaciones del cliente']);
       var total = tomar(['total \$', 'total', 'importe', 'monto']);
       var pago = tomar(['f.pago', 'fpago', 'forma de pago', 'f pago', 'pago']);
-      var obsPago = tomar(['obs fpago', 'obs f.pago', 'obs pago']);
+      // El backend puede mandar VARIAS filas "Obs Fpago" (el detalle de la
+      // tarjeta y el texto de autorización van en filas separadas). Se toman
+      // todas: si no, la segunda caía en "Otros datos" repitiendo el rótulo.
+      var obsPago = todos(['obs fpago', 'obs f.pago', 'obs pago']);
       tomar(['pedido', 'nro', 'nro pedido', 'numero de pedido']); // ya va en el header
       tomar(['mapas', 'mapa', 'navegacion']);              // los enlaces ya se movieron
 
@@ -688,6 +725,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       }
 
       var hecho = 0;
+      // Las tarjetas no se cuelgan a medida que se arman: se guardan acá y se
+      // ordenan al final. El orden lo pide el uso real — dirección primero,
+      // después el importe (que de un vistazo dice cuántos productos son) y
+      // recién ahí el resto.
+      var caja = {};
 
       // El backend repite la observación de la dirección DENTRO del texto de
       // la dirección ("... - Obs Dir: CASA VERDE") y además como fila "Obs".
@@ -732,14 +774,19 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           g.style.gridTemplateColumns = n === 1 ? '1fr' : (n === 2 ? '1fr 1fr' : '1.35fr 1fr 1fr');
           c1.appendChild(g);
         }
-        app.appendChild(c1); hecho++;
+        caja.c1 = c1; hecho++;
       }
 
       // SERVICIO Y HORARIO
       if (!vacio(val(servicio)) || !vacio(val(fecha)) || !vacio(val(desde)) ||
-          (asignado && !vacio(val(asignado))) || (finalizado && !vacio(val(finalizado)))) {
+          (asignado && !vacio(val(asignado))) ||
+          (obsPedido && !vacio(val(obsPedido)))) {
         var c2 = card(I.clock, 'Servicio y horario');
-        if (!vacio(val(servicio))) c2.appendChild(el('div', 'main-val', val(servicio)));
+        // Si el servicio ya está en el header no se repite acá: era el
+        // renglón más alto de la tarjeta y decía exactamente lo mismo.
+        if (!vacio(val(servicio)) && !SERVICIO_EN_HEADER) {
+          c2.appendChild(el('div', 'main-val', val(servicio)));
+        }
         var ch = el('div', 'chips');
         if (!vacio(val(fecha))) ch.appendChild(chip(I.cal, 'Fecha', val(fecha)));
         var rango = '';
@@ -748,11 +795,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         else if (!vacio(val(hasta))) rango = 'hasta ' + val(hasta);
         if (rango) ch.appendChild(chip(I.clock, 'Horario', rango));
         if (asignado && !vacio(val(asignado))) ch.appendChild(chip(I.user, 'Asignado', val(asignado)));
-        if (finalizado && !vacio(val(finalizado))) ch.appendChild(chip(I.check, 'Finalizado', val(finalizado)));
-        if (estadoPed && !vacio(val(estadoPed))) ch.appendChild(chip(I.info, 'Estado', val(estadoPed)));
+        // Finalizado y Estado NO se muestran: en un pedido pendiente son ruido
+        // (y con datos viejos hasta se contradicen con el badge del header).
+        // Igual quedaron consumidos arriba, así que no caen en "Otros datos".
         if (ch.children.length) c2.appendChild(ch);
         if (obsPedido && !vacio(val(obsPedido))) c2.appendChild(nota(val(obsPedido)));
-        app.appendChild(c2); hecho++;
+        caja.c2 = c2; hecho++;
       }
 
       // PRODUCTO(S)
@@ -768,12 +816,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           var f = el('div', 'prod');
           f.appendChild(el('div', 'grow main-val', d.nombre));
           if (!vacio(d.cant)) {
-            f.appendChild(el('span', 'badge',
-              items.length > 1 ? 'x' + d.cant : 'Cantidad: ' + d.cant));
+            f.appendChild(el('span', 'badge', 'x' + d.cant));
           }
           c3.appendChild(f);
         });
-        app.appendChild(c3); hecho++;
+        caja.c3 = c3; hecho++;
       }
 
       // CLIENTE (nombre y observaciones; el teléfono ya va arriba, en Entrega)
@@ -781,7 +828,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         var c4 = card(I.user, 'Cliente');
         if (!vacio(val(cliente))) c4.appendChild(el('div', 'main-val', val(cliente)));
         if (obsCliente && !vacio(val(obsCliente))) c4.appendChild(nota(val(obsCliente)));
-        app.appendChild(c4); hecho++;
+        caja.c4 = c4; hecho++;
       }
 
       // PAGO
@@ -797,8 +844,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           r2.appendChild(t);
         }
         c5.appendChild(r2);
-        if (obsPago && !vacio(val(obsPago))) c5.appendChild(el('div', 'detalle', val(obsPago)));
-        app.appendChild(c5); hecho++;
+        obsPago.forEach(function (p) {
+          if (!vacio(p.v)) c5.appendChild(el('div', 'detalle', p.v));
+        });
+        caja.c5 = c5; hecho++;
       }
 
       // CUALQUIER OTRO DATO QUE MANDE EL BACKEND (no se pierde nada)
@@ -817,8 +866,24 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           f.appendChild(el('span', 'v', p.v));
           c6.appendChild(f);
         });
-        app.appendChild(c6); hecho++;
+        caja.c6 = c6; hecho++;
       }
+
+      // ORDEN: Entrega, Pago, [Cliente | Producto] a dos columnas, Servicio,
+      // y al final lo que no se reconoció.
+      if (caja.c1) app.appendChild(caja.c1);
+      if (caja.c5) app.appendChild(caja.c5);
+      if (caja.c4 && caja.c3) {
+        var duo = el('div', 'duo');
+        duo.appendChild(caja.c4);
+        duo.appendChild(caja.c3);
+        app.appendChild(duo);
+      } else {
+        if (caja.c4) app.appendChild(caja.c4);
+        if (caja.c3) app.appendChild(caja.c3);
+      }
+      if (caja.c2) app.appendChild(caja.c2);
+      if (caja.c6) app.appendChild(caja.c6);
 
       // Sin nada reconocible: se muestra el original antes que una pantalla vacía
       if (!hecho) {
@@ -1618,34 +1683,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     }
   }
 
-  /// Etiqueta y color del estado del pedido. `EstadoNro` 1 = pendiente y
-  /// 2 = entregado (mismo criterio que V2Data); cualquier otro valor se
-  /// muestra tal cual en gris en vez de inventarle un nombre.
-  ({String texto, Color fondo, Color texto2}) get _estadoBadge {
-    switch (widget.estadoNro) {
-      case 1:
-        return (
-          texto: 'Pendiente',
-          fondo: const Color(0xFFF2C315),
-          texto2: const Color(0xFF4A3A00)
-        );
-      case 2:
-        return (
-          texto: 'Entregado',
-          fondo: const Color(0xFF82C63F),
-          texto2: const Color(0xFF12340A)
-        );
-      default:
-        return (
-          texto: 'Estado ${widget.estadoNro}',
-          fondo: const Color(0xFFCBD8E4),
-          texto2: const Color(0xFF23384C)
-        );
-    }
+  /// "Pedido #123 - URGENTE". El servicio se recorta si es larguísimo y el
+  /// `ellipsis` del Text remata lo que igual no entre en pantalla.
+  String get _tituloPedido {
+    final serv = widget.servicioNombre.trim();
+    if (serv.isEmpty) return 'Pedido #${widget.codPedido}';
+    final corto = serv.length > 26 ? '${serv.substring(0, 25)}…' : serv;
+    return 'Pedido #${widget.codPedido} - $corto';
   }
 
   Widget _buildHeader() {
-    final badge = _estadoBadge;
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -1697,38 +1744,18 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Pedido #${widget.codPedido}',
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.82),
-                              fontSize: 12.5,
-                              height: 1.1,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: badge.fondo,
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: Text(
-                            badge.texto,
-                            style: TextStyle(
-                              color: badge.texto2,
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                              height: 1.1,
-                            ),
-                          ),
-                        ),
-                      ],
+                    // Sin chip de estado: el pedido abierto ya se sabe en qué
+                    // estado está y el chip le comía el ancho al tipo de
+                    // servicio, que sí cambia y sí hay que poder leer entero.
+                    Text(
+                      _tituloPedido,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.82),
+                        fontSize: 12.5,
+                        height: 1.1,
+                      ),
                     ),
                   ],
                 ),

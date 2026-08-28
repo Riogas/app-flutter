@@ -327,6 +327,8 @@ class _MapPageState extends State<MapPage> {
                                     totalPedido: data['TotalPedido'] ?? 0.0,
                                     codPedido: data['id'],
                                     pedidoTipo: data['Tipo'],
+                                    servicioNombre:
+                                        (data['ServicioNombre'] ?? '').toString(),
                                     ubicacion: data['ubicacion'] as GeoPoint,
                                   ),
                                 ),

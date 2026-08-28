@@ -239,6 +239,7 @@ class _PendingOrdersPageState extends State<PendingOrdersPage> {
                       : 0.0,
           codPedido: pedidoId,
           pedidoTipo: tipo,
+          servicioNombre: (pedido['ServicioNombre'] ?? '').toString(),
           ubicacion: ubicacion,
         ),
       ),

@@ -75,6 +75,7 @@ class PedidoActionsV2 {
                       : 0.0,
           codPedido: pedidoId,
           pedidoTipo: pedido['Tipo'],
+          servicioNombre: (pedido['ServicioNombre'] ?? '').toString(),
           ubicacion: ubicacion,
           autoFinalize: autoFinalize,
         ),
