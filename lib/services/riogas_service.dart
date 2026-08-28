@@ -1474,6 +1474,22 @@ class RioGasService {
   ///
   /// Devuelve `null` si salió todo bien, o el motivo del fallo. El llamador
   /// viejo lo ignora (se mantiene el comportamiento silencioso de siempre).
+  /// Pega la raíz GX con el objeto del reporte que nombra la constante.
+  ///
+  /// Las constantes 602/603 guardan la ruta de PRODUCCIÓN completa
+  /// (`ica_geos_/com.icageos.urlhttprpt2sgm`), pero en desarrollo la webapp
+  /// cuelga de la raíz (`sgm.riogas.com.uy/`) y ese prefijo da 404. Como
+  /// [raiz] ya trae el path de la app cuando corresponde, acá se usa solo el
+  /// último segmento: el nombre del objeto.
+  static String urlReporte(String raiz, String rutaConstante) {
+    final objeto = rutaConstante
+        .split('/')
+        .where((s) => s.trim().isNotEmpty)
+        .last
+        .trim();
+    return raiz.endsWith('/') ? '$raiz$objeto' : '$raiz/$objeto';
+  }
+
   static Future<String?> downloadAndOpenPDF({
     required int year,
     required int month,
@@ -1506,29 +1522,19 @@ class RioGasService {
     final String fechaHasta =
         '${fechaHastaDate.year}${fechaHastaDate.month.toString().padLeft(2, '0')}${fechaHastaDate.day.toString().padLeft(2, '0')}000000';
 
-    // Construcción de URL usando constantes 600 (base) y 602 (path)
-    final baseUrlFromConst = (await getConstantValue('600'))?.trim() ?? '';
     final reportPathFromConst = (await getConstantValue(constanteRuta))?.trim();
     if (reportPathFromConst == null || reportPathFromConst.isEmpty) {
       return 'No está configurada la constante $constanteRuta '
           '(ruta del reporte).';
     }
 
-    // Normalizar base: quitar sufijo appservices/, asegurar slash final
-    var base = baseUrlFromConst.isEmpty
-        ? 'https://sgm.riogas.com.uy/'
-        : baseUrlFromConst;
-    base = base.replaceAll(RegExp(r'appservices/?$', caseSensitive: false), '');
-    if (!base.endsWith('/')) base += '/';
-
-    // Normalizar path: quitar slash inicial si lo tiene
-    var path = reportPathFromConst;
-    if (path.startsWith('/')) {
-      path = path.substring(1);
-    }
-
-    final url =
-        '${base}${path}?FechaDesde=$fechaDesde&FechaHasta=$fechaHasta&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId&Tipo=RESUMIDO';
+    // El reporte cuelga de la raíz de la webapp GX, la misma de la que
+    // cuelgan los endpoints de promociones — así SIGUE EL AMBIENTE. Antes
+    // salía de la constante 600, que es un valor único y siempre apuntaba a
+    // producción: estando en desarrollo el reporte igual traía datos de prod.
+    final base = gxRootFromBaseUrl(baseUrl);
+    final url = urlReporte(base, reportPathFromConst) +
+        '?FechaDesde=$fechaDesde&FechaHasta=$fechaHasta&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId&Tipo=RESUMIDO';
 
     print('🌐 Downloading PDF from: $url');
 

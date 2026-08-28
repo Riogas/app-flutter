@@ -371,4 +371,49 @@ void main() {
       expect(r.nroTrn, 77);
     });
   });
+
+  group('RioGasService.urlReporte', () {
+    // Verificado contra los servicios REALES: en prod el objeto vive bajo
+    // /ica_geos_/ y en desarrollo cuelga de la raíz (ahí /ica_geos_/ da 404).
+    test('desarrollo: la webapp cuelga de la raíz', () {
+      final raiz =
+          RioGasService.gxRootFromBaseUrl('https://sgm.riogas.com.uy/appservices/');
+      expect(raiz, 'https://sgm.riogas.com.uy/');
+      expect(
+        RioGasService.urlReporte(raiz, 'ica_geos_/com.icageos.urlhttprpt2sgm'),
+        'https://sgm.riogas.com.uy/com.icageos.urlhttprpt2sgm',
+      );
+    });
+
+    test('producción: la raíz ya trae ica_geos_, no se duplica', () {
+      final raiz = RioGasService.gxRootFromBaseUrl(
+          'https://www.riogas.uy/ica_geos_/appservices/');
+      expect(raiz, 'https://www.riogas.uy/ica_geos_/');
+      expect(
+        RioGasService.urlReporte(
+            raiz, 'ica_geos_/com.icageos.urlhttprptsgmpromosapp'),
+        'https://www.riogas.uy/ica_geos_/com.icageos.urlhttprptsgmpromosapp',
+      );
+    });
+
+    test('tolera la constante sin prefijo y con barra inicial', () {
+      const raiz = 'https://sgm.riogas.com.uy/';
+      for (final ruta in [
+        'com.icageos.urlhttprpt2sgm',
+        '/com.icageos.urlhttprpt2sgm',
+        'ica_geos_//com.icageos.urlhttprpt2sgm',
+      ]) {
+        expect(RioGasService.urlReporte(raiz, ruta),
+            'https://sgm.riogas.com.uy/com.icageos.urlhttprpt2sgm',
+            reason: ruta);
+      }
+    });
+
+    test('agrega la barra si la raíz no la trae', () {
+      expect(
+        RioGasService.urlReporte('https://sgm.riogas.com.uy', 'x/objeto'),
+        'https://sgm.riogas.com.uy/objeto',
+      );
+    });
+  });
 }
