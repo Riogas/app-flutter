@@ -101,6 +101,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   // ✅ Flag para prevenir múltiples llamadas simultáneas de finalización
   bool _isFinalizing = false;
 
+  /// Está abierta la tarjeta ampliada (la lupa del WebView).
+  ///
+  /// El overlay vive DENTRO del WebView, así que no puede tapar el botón
+  /// "Finalizar pedido", que es un widget de Flutter: quedaba encendido y
+  /// tocable detrás de un fondo oscurecido. El HTML avisa por este canal y
+  /// acá se esconde mientras dure.
+  bool _tarjetaAmpliada = false;
+
   @override
   void initState() {
     super.initState();
@@ -152,8 +160,21 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             return NavigationDecision.navigate;
           },
         ),
-      )
-      ..loadHtmlString(_getHtmlWithViewport(escaparPseudoEtiquetas(widget.detalleHtml)));
+      );
+
+    // El canal se registra ANTES de cargar: addJavaScriptChannel es asíncrono
+    // y en el mismo cascade el loadHtmlString le ganaba de mano, así que la
+    // página quedaba sin `window.Ampliada` y la lupa no avisaba nada.
+    _controller
+        .addJavaScriptChannel(
+          'Ampliada',
+          onMessageReceived: (m) {
+            if (!mounted) return;
+            setState(() => _tarjetaAmpliada = m.message == 'on');
+          },
+        )
+        .then((_) => _controller.loadHtmlString(
+            _getHtmlWithViewport(escaparPseudoEtiquetas(widget.detalleHtml))));
 
     // Ya no se necesita escuchar el stream manualmente, se usará ValueNotifier
     _calcularDistanciaDesdeUbicacionCliente(); // llamada a función
@@ -546,6 +567,46 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       .extra + .extra { border-top: 1px solid #eef3f7; }
       .extra .k { color: var(--text2); flex: 0 0 auto; }
       .extra .v { color: var(--text); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+      /* 🔍 Lupa: amplía la tarjeta de Pago en un modal, para leer sin
+         esforzar la vista (los datos de la tarjeta son largos y chicos). */
+      .lupa {
+        margin-left: auto; flex: 0 0 auto;
+        width: 32px; height: 32px; border-radius: 50%;
+        border: 0; padding: 0; background: var(--soft); color: var(--blue);
+        display: flex; align-items: center; justify-content: center;
+      }
+      .lupa svg { width: 17px; height: 17px; }
+      .lupa:active { background: #d8ecfd; }
+      .zoom {
+        position: fixed; inset: 0; z-index: 20;
+        background: rgba(8, 40, 68, .55);
+        display: flex; align-items: center; justify-content: center;
+        padding: 16px;
+        opacity: 0; transition: opacity .16s ease;
+        -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+      }
+      .zoom.on { opacity: 1; }
+      .zoom-box {
+        width: 100%; max-width: 560px; max-height: 100%; overflow-y: auto;
+        transform: scale(.9); transition: transform .18s cubic-bezier(.2,.9,.3,1.2);
+      }
+      .zoom.on .zoom-box { transform: scale(1); }
+      .zoom-box .card { margin: 0; padding: 16px 18px 18px; border-radius: 18px; }
+      /* Un escalón más grande, sin exagerar. */
+      .zoom-box .title { font-size: 14px; }
+      .zoom-box .ico { width: 34px; height: 34px; flex: 0 0 34px; }
+      .zoom-box .ico svg { width: 19px; height: 19px; }
+      .zoom-box .main-val { font-size: 20px; line-height: 1.3; }
+      .zoom-box .tot-lb { font-size: 13px; }
+      .zoom-box .tot-vl { font-size: 25px; }
+      .zoom-box .detalle { font-size: 15px; line-height: 1.5; margin-top: 10px; padding-top: 10px; }
+      .zoom-cerrar {
+        margin: 12px auto 0; display: flex; align-items: center; gap: 8px;
+        height: 44px; padding: 0 20px; border: 0; border-radius: 22px;
+        background: #fff; color: var(--text); font-size: 15px; font-weight: 600;
+        font-family: inherit;
+      }
+      .zoom-cerrar svg { width: 17px; height: 17px; }
       .legacy { background: #fff; border-radius: 16px; padding: 12px; font-size: 14px; }
       .legacy table { width: 100%; border-collapse: collapse; }
       .legacy td, .legacy th { padding: 4px 6px; text-align: left; }
@@ -575,7 +636,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         cal: '<rect x="3.5" y="5" width="17" height="15" rx="2.4"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/>',
         nav: '<path d="M12 3 20 20l-8-4-8 4z"/>',
         info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
-        check: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.3 2.3 4.7-5"/>'
+        check: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.3 2.3 4.7-5"/>',
+        lupa: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2M11 8.5v5M8.5 11h5"/>',
+        cerrar: '<path d="M6 6l12 12M18 6 6 18"/>'
       };
 
       function svg(d) {
@@ -703,6 +766,59 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         c.appendChild(w);
         return c;
       }
+      /// Muestra una copia de [tarjeta] a pantalla completa y más grande.
+      /// Se clona en vez de mover el nodo original: así al cerrar no hay que
+      /// devolverlo a su lugar y la pantalla de atrás queda intacta.
+      function ampliar(tarjeta) {
+        var capa = el('div', 'zoom');
+        var caja = el('div', 'zoom-box');
+        caja.appendChild(tarjeta.cloneNode(true));
+        var lupaClon = caja.querySelector('.lupa');
+        if (lupaClon) lupaClon.parentNode.removeChild(lupaClon);
+
+        var cerrar = document.createElement('button');
+        cerrar.className = 'zoom-cerrar';
+        cerrar.setAttribute('type', 'button');
+        var ic = document.createElement('span');
+        ic.innerHTML = svg(I.cerrar);
+        cerrar.appendChild(ic.firstChild);
+        cerrar.appendChild(el('span', null, 'Cerrar'));
+        caja.appendChild(cerrar);
+        capa.appendChild(caja);
+
+        function avisar(estado) {
+          if (window.Ampliada) window.Ampliada.postMessage(estado);
+        }
+        function salir() {
+          capa.classList.remove('on');
+          avisar('off');
+          setTimeout(function () {
+            if (capa.parentNode) capa.parentNode.removeChild(capa);
+          }, 180);
+        }
+        cerrar.addEventListener('click', salir);
+        // Tocar el fondo cierra; tocar la tarjeta NO.
+        capa.addEventListener('click', function (e) {
+          if (e.target === capa) salir();
+        });
+
+        document.body.appendChild(capa);
+        avisar('on');
+        // Un frame después para que la transición tenga de dónde arrancar.
+        requestAnimationFrame(function () { capa.classList.add('on'); });
+      }
+
+      /// Botón de lupa en el encabezado de una tarjeta.
+      function botonLupa(tarjeta) {
+        var b = document.createElement('button');
+        b.className = 'lupa';
+        b.setAttribute('type', 'button');
+        b.setAttribute('aria-label', 'Ampliar');
+        b.innerHTML = svg(I.lupa);
+        b.addEventListener('click', function () { ampliar(tarjeta); });
+        return b;
+      }
+
       function nota(texto) {
         var n = el('div', 'nota');
         n.appendChild(el('span', null, texto));
@@ -847,6 +963,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         obsPago.forEach(function (p) {
           if (!vacio(p.v)) c5.appendChild(el('div', 'detalle', p.v));
         });
+        // El detalle de la tarjeta (autorización, cuotas, CI) viene largo y
+        // en cuerpo chico: la lupa lo abre ampliado.
+        c5.querySelector('.head').appendChild(botonLupa(c5));
         caja.c5 = c5; hecho++;
       }
 
@@ -1775,7 +1894,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         children: [
           _buildHeader(),
           Expanded(child: WebViewWidget(controller: _controller)),
-          if (widget.estadoNro == 1) // Show button only if estadoNro is 1
+          if (widget.estadoNro == 1 && !_tarjetaAmpliada)
             Container(
               decoration: const BoxDecoration(
                 color: Color(0xFFF4F7FA),
