@@ -26,6 +26,7 @@ import '../services/counter_service.dart'; // Import the new CounterService
 import '../utils/connection_check.dart';
 import '../utils/screenBlock.dart'; // Import secureScreen
 import '../utils/constantes.dart';
+import 'v2/promociones_page.dart';
 import 'package:android_intent_plus/android_intent.dart'; // Import AndroidIntent
 import 'package:android_intent_plus/flag.dart'; // Import Flag for AndroidIntent
 import 'package:flutter/services.dart'; // Import SystemNavigator
@@ -1023,7 +1024,10 @@ class _HomePageState extends State<HomePage>
     return ValueListenableBuilder<bool>(
       valueListenable: UiPrefs.homeV2,
       builder: (context, isV2, _) {
-        if (isV2) {
+        // En producción NO se ofrece el clásico (ni aparece el switch en
+        // Configuración), así que tampoco se respeta lo que haya guardado:
+        // si no, alguien que lo apagó en desarrollo quedaría atrapado ahí.
+        if (isV2 || !AppEnvironment.isDevelopment) {
           return HomeV2Scaffold(
             messageCountNotifier: _messageCountNotifier,
             onEstadoTap: _handleEstadoTapV2,
@@ -1040,13 +1044,18 @@ class _HomePageState extends State<HomePage>
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // 🎨 Navbar nuevo (V2) también en el diseño clásico
-          V2Header(
-            messageCountNotifier: _messageCountNotifier,
-            onEstadoTap: _handleEstadoTapV2,
-            height: 112,
-            bottomSpace: 12,
-          ),
+          // 🎨 Navbar nuevo (V2) también en el diseño clásico.
+          //
+          // Promos NO lleva el del shell: PromocionesPage dibuja el suyo (el
+          // scaffold V2 no pone ninguno, cada solapa trae el propio) y acá
+          // quedaban los dos apilados.
+          if (_legacyIndex != 2)
+            V2Header(
+              messageCountNotifier: _messageCountNotifier,
+              onEstadoTap: _handleEstadoTapV2,
+              height: 112,
+              bottomSpace: 12,
+            ),
           Expanded(child: _buildLegacyBody()),
         ],
       ),
@@ -1054,16 +1063,29 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  /// Índice acotado a los 2 tabs del clásico (Pedidos/Mapa); mensajes y
-  /// configuración viven ahora en el navbar superior
-  int get _legacyIndex => _selectedIndex > 1 ? 0 : _selectedIndex;
+  /// Índice acotado a los 3 tabs del clásico (Pedidos/Mapa/Promos); mensajes
+  /// y configuración viven ahora en el navbar superior
+  int get _legacyIndex => _selectedIndex > 2 ? 0 : _selectedIndex;
+
+  /// Promociones en el diseño clásico. El shell clásico monta UNA solapa por
+  /// vez (a diferencia del `IndexedStack` de V2), así que trae su propio
+  /// navbar y pide el anti-captura solo mientras está a la vista.
+  late final Widget _promosTabLegacy = PromocionesPage(
+    messageCountNotifier: _messageCountNotifier,
+    onEstadoTap: _handleEstadoTapV2,
+  );
+
+  Widget _legacyTab() {
+    if (_legacyIndex == 2) return _promosTabLegacy;
+    return _widgetOptions.elementAt(_legacyIndex);
+  }
 
   Widget _buildLegacyBody() {
     return Hive.isBoxOpen('sessionBox')
         ? ValueListenableBuilder<Map<String, dynamic>?>(
             valueListenable: _streamManager.sesionesNotifier,
             builder: (context, data, _) {
-              return _widgetOptions.elementAt(_legacyIndex);
+              return _legacyTab();
             },
           )
         : FutureBuilder(
@@ -1075,7 +1097,7 @@ class _HomePageState extends State<HomePage>
               return ValueListenableBuilder<Map<String, dynamic>?>(
                 valueListenable: _streamManager.sesionesNotifier,
                 builder: (context, data, _) {
-                  return _widgetOptions.elementAt(_legacyIndex);
+                  return _legacyTab();
                 },
               );
             },
@@ -1102,6 +1124,8 @@ class _HomePageState extends State<HomePage>
               _navItemV2(Icons.local_shipping_outlined, Icons.local_shipping,
                   'Pedidos', pendingOrdersCount),
               _navItemV2(Icons.map_outlined, Icons.map, 'Mapa', 0),
+              _navItemV2(Icons.card_giftcard_outlined, Icons.card_giftcard,
+                  'Promos', 0),
             ],
             currentIndex: _legacyIndex,
             onTap: _onItemTapped,
