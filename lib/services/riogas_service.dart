@@ -1465,7 +1465,16 @@ class RioGasService {
     }
   }
 
-  static Future<void> downloadAndOpenPDF({
+  /// Descarga un reporte PDF de SGM y lo abre con el visor del sistema.
+  ///
+  /// [constanteRuta] es la constante que guarda el path del servicio, colgado
+  /// de la URL base (constante 600): **602 = pedidos cumplidos** (el "Reporte
+  /// de visitas" de Configuración) y **603 = promos autorizadas en la app**.
+  /// Los dos servicios reciben exactamente los mismos parámetros.
+  ///
+  /// Devuelve `null` si salió todo bien, o el motivo del fallo. El llamador
+  /// viejo lo ignora (se mantiene el comportamiento silencioso de siempre).
+  static Future<String?> downloadAndOpenPDF({
     required int year,
     required int month,
     required int day,
@@ -1477,6 +1486,8 @@ class RioGasService {
     required int agenciaId,
     required int escenarioId,
     required int movilId,
+    String constanteRuta = '602',
+    String nombreArchivo = 'report.pdf',
   }) async {
     // print('📋 Parameters:');
     // print('Year: $year, Month: $month, Day: $day');
@@ -1497,8 +1508,11 @@ class RioGasService {
 
     // Construcción de URL usando constantes 600 (base) y 602 (path)
     final baseUrlFromConst = (await getConstantValue('600'))?.trim() ?? '';
-    final reportPathFromConst =
-        (await getConstantValue('602'))?.trim() ?? 'com.icageos.urlhttprpt2sgm';
+    final reportPathFromConst = (await getConstantValue(constanteRuta))?.trim();
+    if (reportPathFromConst == null || reportPathFromConst.isEmpty) {
+      return 'No está configurada la constante $constanteRuta '
+          '(ruta del reporte).';
+    }
 
     // Normalizar base: quitar sufijo appservices/, asegurar slash final
     var base = baseUrlFromConst.isEmpty
@@ -1519,24 +1533,51 @@ class RioGasService {
     print('🌐 Downloading PDF from: $url');
 
     try {
-      // print('🌐 Downloading PDF from: $url');
       final response = await http.get(Uri.parse(url));
 
-      if (response.statusCode == 200) {
-        final directory = await getTemporaryDirectory();
-        final filePath = '${directory.path}/report.pdf';
-        final file = File(filePath);
-
-        await file.writeAsBytes(response.bodyBytes);
-        // print('✅ PDF downloaded to: $filePath');
-
-        await OpenFile.open(filePath);
-        // print('📂 Opened PDF with result: $result');
-      } else {
-        // print('❌ Failed to download PDF. Status code: ${response.statusCode}');
+      if (response.statusCode != 200) {
+        print('❌ [REPORTE] HTTP ${response.statusCode} en $url');
+        return 'El servidor respondió ${response.statusCode}.';
       }
+
+      // El servicio puede contestar 200 con HTML en vez del PDF: GeneXus
+      // redirige al login de SGM cuando el objeto NO está publicado como
+      // anónimo (le pasa hoy a la 603; la 602 sí sale sin sesión). Sin este
+      // chequeo se guardaba la pantalla de login con nombre .pdf y el visor
+      // abría un archivo roto, sin decir por qué.
+      final esPdf = response.bodyBytes.length >= 5 &&
+          String.fromCharCodes(response.bodyBytes.take(5)) == '%PDF-';
+      if (!esPdf) {
+        // GeneXus responde 200 y sirve la pantalla de login, no un redirect
+        // que se pueda leer en `response.request`: hay que mirar el cuerpo.
+        final cuerpo = utf8
+            .decode(response.bodyBytes.take(4096).toList(), allowMalformed: true)
+            .toLowerCase();
+        final pideLogin =
+            cuerpo.contains('riogaslogin') || cuerpo.contains('login sgm');
+        print('❌ [REPORTE] La respuesta no es un PDF '
+            '(${response.headers['content-type']}), pideLogin=$pideLogin');
+        return pideLogin
+            ? 'El servicio del reporte pide inicio de sesión en SGM. '
+                'Hay que publicarlo sin autenticación, como el de visitas.'
+            : 'El servidor no devolvió un PDF.';
+      }
+
+      final directory = await getTemporaryDirectory();
+      final filePath = '${directory.path}/$nombreArchivo';
+      final file = File(filePath);
+      await file.writeAsBytes(response.bodyBytes);
+
+      final abierto = await OpenFile.open(filePath);
+      if (abierto.type != ResultType.done) {
+        print('❌ [REPORTE] No se pudo abrir: ${abierto.message}');
+        return 'Se descargó pero no se pudo abrir el PDF '
+            '(${abierto.message}).';
+      }
+      return null;
     } catch (e) {
-      // print('❌ Error downloading or opening PDF: $e');
+      print('❌ [REPORTE] Error descargando/abriendo: $e');
+      return 'No se pudo obtener el reporte: $e';
     }
   }
 

@@ -8,6 +8,7 @@ import '../../services/persistent_stream_manager.dart';
 import '../message_page.dart';
 import '../settings_page.dart';
 import 'v2_data.dart';
+import 'reporte_promos.dart';
 import 'v2_theme.dart';
 
 /// 🏙️ Cabecera del rediseño: ilustración + degradado, logo, mensajes,
@@ -257,6 +258,8 @@ class V2Header extends StatelessWidget {
       itemBuilder: (context) => [
         if (!menuSoloLogout) ...[
           _menuItem('config', Icons.settings_outlined, 'Configuración'),
+          _menuItem('reporte-promos', Icons.description_outlined,
+              'Reporte promociones'),
           const PopupMenuDivider(),
         ],
         _menuItem('logout', Icons.logout, 'Cerrar sesión',
@@ -273,8 +276,16 @@ class V2Header extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: color ?? V2Colors.textoPrimario),
           const SizedBox(width: 12),
-          Text(label,
-              style: TextStyle(color: color ?? V2Colors.textoPrimario)),
+          // Flexible: con rótulos largos ("Reporte promociones") la fila se
+          // pasaba del ancho del popup y Flutter tiraba overflow.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: color ?? V2Colors.textoPrimario),
+            ),
+          ),
         ],
       ),
     );
@@ -287,6 +298,9 @@ class V2Header extends StatelessWidget {
           context,
           MaterialPageRoute(builder: (_) => SettingsPage()),
         );
+        break;
+      case 'reporte-promos':
+        await abrirReportePromos(context);
         break;
       case 'logout':
         await _confirmarLogout(context);
