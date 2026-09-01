@@ -525,13 +525,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         border-radius: 9px; padding: 4px 8px; font-size: 12.5px;
         white-space: nowrap; flex: 0 0 auto;
       }
-      /* Cliente y Producto comparten renglón: son dos datos cortos y juntos
-         ahorran una tarjeta entera de alto. */
-      .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; align-items: stretch; }
-      .duo > .card { margin-bottom: 0; }
-      @media (max-width: 300px) { .duo { grid-template-columns: 1fr; } }
       .prod { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; }
-      .duo .prod { flex-wrap: wrap; gap: 4px; }
       .prod + .prod { border-top: 1px solid #eef3f7; }
       .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; }
       .maps a, a.act {
@@ -745,8 +739,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       tomar(['pedido', 'nro', 'nro pedido', 'numero de pedido']); // ya va en el header
       tomar(['mapas', 'mapa', 'navegacion']);              // los enlaces ya se movieron
 
+      /// Con [titulo] nulo la tarjeta va SIN encabezado: no se dibuja el ícono
+      /// ni el rótulo y el contenido arranca pegado al borde de arriba. Lo usa
+      /// Entrega, donde la dirección se explica sola y el título solo empujaba
+      /// todo hacia abajo.
       function card(icono, titulo) {
         var c = el('section', 'card');
+        if (!titulo) return c;
         var h = el('div', 'head');
         var i = el('div', 'ico');
         i.innerHTML = svg(icono);
@@ -874,7 +873,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
       // ENTREGA
       if (!vacio(dirTxt) || aWaze || aMaps || botonTel) {
-        var c1 = card(I.pin, 'Entrega');
+        var c1 = card(I.pin, null); // sin título: la dirección se explica sola
         if (!vacio(dirTxt)) c1.appendChild(el('div', 'addr', dirTxt));
         var refs = [];
         if (esquina && !vacio(val(esquina))) refs.push('Esquina: ' + val(esquina));
@@ -988,21 +987,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         caja.c6 = c6; hecho++;
       }
 
-      // ORDEN: Entrega, Pago, [Cliente | Producto] a dos columnas, Servicio,
-      // y al final lo que no se reconoció.
+      // ORDEN: Entrega, Pago, Producto, Servicio, lo que no se reconoció, y
+      // Cliente al final del todo. Producto ya no comparte renglón con
+      // Cliente: a lo ancho entra en una sola fila y la tarjeta queda fina.
+      // Cliente es el dato que menos se mira, así que va último y a lo ancho.
       if (caja.c1) app.appendChild(caja.c1);
       if (caja.c5) app.appendChild(caja.c5);
-      if (caja.c4 && caja.c3) {
-        var duo = el('div', 'duo');
-        duo.appendChild(caja.c4);
-        duo.appendChild(caja.c3);
-        app.appendChild(duo);
-      } else {
-        if (caja.c4) app.appendChild(caja.c4);
-        if (caja.c3) app.appendChild(caja.c3);
-      }
+      if (caja.c3) app.appendChild(caja.c3);
       if (caja.c2) app.appendChild(caja.c2);
       if (caja.c6) app.appendChild(caja.c6);
+      if (caja.c4) app.appendChild(caja.c4);
 
       // Sin nada reconocible: se muestra el original antes que una pantalla vacía
       if (!hecho) {
