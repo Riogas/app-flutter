@@ -488,18 +488,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         margin-bottom: 6px;
       }
       .card:last-child { margin-bottom: 0; }
-      .head { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
-      .ico {
-        width: 26px; height: 26px; border-radius: 50%;
-        background: var(--soft); color: var(--blue);
-        display: flex; align-items: center; justify-content: center;
-        flex: 0 0 26px;
-      }
-      .ico svg { width: 15px; height: 15px; }
-      .title {
-        font-size: 12px; font-weight: 700; color: var(--blue);
-        letter-spacing: .02em;
-      }
       .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
       .grow { flex: 1; min-width: 0; }
       .addr {
@@ -562,7 +550,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       .extra .k { color: var(--text2); flex: 0 0 auto; }
       .extra .v { color: var(--text); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
       /* 🔍 Lupa: amplía la tarjeta de Pago en un modal, para leer sin
-         esforzar la vista (los datos de la tarjeta son largos y chicos). */
+         esforzar la vista (los datos de la tarjeta son largos y chicos).
+         Vive abajo a la derecha, en el renglón del último dato. */
+      .detalle.con-lupa { display: flex; align-items: center; gap: 10px; }
       .lupa {
         margin-left: auto; flex: 0 0 auto;
         width: 32px; height: 32px; border-radius: 50%;
@@ -587,9 +577,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       .zoom.on .zoom-box { transform: scale(1); }
       .zoom-box .card { margin: 0; padding: 16px 18px 18px; border-radius: 18px; }
       /* Un escalón más grande, sin exagerar. */
-      .zoom-box .title { font-size: 14px; }
-      .zoom-box .ico { width: 34px; height: 34px; flex: 0 0 34px; }
-      .zoom-box .ico svg { width: 19px; height: 19px; }
       .zoom-box .main-val { font-size: 20px; line-height: 1.3; }
       .zoom-box .tot-lb { font-size: 13px; }
       .zoom-box .tot-vl { font-size: 25px; }
@@ -739,20 +726,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       tomar(['pedido', 'nro', 'nro pedido', 'numero de pedido']); // ya va en el header
       tomar(['mapas', 'mapa', 'navegacion']);              // los enlaces ya se movieron
 
-      /// Con [titulo] nulo la tarjeta va SIN encabezado: no se dibuja el ícono
-      /// ni el rótulo y el contenido arranca pegado al borde de arriba. Lo usa
-      /// Entrega, donde la dirección se explica sola y el título solo empujaba
-      /// todo hacia abajo.
-      function card(icono, titulo) {
-        var c = el('section', 'card');
-        if (!titulo) return c;
-        var h = el('div', 'head');
-        var i = el('div', 'ico');
-        i.innerHTML = svg(icono);
-        h.appendChild(i);
-        h.appendChild(el('div', 'title', titulo));
-        c.appendChild(h);
-        return c;
+      /// Las tarjetas van SIN encabezado: ni ícono ni título. El contenido se
+      /// explica solo (una dirección, un importe, un nombre) y el encabezado
+      /// costaba ~34px por tarjeta — con cinco tarjetas era scroll puro para
+      /// no decir nada que el dato de abajo no diga.
+      function card() {
+        return el('section', 'card');
       }
       function chip(icono, rotulo, valor) {
         var c = el('div', 'chip');
@@ -873,7 +852,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
       // ENTREGA
       if (!vacio(dirTxt) || aWaze || aMaps || botonTel) {
-        var c1 = card(I.pin, null); // sin título: la dirección se explica sola
+        var c1 = card();
         if (!vacio(dirTxt)) c1.appendChild(el('div', 'addr', dirTxt));
         var refs = [];
         if (esquina && !vacio(val(esquina))) refs.push('Esquina: ' + val(esquina));
@@ -896,7 +875,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       if (!vacio(val(servicio)) || !vacio(val(fecha)) || !vacio(val(desde)) ||
           (asignado && !vacio(val(asignado))) ||
           (obsPedido && !vacio(val(obsPedido)))) {
-        var c2 = card(I.clock, 'Servicio y horario');
+        var c2 = card();
         // Si el servicio ya está en el header no se repite acá: era el
         // renglón más alto de la tarjeta y decía exactamente lo mismo.
         if (!vacio(val(servicio)) && !SERVICIO_EN_HEADER) {
@@ -926,7 +905,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         if (!vacio(d.nombre)) items.push(d);
       });
       if (items.length) {
-        var c3 = card(I.box, items.length > 1 ? 'Productos' : 'Producto');
+        var c3 = card();
         items.forEach(function (d) {
           var f = el('div', 'prod');
           f.appendChild(el('div', 'grow main-val', d.nombre));
@@ -940,7 +919,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
       // CLIENTE (nombre y observaciones; el teléfono ya va arriba, en Entrega)
       if (!vacio(val(cliente)) || (obsCliente && !vacio(val(obsCliente)))) {
-        var c4 = card(I.user, 'Cliente');
+        var c4 = card();
         if (!vacio(val(cliente))) c4.appendChild(el('div', 'main-val', val(cliente)));
         if (obsCliente && !vacio(val(obsCliente))) c4.appendChild(nota(val(obsCliente)));
         caja.c4 = c4; hecho++;
@@ -948,7 +927,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
       // PAGO
       if (!vacio(val(pago)) || !vacio(val(total))) {
-        var c5 = card(I.card, 'Pago');
+        var c5 = card();
         var r2 = el('div', 'row');
         r2.appendChild(el('div', 'grow main-val', vacio(val(pago)) ? '' : val(pago)));
         if (!vacio(val(total))) {
@@ -959,12 +938,25 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           r2.appendChild(t);
         }
         c5.appendChild(r2);
+        // La lupa (el detalle de la tarjeta viene largo y en cuerpo chico) va
+        // abajo a la derecha, compartiendo renglón con el último dato —
+        // normalmente "Cod.Auto / Importe Dto". Así no ocupa alto propio.
+        var ultimo = null;
         obsPago.forEach(function (p) {
-          if (!vacio(p.v)) c5.appendChild(el('div', 'detalle', p.v));
+          if (vacio(p.v)) return;
+          ultimo = el('div', 'detalle');
+          ultimo.appendChild(el('span', 'grow', p.v));
+          c5.appendChild(ultimo);
         });
-        // El detalle de la tarjeta (autorización, cuotas, CI) viene largo y
-        // en cuerpo chico: la lupa lo abre ampliado.
-        c5.querySelector('.head').appendChild(botonLupa(c5));
+        if (ultimo) {
+          ultimo.className = 'detalle con-lupa';
+          ultimo.appendChild(botonLupa(c5));
+        } else {
+          // Sin líneas de detalle no hay último renglón donde apoyarla: va en
+          // el mismo del total. En un renglón propio dejaba un hueco vacío
+          // abajo de la tarjeta, que es justo lo que se quiere evitar.
+          r2.appendChild(botonLupa(c5));
+        }
         caja.c5 = c5; hecho++;
       }
 
@@ -976,7 +968,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         sobrantes.push(pares[i]);
       }
       if (sobrantes.length) {
-        var c6 = card(I.info, 'Otros datos');
+        var c6 = card();
         sobrantes.forEach(function (p) {
           var f = el('div', 'extra');
           var k = p.k.charAt(0).toUpperCase() + p.k.slice(1);
