@@ -24,9 +24,16 @@ class BootPingWorker(context: Context, params: WorkerParameters) : CoroutineWork
         private const val KEY_BOOT_REASON = "boot_reason"
 
         fun enqueue(context: Context, bootReason: String = "BOOT_COMPLETED") {
+            // SIN setExpedited: un CoroutineWorker expedited obliga a implementar
+            // getForegroundInfo(), y la implementación de la clase base tira
+            // IllegalStateException("Not implemented") y MATA EL PROCESO. Se
+            // disparaba en cada MY_PACKAGE_REPLACED, o sea en cada actualización
+            // de la app, dejándola en loop de crash al arrancar.
+            // Tampoco corresponde: el ping no es urgente y este worker está
+            // pensado justamente para NO levantar un foreground service (que es
+            // lo que hace el trabajo expedited en API < 31).
             val req = OneTimeWorkRequestBuilder<BootPingWorker>()
                 .setInputData(workDataOf(KEY_BOOT_REASON to bootReason))
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork("boot_ping", ExistingWorkPolicy.REPLACE, req)
