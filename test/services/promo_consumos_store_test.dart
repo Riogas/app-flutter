@@ -64,4 +64,36 @@ void main() {
       expect(m.values.join(' ').contains('692757'), isFalse);
     });
   });
+
+  group('PromoConsumosStore.puedeAnular', () {
+    PromoConsumo consumo({required DateTime cuando, bool anulada = false}) =>
+        PromoConsumo.fromMap('1', {
+          'promo': 'Antel',
+          'codigoMascara': '••57',
+          'fechaHora': cuando.toIso8601String(),
+          'anulada': anulada,
+        });
+
+    test('un consumo recién hecho se puede anular', () {
+      expect(
+        PromoConsumosStore().puedeAnular(consumo(cuando: DateTime.now())),
+        isTrue,
+      );
+    });
+
+    test('NO caduca: uno de hace días sigue siendo anulable', () {
+      // Antes había una ventana de 30 minutos. Se sacó: si un consumo no se
+      // puede anular, eso lo contesta el servicio, no una cuenta local.
+      final viejo = DateTime.now().subtract(const Duration(days: 3));
+      expect(PromoConsumosStore().puedeAnular(consumo(cuando: viejo)), isTrue);
+    });
+
+    test('lo único que lo bloquea es que ya esté anulado', () {
+      expect(
+        PromoConsumosStore()
+            .puedeAnular(consumo(cuando: DateTime.now(), anulada: true)),
+        isFalse,
+      );
+    });
+  });
 }

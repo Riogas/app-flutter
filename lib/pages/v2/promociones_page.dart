@@ -83,7 +83,6 @@ class _PromocionesPageState extends State<PromocionesPage>
 
   _Fase _fase = _Fase.inicial;
   String _mensajeResultado = '';
-  String? _codigoAutorizacion;
   DateTime? _fechaConsumo;
   bool _opcionalesAbiertos = false;
 
@@ -113,9 +112,30 @@ class _PromocionesPageState extends State<PromocionesPage>
     PromoUsoStore().init();
     // Refrescar habilitación del botón Validar al tipear
     for (final c in [_codigoCtrl, _telCtrl, _nombreCtrl, _auxCtrl]) {
-      c.addListener(() => setState(() {}));
+      c.addListener(_alEditarCampo);
     }
   }
+
+  /// Tocar cualquier dato tira abajo la validación anterior: vuelve a
+  /// aparecer el botón Validar y se cae la tarjeta de resultado. Sin esto,
+  /// cambiar el código después de validar dejaba en pantalla un "Consumir"
+  /// que iba a consumir el beneficio del cliente ANTERIOR.
+  void _alEditarCampo() {
+    setState(() {
+      if (_fase == _Fase.beneficioOk || _fase == _Fase.pendientePin) {
+        _fase = _Fase.inicial;
+        _mensajeResultado = '';
+      }
+    });
+  }
+
+  /// Ya no se muestra cuando la promo se validó bien: a esa altura lo que
+  /// corresponde es consumir, no volver a validar.
+  bool get _mostrarValidar =>
+      _fase != _Fase.beneficioOk &&
+      _fase != _Fase.pendientePin &&
+      _fase != _Fase.consumiendo &&
+      _fase != _Fase.consumido;
 
   /// Si esta instancia tiene tomado el anti-captura. Necesario para que el
   /// contador quede balanceado: se adquiere y libera al entrar/salir del tab,
@@ -241,7 +261,6 @@ class _PromocionesPageState extends State<PromocionesPage>
       _auxCtrl.clear();
       _fase = _Fase.inicial;
       _mensajeResultado = '';
-      _codigoAutorizacion = null;
       _fechaConsumo = null;
       _opcionalesAbiertos = false;
     });
@@ -495,7 +514,6 @@ class _PromocionesPageState extends State<PromocionesPage>
     setState(() {
       if (res.ok) {
         _fase = _Fase.consumido;
-        _codigoAutorizacion = res.codigoAutorizacion;
         _fechaConsumo = res.fechaHora;
       } else {
         _fase = _Fase.error;
@@ -503,7 +521,7 @@ class _PromocionesPageState extends State<PromocionesPage>
       }
     });
 
-    // 🧾 Registrar el consumo en el dispositivo (permite anular 30 min)
+    // 🧾 Registrar el consumo en el dispositivo (queda anulable)
     if (res.ok) {
       await PromoConsumosStore().registrar(
         promo: _label('NombreCombo'),
@@ -528,7 +546,6 @@ class _PromocionesPageState extends State<PromocionesPage>
       _auxCtrl.clear();
       _fase = _Fase.inicial;
       _mensajeResultado = '';
-      _codigoAutorizacion = null;
       _fechaConsumo = null;
       _opcionalesAbiertos = false;
     });
@@ -673,13 +690,6 @@ class _PromocionesPageState extends State<PromocionesPage>
   // ── Formulario ──────────────────────────────────────────────────────────
 
   Widget _formCard(List<DocumentSnapshot> promos) {
-    final nombres = promos
-        .map((d) =>
-            ((d.data() as Map<String, dynamic>?)?['NombreCombo'] ?? '')
-                .toString())
-        .where((n) => n.isNotEmpty)
-        .toList();
-
     final nota = _label('NotaAnteriorAlBotonValidar');
     final labelValidar = _label('LabelBotonValidar').isNotEmpty
         ? _label('LabelBotonValidar')
@@ -688,17 +698,10 @@ class _PromocionesPageState extends State<PromocionesPage>
     final form = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _labelCampo('Promoción', requerido: true),
-        const SizedBox(height: 6),
+        // Sin título arriba: el combo ya dice "Seleccioná una promoción" y,
+        // una vez elegida, muestra su nombre. Debajo iba además la lista de
+        // TODAS las campañas en gris chico, que no ayudaba a elegir ninguna.
         _comboPromos(promos),
-        const SizedBox(height: 4),
-        Text(
-          nombres.join(', '),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-              color: V2Colors.textoSecundario, fontSize: 11.5),
-        ),
         // 🧪 Solo visible en modo debug: la ubicación administrativa es un
         // dato interno que viajará a la API de validación
         if (kDebugMode &&
@@ -746,38 +749,40 @@ class _PromocionesPageState extends State<PromocionesPage>
               ),
             ),
           ],
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _puedeValidar ? _validar : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: V2Colors.accion,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor:
-                    V2Colors.accion.withOpacity(0.35),
-                disabledForegroundColor: Colors.white70,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+          if (_mostrarValidar) ...[
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _puedeValidar ? _validar : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: V2Colors.accion,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor:
+                      V2Colors.accion.withOpacity(0.35),
+                  disabledForegroundColor: Colors.white70,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                textStyle: const TextStyle(
-                  fontSize: 16.5,
-                  fontWeight: FontWeight.w700,
-                ),
+                icon: _fase == _Fase.validando
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2.5),
+                      )
+                    : const Icon(Icons.verified_user_outlined, size: 21),
+                label: Text(
+                    _fase == _Fase.validando ? 'Validando...' : labelValidar),
               ),
-              icon: _fase == _Fase.validando
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2.5),
-                    )
-                  : const Icon(Icons.verified_user_outlined, size: 21),
-              label: Text(
-                  _fase == _Fase.validando ? 'Validando...' : labelValidar),
             ),
-          ),
+          ],
         ],
       ],
     );
@@ -863,15 +868,13 @@ class _PromocionesPageState extends State<PromocionesPage>
     );
   }
 
-  // ── 🧾 Promos del día (consumos locales, anulables por 30 min) ──────────
+  // ── 🧾 Promos del día (consumos locales, siempre anulables) ─────────────
 
   Widget _consumosDelDiaRow() {
     return ValueListenableBuilder<List<PromoConsumo>>(
       valueListenable: PromoConsumosStore().consumos,
       builder: (context, _, __) {
         final visibles = PromoConsumosStore().visibles;
-        final anulables =
-            visibles.where(PromoConsumosStore().puedeAnular).length;
         return V2Card(
           padding: EdgeInsets.zero,
           child: InkWell(
@@ -910,9 +913,7 @@ class _PromocionesPageState extends State<PromocionesPage>
                         Text(
                           visibles.isEmpty
                               ? 'Todavía no consumiste beneficios hoy'
-                              : anulables > 0
-                                  ? '$anulables ${anulables == 1 ? 'anulable' : 'anulables'} por tiempo limitado'
-                                  : 'Consumos confirmados',
+                              : 'Consumos confirmados',
                           style: const TextStyle(
                             color: V2Colors.textoSecundario,
                             fontSize: 12,
@@ -921,24 +922,6 @@ class _PromocionesPageState extends State<PromocionesPage>
                       ],
                     ),
                   ),
-                  if (anulables > 0)
-                    Container(
-                      margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: V2Colors.naranja.withOpacity(0.14),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '$anulables',
-                        style: const TextStyle(
-                          color: V2Colors.naranja,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
                   const Icon(Icons.chevron_right,
                       color: V2Colors.textoSecundario),
                 ],
@@ -1212,8 +1195,6 @@ class _PromocionesPageState extends State<PromocionesPage>
         _tieneCodigo,
         _codigoReq,
         () => _bloqueCampo(
-              label: _labelCodigo,
-              requerido: _codigoReq,
               // 📷 Según `ComoSeIngresaElCodigo`: tecleado o cámara. En ambos
               // casos el valor termina en `_codigoCtrl`, así que la validación
               // y el consumo no se enteran de la diferencia.
@@ -1221,20 +1202,20 @@ class _PromocionesPageState extends State<PromocionesPage>
                   ? _campoEscaneo()
                   : _campoTexto(
                       controller: _codigoCtrl,
-                      hint: 'Ingresá el código de la promoción',
+                      hint: _labelCodigo,
                       icon: Icons.qr_code_2,
+                      destacado: true,
                     ),
             ));
     agregar(
         _tieneTel,
         _telReq,
         () => _bloqueCampo(
-              label: _label('LabelCodTelCliente'),
-              requerido: _telReq,
               campo: _campoTexto(
                 controller: _telCtrl,
-                hint: 'Ingresá el teléfono del cliente',
+                hint: _label('LabelCodTelCliente'),
                 icon: Icons.phone_outlined,
+                destacado: true,
                 keyboardType: TextInputType.phone,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 helper: _label('TelValores').isNotEmpty
@@ -1246,11 +1227,9 @@ class _PromocionesPageState extends State<PromocionesPage>
         _tieneNombre,
         _nombreReq,
         () => _bloqueCampo(
-              label: _label('LabelNomCliente'),
-              requerido: _nombreReq,
               campo: _campoTexto(
                 controller: _nombreCtrl,
-                hint: 'Nombre y apellido del cliente',
+                hint: _label('LabelNomCliente'),
                 icon: Icons.person_outline,
                 textCapitalization: TextCapitalization.words,
               ),
@@ -1259,11 +1238,9 @@ class _PromocionesPageState extends State<PromocionesPage>
         _tieneAux,
         _auxReq,
         () => _bloqueCampo(
-              label: _label('LabelAuxIn1'),
-              requerido: _auxReq,
               campo: _campoTexto(
                 controller: _auxCtrl,
-                hint: 'Agregá cualquier observación relevante',
+                hint: _label('LabelAuxIn1'),
                 icon: Icons.notes_outlined,
                 maxLines: 3,
                 maxLength: 120,
@@ -1280,22 +1257,12 @@ class _PromocionesPageState extends State<PromocionesPage>
     ];
   }
 
-  Widget _bloqueCampo({
-    required String label,
-    required bool requerido,
-    required Widget campo,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _labelCampo(label, requerido: requerido),
-          const SizedBox(height: 6),
-          campo,
-        ],
-      ),
-    );
+  /// El rótulo de cada campo vive DENTRO del campo, como texto de ayuda: el
+  /// título arriba decía exactamente lo mismo y costaba un renglón por campo.
+  /// Requerido/opcional ya se distingue por dónde aparece el campo — los
+  /// opcionales viven detrás del colapsable "Datos opcionales".
+  Widget _bloqueCampo({required Widget campo}) {
+    return Padding(padding: const EdgeInsets.only(top: 14), child: campo);
   }
 
   Widget _toggleOpcionales(int cantidad) {
@@ -1342,41 +1309,6 @@ class _PromocionesPageState extends State<PromocionesPage>
           ],
         ),
       ),
-    );
-  }
-
-  Widget _labelCampo(String texto, {required bool requerido}) {
-    return Row(
-      children: [
-        Flexible(
-          child: Text(
-            texto,
-            style: const TextStyle(
-              color: V2Colors.textoPrimario,
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: requerido
-                ? V2Colors.rojo.withOpacity(0.10)
-                : V2Colors.textoSecundario.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            requerido ? 'Requerido' : 'Opcional',
-            style: TextStyle(
-              color: requerido ? V2Colors.rojo : V2Colors.textoSecundario,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -1502,7 +1434,14 @@ class _PromocionesPageState extends State<PromocionesPage>
     int maxLines = 1,
     int? maxLength,
     String? helper,
+    bool destacado = false,
   }) {
+    // 🎨 Crema en los campos que el repartidor SÍ o SÍ tiene que cargar
+    // (código y teléfono): así saltan a la vista entre el resto del formulario.
+    final fondo =
+        destacado ? const Color(0xFFFFF8E1) : const Color(0xFFF5F8FB);
+    final borde =
+        destacado ? const Color(0xFFE3C878) : V2Colors.celesteClaro;
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
@@ -1514,7 +1453,7 @@ class _PromocionesPageState extends State<PromocionesPage>
       cursorColor: V2Colors.accion,
       decoration: InputDecoration(
         filled: true,
-        fillColor: const Color(0xFFF5F8FB),
+        fillColor: fondo,
         hintText: hint,
         hintStyle:
             const TextStyle(color: V2Colors.textoSecundario, fontSize: 14),
@@ -1526,8 +1465,7 @@ class _PromocionesPageState extends State<PromocionesPage>
             const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: V2Colors.celesteClaro, width: 1.4),
+          borderSide: BorderSide(color: borde, width: 1.4),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -1535,8 +1473,7 @@ class _PromocionesPageState extends State<PromocionesPage>
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: V2Colors.celesteClaro, width: 1.4),
+          borderSide: BorderSide(color: borde, width: 1.4),
         ),
       ),
     );
@@ -1688,8 +1625,6 @@ class _PromocionesPageState extends State<PromocionesPage>
             extra: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (_codigoAutorizacion != null)
-                  _lineaConfirm('Autorización', _codigoAutorizacion!),
                 if (_fechaConsumo != null)
                   _lineaConfirm(
                     'Fecha',

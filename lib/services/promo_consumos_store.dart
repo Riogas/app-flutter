@@ -87,9 +87,10 @@ class PromoConsumo {
 }
 
 /// 🧾 Registro local (Hive) de los consumos de beneficios del dispositivo.
-/// Permite ver las promos del día y ANULAR un consumo dentro de la ventana
-/// de anulación. Cuando exista la API GeneXus, la anulación también viajará
-/// al backend (ver BeneficiosService.anular).
+/// Permite ver las promos del día y ANULAR un consumo. NO hay ventana de
+/// tiempo: un consumo se puede intentar anular siempre, y quien decide si
+/// corresponde es el servicio (ver BeneficiosService.anular), que contesta
+/// con el motivo cuando no se puede.
 class PromoConsumosStore {
   PromoConsumosStore._();
   static final PromoConsumosStore _instance = PromoConsumosStore._();
@@ -97,8 +98,11 @@ class PromoConsumosStore {
 
   static const String _boxName = 'promosConsumosBox';
 
-  /// ⏳ Ventana durante la cual un consumo se puede anular
-  static const Duration ventanaAnulacion = Duration(minutes: 30);
+  /// ⏳ Cuánto sigue apareciendo un consumo en "Promos del día" después de
+  /// hecho. NO tiene nada que ver con poder anularlo (eso ya no caduca):
+  /// existe solo para tapar el corte de medianoche, porque un consumo de las
+  /// 23:50 desaparecía de la lista a las 00:00.
+  static const Duration _ventanaVisibilidad = Duration(hours: 12);
 
   /// Retención local de registros
   static const Duration _retencion = Duration(days: 7);
@@ -234,9 +238,8 @@ class PromoConsumosStore {
 
   /// Consumos visibles en "Promos del día" (más recientes primero).
   ///
-  /// Son los de hoy MÁS cualquiera que todavía esté dentro de su ventana de
-  /// anulación. Ese agregado tapa el corte de medianoche: un consumo hecho
-  /// 23:50 desaparecía a las 00:00 con la ventana todavía abierta, y quedaba
+  /// Son los de hoy MÁS los de las últimas horas. Ese agregado tapa el corte
+  /// de medianoche: un consumo hecho 23:50 desaparecía a las 00:00 y quedaba
   /// sin forma de anularse desde la app.
   List<PromoConsumo> get visibles {
     final ahora = DateTime.now();
@@ -245,7 +248,7 @@ class PromoConsumosStore {
             (c.fechaHora.year == ahora.year &&
                 c.fechaHora.month == ahora.month &&
                 c.fechaHora.day == ahora.day) ||
-            puedeAnular(c))
+            ahora.difference(c.fechaHora) < _ventanaVisibilidad)
         .toList();
   }
 
@@ -253,15 +256,8 @@ class PromoConsumosStore {
       'que seguían siendo anulables después de medianoche.')
   List<PromoConsumo> get delDia => visibles;
 
-  /// ¿Sigue dentro de la ventana de anulación?
-  bool puedeAnular(PromoConsumo c) =>
-      !c.anulada &&
-      DateTime.now().difference(c.fechaHora) < ventanaAnulacion;
-
-  /// Minutos restantes para poder anular (0 si ya no se puede)
-  int minutosParaAnular(PromoConsumo c) {
-    final restante =
-        ventanaAnulacion - DateTime.now().difference(c.fechaHora);
-    return restante.isNegative ? 0 : restante.inMinutes + 1;
-  }
+  /// ¿Se puede intentar anular? Siempre que no esté ya anulada: no hay
+  /// ventana de tiempo. Si el consumo no admite anulación, eso lo dice el
+  /// servicio en su respuesta, no una cuenta regresiva local.
+  bool puedeAnular(PromoConsumo c) => !c.anulada;
 }
