@@ -2043,6 +2043,10 @@ class _PinSheetState extends State<_PinSheet> {
   }
 
   Future<void> _confirmar() async {
+    // 🔽 El teclado ocupa media pantalla y tapa el resultado: la respuesta
+    // puede tardar, y si falla el motivo y el botón de reenvío quedan abajo,
+    // detrás del teclado. Se baja apenas se confirma.
+    FocusScope.of(context).unfocus();
     setState(() {
       _confirmando = true;
       _error = false;
@@ -2064,7 +2068,9 @@ class _PinSheetState extends State<_PinSheet> {
     for (final c in _ctrls) {
       c.clear();
     }
-    _nodes[0].requestFocus();
+    // Sin requestFocus: volver a enfocar levantaba el teclado de nuevo y
+    // tapaba justo el mensaje que explica por qué falló. Para reintentar se
+    // toca una casilla.
     setState(() {
       _confirmando = false;
       _error = true;
@@ -2267,7 +2273,12 @@ class _PinSheetState extends State<_PinSheet> {
                       child: OutlinedButton(
                         onPressed: _confirmando
                             ? null
-                            : () => Navigator.pop(context),
+                            : () {
+                                // Que no quede el teclado arriba tapando la
+                                // pantalla de atrás mientras el sheet cierra.
+                                FocusScope.of(context).unfocus();
+                                Navigator.pop(context);
+                              },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: V2Colors.accion,
                           side: const BorderSide(
