@@ -86,6 +86,22 @@ class _PromocionesPageState extends State<PromocionesPage>
   DateTime? _fechaConsumo;
   bool _opcionalesAbiertos = false;
 
+  /// Consumo que se está anulando ahora mismo (spinner en su botón). Sin
+  /// esto la app se quedaba 30s quieta —el timeout de `_post`— sin ninguna
+  /// señal de que estuviera haciendo algo.
+  String? _anulandoId;
+
+  /// Resultado del último intento de anulación, por consumo. Se muestra
+  /// DENTRO del sheet: un SnackBar acá no se ve nunca, porque el
+  /// `showModalBottomSheet` se dibuja POR ENCIMA del Scaffold que hospeda al
+  /// ScaffoldMessenger. El aviso quedaba atrás del modal y el usuario se
+  /// quedaba sin saber qué había pasado.
+  final Map<String, String> _avisoAnulacion = {};
+
+  /// El sheet de "Promos del día" sigue abierto: un `setSheet` después de
+  /// cerrarlo tira excepción.
+  bool _sheetConsumosAbierto = false;
+
   // 🌍 Ubicación actual (interna, para la API de validación)
   String? _departamento;
   String? _localidad;
@@ -935,6 +951,8 @@ class _PromocionesPageState extends State<PromocionesPage>
 
   Future<void> _mostrarConsumosDelDia() async {
     Timer? refresco;
+    _avisoAnulacion.clear();
+    _sheetConsumosAbierto = true;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1002,12 +1020,21 @@ class _PromocionesPageState extends State<PromocionesPage>
         },
       ),
     );
+    _sheetConsumosAbierto = false;
     refresco?.cancel();
   }
 
   Widget _consumoTile(PromoConsumo c, StateSetter setSheet) {
     final store = PromoConsumosStore();
     final anulable = store.puedeAnular(c);
+    final anulando = _anulandoId == c.id;
+    final aviso = _avisoAnulacion[c.id];
+    // Solo la máscara del código: alcanza para reconocer cuál fue sin
+    // exponerlo (el código entero ya no se guarda).
+    final identificadores = [
+      if (c.codigoMascara.isNotEmpty) 'Cód: ${c.codigoMascara}',
+      if (c.telefono.isNotEmpty) 'Tel: ${c.telefono}',
+    ].join(' · ');
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1056,40 +1083,75 @@ class _PromocionesPageState extends State<PromocionesPage>
                 _chipEstado('Confirmado', V2Colors.verde),
             ],
           ),
-          const SizedBox(height: 6),
+          // Identificadores arriba: es por lo que se reconoce el consumo. La
+          // autorización (el MDU) no le dice nada a nadie y se sacó.
+          if (identificadores.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              identificadores,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: V2Colors.textoSecundario,
+                fontSize: 11.5,
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
           Text(
             c.beneficio,
-            maxLines: 2,
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: V2Colors.textoSecundario,
               fontSize: 12.5,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            [
-              if (c.autorizacion.isNotEmpty) 'Aut: ${c.autorizacion}',
-              // Solo la máscara del código: alcanza para reconocer cuál fue
-              // sin exponerlo (el código entero ya no se guarda).
-              if (c.codigoMascara.isNotEmpty) 'Cód: ${c.codigoMascara}',
-              if (c.telefono.isNotEmpty) 'Tel: ${c.telefono}',
-              if (c.cliente.isNotEmpty) c.cliente,
-            ].join(' · '),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: V2Colors.textoSecundario,
-              fontSize: 11.5,
+          if (aviso != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: c.anulada
+                    ? const Color(0xFFE8F5E9)
+                    : const Color(0xFFFDECEA),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    c.anulada ? Icons.check_circle : Icons.error_outline,
+                    size: 17,
+                    color: c.anulada ? V2Colors.verde : V2Colors.rojo,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      aviso,
+                      style: TextStyle(
+                        color: c.anulada ? V2Colors.verde : V2Colors.rojo,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
           if (anulable) ...[
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               height: 42,
               child: OutlinedButton.icon(
-                onPressed: () => _anularConsumo(c, setSheet),
+                // Deshabilitado mientras se anula: el POST puede tardar hasta
+                // 30s y sin esto se podía disparar dos veces.
+                onPressed:
+                    anulando ? null : () => _anularConsumo(c, setSheet),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: V2Colors.rojo,
                   side:
@@ -1098,8 +1160,15 @@ class _PromocionesPageState extends State<PromocionesPage>
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                icon: const Icon(Icons.undo, size: 18),
-                label: const Text('Anular promo'),
+                icon: anulando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            color: V2Colors.rojo, strokeWidth: 2.2),
+                      )
+                    : const Icon(Icons.undo, size: 18),
+                label: Text(anulando ? 'Anulando...' : 'Anular promo'),
               ),
             ),
           ],
@@ -1133,8 +1202,11 @@ class _PromocionesPageState extends State<PromocionesPage>
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Anular promo'),
+        // Se identifica por el TELÉFONO del cliente, no por el MDU: es lo
+        // único que el repartidor puede contrastar con la persona que tiene
+        // enfrente antes de anularle el beneficio.
         content: Text(
-            '¿Anular el beneficio de ${c.promo} (${c.autorizacion.isNotEmpty ? c.autorizacion : V2Data.fmtHora(c.fechaHora)})?\n\nEsta acción no se puede deshacer.'),
+            '¿Anular el beneficio de ${c.promo}${c.telefono.isNotEmpty ? ' del ${c.telefono}' : ' de las ${V2Data.fmtHora(c.fechaHora)}'}?\n\nEsta acción no se puede deshacer.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -1153,30 +1225,46 @@ class _PromocionesPageState extends State<PromocionesPage>
     );
     if (confirmar != true) return;
 
-    final ident = await _identidad();
-    final res = await _service.anular(
-      autorizacion: c.autorizacion,
-      mduId: c.mduId,
-      promoIdInterno: c.idInterno,
-      promoNombre: c.promo,
-      movil: ident['movil']!,
-      usuario: ident['usuario']!,
-      escenario: ident['escenario']!,
-      deviceId: ident['deviceId']!,
-    );
+    /// Refresca el sheet solo si sigue abierto: el usuario puede cerrarlo
+    /// mientras el POST está en vuelo, y ahí `setSheet` tira excepción.
+    void refrescar(VoidCallback cambios) {
+      cambios();
+      if (_sheetConsumosAbierto) setSheet(() {});
+    }
 
-    if (res.ok) {
-      await PromoConsumosStore().marcarAnulada(c.id);
-      setSheet(() {});
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res.mensaje)),
-        );
-      }
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(res.mensaje)),
+    refrescar(() {
+      _anulandoId = c.id;
+      _avisoAnulacion.remove(c.id);
+    });
+
+    try {
+      final ident = await _identidad();
+      final res = await _service.anular(
+        autorizacion: c.autorizacion,
+        mduId: c.mduId,
+        promoIdInterno: c.idInterno,
+        promoNombre: c.promo,
+        movil: ident['movil']!,
+        usuario: ident['usuario']!,
+        escenario: ident['escenario']!,
+        deviceId: ident['deviceId']!,
       );
+      if (res.ok) await PromoConsumosStore().marcarAnulada(c.id);
+      // Pase lo que pase queda un mensaje en pantalla: si el servicio
+      // contestó un error controlado se muestra el suyo; si no contestó nada
+      // (timeout, 400, 500), el de "probá de nuevo en unos minutos". Nunca
+      // se sale en silencio.
+      refrescar(() {
+        _anulandoId = null;
+        _avisoAnulacion[c.id] = res.mensaje;
+      });
+    } catch (e) {
+      print('❌ [ANULAR] Excepción anulando ${c.id}: $e');
+      refrescar(() {
+        _anulandoId = null;
+        _avisoAnulacion[c.id] =
+            'No se pudo anular el consumo. Probá de nuevo en unos minutos.';
+      });
     }
   }
 

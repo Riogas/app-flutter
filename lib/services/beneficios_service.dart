@@ -444,10 +444,17 @@ class BeneficiosService {
     print('🎁 [ANULAR] POST promociones/AnularPromo: $body');
 
     final resp = await RioGasService.anularPromo(body);
+    // `_post` devuelve null para TODO lo que no sea un 200: timeout de 30s,
+    // 400, 500, sin señal. No se puede distinguir cuál fue, y tampoco se
+    // sabe si el server llegó a procesar la anulación — por eso el mensaje
+    // dice que el consumo sigue como está y que se reintente, en vez de
+    // afirmar que no se anuló.
     if (resp == null) {
       return const BeneficioConsumo(
         ok: false,
-        mensaje: 'No fue posible conectarse al servicio. Intentá nuevamente.',
+        mensaje: 'El servicio no respondió, así que el consumo sigue '
+            'figurando como consumido. Revisá la conexión y probá de nuevo '
+            'en unos minutos.',
       );
     }
     final ok = _okDe(resp) == 0;
@@ -458,7 +465,7 @@ class BeneficiosService {
           ? msg
           : (ok
               ? 'El consumo fue anulado correctamente.'
-              : 'No se pudo anular el consumo.'),
+              : 'El servicio no permitió anular este consumo.'),
       codigoAutorizacion: autorizacion,
       fechaHora: DateTime.now(),
       mduId: mduId,
