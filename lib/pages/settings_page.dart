@@ -279,80 +279,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _generateReport() async {
-    DateTime? selectedDate = await _selectDate(context);
-    if (selectedDate != null) {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          return Center(child: CircularProgressIndicator());
-        },
-      );
-
-      try {
-        // Split the selectedDate into components
-        int year = selectedDate.year;
-        int month = selectedDate.month;
-        int day = selectedDate.day;
-        int hour = selectedDate.hour;
-        int minutes = selectedDate.minute;
-        int seconds = selectedDate.second;
-
-        var box = await Hive.openBox('sessionBox');
-        String idUsuario = box.get('username');
-        String deviceId = box.get('deviceId');
-        String escenarioId = box.get('escenario', defaultValue: '0');
-        String movil = box.get('movil');
-
-        // Log the data being sent to the console
-        print('Datos enviados a downloadAndOpenPDF:');
-        print('Año: $year, Mes: $month, Día: $day');
-        print('Hora: $hour, Minutos: $minutes, Segundos: $seconds');
-        print('Usuario: $idUsuario, Equipo: $deviceId');
-        print(
-            'Agencia ID: 0, Escenario ID: ${int.tryParse(escenarioId) ?? 0}, Móvil ID: ${int.tryParse(movil) ?? 0}');
-
-        // Call the function to download and open the PDF
-        await RioGasService.downloadAndOpenPDF(
-          year: year,
-          month: month,
-          day: day,
-          hour: hour,
-          minutes: minutes,
-          seconds: seconds,
-          usuMobileLogin: idUsuario ?? '',
-          termMobileEquipo: deviceId ?? '',
-          agenciaId: 0,
-          escenarioId: int.tryParse(escenarioId) ?? 0,
-          movilId: int.tryParse(movil) ?? 0,
-        );
-
-        // print('Fecha seleccionada para el reporte: $selectedDate');
-      } catch (e) {
-        _showMessage('Error al generar el reporte: $e');
-      } finally {
-        // Dismiss loading indicator
-        Navigator.of(context).pop();
-      }
-    }
-  }
-
-  Future<DateTime?> _selectDate(BuildContext context) async {
-    DateTime initialDate = DateTime.now();
-    DateTime firstDate = DateTime(2000);
-    DateTime lastDate = DateTime(2101);
-
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: lastDate,
-    );
-    return picked;
-  }
-
   Future<void> _checkForUpdate() async {
     var response = await RioGasService.validarVersion(appVersion, deviceId!);
 
@@ -1394,13 +1320,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   isLongText: true,
                 ),
               ),
-            _buildInfoRowWithButton(
-              Icons.check_circle,
-              'Reporte de visitas',
-              '',
-              Icons.description,
-              _generateReport,
-            ),
             // El botón de manual PDF ahora siempre se muestra, y la URL se obtiene al presionar
             _buildInfoRowWithButton(
               Icons.picture_as_pdf,

@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
 import '../../services/logout_service.dart';
+import '../../services/modo_restringido.dart';
 import '../../services/persistent_stream_manager.dart';
 import '../message_page.dart';
 import '../settings_page.dart';
 import 'v2_data.dart';
-import 'reporte_promos.dart';
+import 'reportes.dart';
 import 'v2_theme.dart';
 
 /// 🏙️ Cabecera del rediseño: ilustración + degradado, logo, mensajes,
@@ -258,6 +259,11 @@ class V2Header extends StatelessWidget {
       itemBuilder: (context) => [
         if (!menuSoloLogout) ...[
           _menuItem('config', Icons.settings_outlined, 'Configuración'),
+          // El comercio adherido (9998) no hace visitas: solo ve el de
+          // promociones. Es lo único que cambia del menú entre perfiles.
+          if (!ModoRestringido.activo.value)
+            _menuItem('reporte-visitas', Icons.check_circle_outline,
+                'Reporte de visitas'),
           _menuItem('reporte-promos', Icons.description_outlined,
               'Reporte promociones'),
           const PopupMenuDivider(),
@@ -298,6 +304,9 @@ class V2Header extends StatelessWidget {
           context,
           MaterialPageRoute(builder: (_) => SettingsPage()),
         );
+        break;
+      case 'reporte-visitas':
+        await abrirReporteVisitas(context);
         break;
       case 'reporte-promos':
         await abrirReportePromos(context);
