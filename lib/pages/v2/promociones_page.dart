@@ -86,6 +86,10 @@ class _PromocionesPageState extends State<PromocionesPage>
   DateTime? _fechaConsumo;
   bool _opcionalesAbiertos = false;
 
+  /// Limpieza automática de los campos en curso: sirve para que el listener
+  /// de los controllers no la confunda con que el usuario tocó algo.
+  bool _limpiandoCampos = false;
+
   /// Consumo que se está anulando ahora mismo (spinner en su botón). Sin
   /// esto la app se quedaba 30s quieta —el timeout de `_post`— sin ninguna
   /// señal de que estuviera haciendo algo.
@@ -137,12 +141,32 @@ class _PromocionesPageState extends State<PromocionesPage>
   /// cambiar el código después de validar dejaba en pantalla un "Consumir"
   /// que iba a consumir el beneficio del cliente ANTERIOR.
   void _alEditarCampo() {
+    // La limpieza post-consumo no es una edición: si se tratara como tal,
+    // tiraría abajo la tarjeta de confirmación en el mismo instante en que
+    // se muestra.
+    if (_limpiandoCampos) return;
     setState(() {
-      if (_fase == _Fase.beneficioOk || _fase == _Fase.pendientePin) {
+      if (_fase == _Fase.beneficioOk ||
+          _fase == _Fase.pendientePin ||
+          _fase == _Fase.consumido) {
         _fase = _Fase.inicial;
         _mensajeResultado = '';
+        _fechaConsumo = null;
       }
     });
+  }
+
+  /// Vacía los datos del cliente después de un consumo exitoso: el código y
+  /// el teléfono no tienen por qué seguir a la vista cuando el repartidor ya
+  /// atiende a otra persona.
+  void _limpiarDatosDelCliente() {
+    _limpiandoCampos = true;
+    _codigoCtrl.clear();
+    _telCtrl.clear();
+    _nombreCtrl.clear();
+    _auxCtrl.clear();
+    _limpiandoCampos = false;
+    if (mounted) setState(() {});
   }
 
   /// Ya no se muestra cuando la promo se validó bien: a esa altura lo que
@@ -244,10 +268,12 @@ class _PromocionesPageState extends State<PromocionesPage>
   bool get _nombreReq => _esRequerido('ReqNomCliente', porDefecto: false);
   bool get _auxReq => _esRequerido('ReqAuxIn1', porDefecto: false);
 
+  /// Solo mientras hay una llamada en vuelo. `consumido` NO bloquea: los
+  /// campos quedan vacíos y listos para el próximo cliente, y como ya no
+  /// existe el botón "Nueva validación", dejarlo bloqueado sería dejar la
+  /// pantalla sin salida.
   bool get _formBloqueado =>
-      _fase == _Fase.validando ||
-      _fase == _Fase.consumiendo ||
-      _fase == _Fase.consumido;
+      _fase == _Fase.validando || _fase == _Fase.consumiendo;
 
   bool get _puedeValidar {
     if (_promoDoc == null || _formBloqueado) return false;
@@ -551,20 +577,11 @@ class _PromocionesPageState extends State<PromocionesPage>
         mduId: res.mduId,
         preMduId: res.preMduId,
       );
+      // Recién ACÁ se limpia: el registro de arriba lee código, teléfono y
+      // cliente, así que vaciarlos antes dejaba el consumo del día sin los
+      // datos con los que después se lo reconoce.
+      _limpiarDatosDelCliente();
     }
-  }
-
-  void _nuevaValidacion() {
-    setState(() {
-      _codigoCtrl.clear();
-      _telCtrl.clear();
-      _nombreCtrl.clear();
-      _auxCtrl.clear();
-      _fase = _Fase.inicial;
-      _mensajeResultado = '';
-      _fechaConsumo = null;
-      _opcionalesAbiertos = false;
-    });
   }
 
   Widget _lineaConfirm(String k, String v) {
@@ -805,12 +822,10 @@ class _PromocionesPageState extends State<PromocionesPage>
 
     return V2Card(
       shadows: V2Shadows.cardElevada,
-      child: _formBloqueado && _fase == _Fase.consumido
-          ? Opacity(opacity: 0.55, child: IgnorePointer(child: form))
-          : AbsorbPointer(
-              absorbing: _fase == _Fase.validando || _fase == _Fase.consumiendo,
-              child: form,
-            ),
+      child: AbsorbPointer(
+        absorbing: _fase == _Fase.validando || _fase == _Fase.consumiendo,
+        child: form,
+      ),
     );
   }
 
@@ -1719,30 +1734,10 @@ class _PromocionesPageState extends State<PromocionesPage>
                     '${_fechaConsumo!.day.toString().padLeft(2, '0')}/${_fechaConsumo!.month.toString().padLeft(2, '0')} ${V2Data.fmtHora(_fechaConsumo!)}',
                   ),
                 _lineaConfirm('Promoción', _label('NombreCombo')),
-                if (_telCtrl.text.trim().isNotEmpty)
-                  _lineaConfirm('Cliente', _telCtrl.text.trim()),
+                // El teléfono del cliente NO se repite acá: se acaba de
+                // limpiar del formulario justamente para que no quede
+                // expuesto, y volver a pintarlo sería dejarlo igual.
                 _lineaConfirm('Beneficio', _mensajeResultado),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: _nuevaValidacion,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: V2Colors.accion,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    icon: const Icon(Icons.refresh, size: 20),
-                    label: const Text('Nueva validación'),
-                  ),
-                ),
               ],
             ),
           ),
