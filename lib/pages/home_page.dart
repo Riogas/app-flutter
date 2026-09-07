@@ -1024,10 +1024,14 @@ class _HomePageState extends State<HomePage>
     return ValueListenableBuilder<bool>(
       valueListenable: UiPrefs.homeV2,
       builder: (context, isV2, _) {
-        // En producción NO se ofrece el clásico (ni aparece el switch en
-        // Configuración), así que tampoco se respeta lo que haya guardado:
-        // si no, alguien que lo apagó en desarrollo quedaría atrapado ahí.
-        if (isV2 || !AppEnvironment.isDevelopment) {
+        // Con el rediseño apagado va SIEMPRE el clásico, sin mirar la
+        // preferencia guardada ni el ambiente. Cuando se prenda, vuelve la
+        // regla de antes: en producción no se ofrece el clásico (ni aparece
+        // el switch en Configuración), así que tampoco se respeta lo
+        // guardado — si no, alguien que lo apagó en desarrollo quedaría
+        // atrapado ahí.
+        if (UiPrefs.disenoNuevoHabilitado &&
+            (isV2 || !AppEnvironment.isDevelopment)) {
           return HomeV2Scaffold(
             messageCountNotifier: _messageCountNotifier,
             onEstadoTap: _handleEstadoTapV2,

@@ -1077,8 +1077,12 @@ class _SettingsPageState extends State<SettingsPage> {
               _buildInfoSection(),
               SizedBox(height: 20),
               // El selector de diseño es para comparar durante el desarrollo:
-              // en producción no se ofrece (y el home fuerza el diseño nuevo).
-              if (AppEnvironment.isDevelopment) _buildDesignToggle(),
+              // en producción no se ofrece. Y con el rediseño apagado no se
+              // muestra en ningún lado, para no ofrecer un switch que no hace
+              // nada.
+              if (UiPrefs.disenoNuevoHabilitado &&
+                  AppEnvironment.isDevelopment)
+                _buildDesignToggle(),
               SizedBox(height: 10),
               _buildNavegadorSelector(),
               SizedBox(height: 10),

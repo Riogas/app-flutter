@@ -7,7 +7,21 @@ import 'package:hive/hive.dart';
 class UiPrefs {
   UiPrefs._();
 
-  /// true = diseño nuevo (Home V2, rediseño 2026) / false = diseño clásico
+  /// 🎛️ INTERRUPTOR DEL REDISEÑO 2026.
+  ///
+  /// En `false` NADIE ve el diseño nuevo: ni la flota ni desarrollo, y el
+  /// switch de Configuración tampoco aparece. Es un único lugar a propósito:
+  /// para publicarlo alcanza con poner `true` acá y volver a compilar.
+  ///
+  /// Apagado por decisión del usuario hasta nuevo aviso. Ojo: el rediseño NO
+  /// se pierde — el shell clásico dibuja igual el V2Header (menú del avatar
+  /// con los dos reportes) y tiene la solapa Promos, así que todo lo que
+  /// vive ahí sigue alcanzable. El perfil 9998 tampoco se toca: usa
+  /// PromosShell, que se resuelve antes de este interruptor.
+  static const bool disenoNuevoHabilitado = false;
+
+  /// true = diseño nuevo (Home V2, rediseño 2026) / false = diseño clásico.
+  /// Solo se consulta si [disenoNuevoHabilitado] está en true.
   static final ValueNotifier<bool> homeV2 = ValueNotifier<bool>(true);
 
   /// 🧭 Navegador preferido para "Iniciar viaje"/"Navegar ahora":
