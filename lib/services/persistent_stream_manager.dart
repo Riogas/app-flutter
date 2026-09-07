@@ -790,12 +790,6 @@ class PersistentStreamManager {
   List<DocumentSnapshot> get pedidos => _pedidosNotifier.value;
   List<DocumentSnapshot> get mensajes => _mensajesNotifier.value;
   DocumentSnapshot? get movil => _movilNotifier.value;
-
-  /// Agencia (`EFleteraId`) del móvil logueado, o vacío si el documento del
-  /// móvil todavía no llegó por el stream. Es la MISMA que decide el alcance
-  /// de las promos; se expone porque los reportes de SGM la piden como
-  /// parámetro y no viene en la respuesta del login.
-  String get agenciaId => _agenciaId;
   Map<String, dynamic>? get sesiones => _sesionesNotifier.value;
   List<Map<String, dynamic>> get subEstados => _subEstadosNotifier.value;
   List<Map<String, dynamic>> get subEstadoMoviles =>

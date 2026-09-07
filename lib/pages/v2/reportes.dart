@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
-import '../../services/persistent_stream_manager.dart';
 import '../../services/riogas_service.dart';
 
 /// 📄 Reportes de SGM que se abren desde el menú del avatar.
@@ -38,18 +37,6 @@ Future<void> _abrirReporte(
   required String nombreArchivo,
   required String titulo,
 }) async {
-  // La agencia es el `EFleteraId` del documento del móvil y llega por el
-  // stream, no por el login. Iba fija en 0 desde que se escribió el reporte
-  // de visitas, y SGM la usa como parámetro: con 0 el reporte sale mal.
-  final agencia = PersistentStreamManager().agenciaId;
-  if (agencia.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Todavía no se conoce la agencia del móvil. '
-          'Esperá unos segundos y probá de nuevo.'),
-    ));
-    return;
-  }
-
   final hoy = DateTime.now();
   final fecha = await showDatePicker(
     context: context,
@@ -83,7 +70,6 @@ Future<void> _abrirReporte(
       seconds: 0,
       usuMobileLogin: box.get('username', defaultValue: '').toString(),
       termMobileEquipo: box.get('deviceId', defaultValue: '').toString(),
-      agenciaId: int.tryParse(agencia.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0,
       // El móvil llega como texto y a veces con el prefijo del documento de
       // Firestore ("Moviles-336"): se queda con los dígitos.
       escenarioId:

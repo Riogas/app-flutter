@@ -1499,7 +1499,6 @@ class RioGasService {
     required int seconds,
     required String usuMobileLogin,
     required String termMobileEquipo,
-    required int agenciaId,
     required int escenarioId,
     required int movilId,
     String constanteRuta = '602',
@@ -1511,7 +1510,7 @@ class RioGasService {
     // print(
     //   'UsuMobileLogin: $usuMobileLogin, TermMobileEquipo: $termMobileEquipo',
     // );
-    // print('AgenciaId: $agenciaId, EscenarioId: $escenarioId');
+    // print('EscenarioId: $escenarioId');
     // print('MovilId: $movilId');
 
     final DateTime fechaDesdeDate = DateTime(year, month, day);
@@ -1534,7 +1533,7 @@ class RioGasService {
     // producción: estando en desarrollo el reporte igual traía datos de prod.
     final base = gxRootFromBaseUrl(baseUrl);
     final url = urlReporte(base, reportPathFromConst) +
-        '?FechaDesde=$fechaDesde&FechaHasta=$fechaHasta&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&AgenciaId=$agenciaId&EscenarioId=$escenarioId&Movid=$movilId&Tipo=RESUMIDO';
+        '?FechaDesde=$fechaDesde&FechaHasta=$fechaHasta&UsuMobileLogin=$usuMobileLogin&TermMobileEquipo=$termMobileEquipo&EscenarioId=$escenarioId&Movid=$movilId&Tipo=RESUMIDO';
 
     print('🌐 Downloading PDF from: $url');
 
