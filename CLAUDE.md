@@ -187,11 +187,20 @@ acordate de que el lado Kotlin no se puede compilar en matrix.
 
 - **Firebase rompe 13 pruebas y no tiene arreglo**: usá el comando de "Cómo se prueba".
   Mockear `firebase_core` es imposible (Pigeon); ya se probó y se descartó.
-- **`pubspec.lock` y `.flutter-plugins-dependencies` aparecen modificados solos** en
-  matrix apenas corre `flutter pub get` o `flutter test`: el Flutter de matrix (3.35.4)
-  resuelve versiones distintas de las que quedaron congeladas desde la PC. **No es
-  trabajo de nadie y NO va a ningún commit**: dejalos afuera con `git add <archivo>`
-  explícito, nunca `git add -A`.
+- 🔴 **`.flutter-plugins-dependencies` está versionado por error y se ensucia solo en
+  CADA corrida.** El propio archivo dice `"This is a generated file; do not edit or check
+  into version control"` y adentro guarda **rutas absolutas de la máquina**
+  (`C:\Users\jgomez\AppData\Local\Pub\Cache\…` en la PC, `/home/jgomez/.pub-cache/…` en
+  matrix), así que `flutter pub get` y `flutter test` lo reescriben siempre.
+  **Consecuencia para la consola**: `turnos doctor` lo lee como "cambios sin guardar sobre
+  archivos versionados" y bloquea el proyecto entero. Mientras no se saque del repo
+  (`git rm --cached .flutter-plugins-dependencies` + una línea en el `.gitignore` —
+  decisión de una persona, no de una tarea), hay que dejar el árbol limpio con
+  `git checkout -- .flutter-plugins-dependencies` antes de correr el doctor.
+  `pubspec.lock` puede aparecer modificado por lo mismo la primera vez que se instala el
+  SDK en una máquina nueva; se revierte igual y no vuelve.
+  **Ninguno de los dos va a un commit**: usá `git add <archivo>` explícito, nunca
+  `git add -A`.
 - **`android/gradle.properties` tiene `org.gradle.java.home=C:\Program Files\Java\jdk-21`
   clavado a la PC de la persona.** Es un archivo versionado que solo sirve en Windows.
   No lo "arregles" para Linux: le romperías la compilación a quien publica.
