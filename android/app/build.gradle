@@ -35,7 +35,7 @@ android {
         applicationId = "com.example.moveit" // 👈 aquí sí va el package
         minSdk = 25
         targetSdk = 35
-        versionCode project.hasProperty('flutterVersionCode') ? flutterVersionCode.toInteger() : 2070
+        versionCode project.hasProperty('flutterVersionCode') ? flutterVersionCode.toInteger() : 2071
         versionName project.hasProperty('flutterVersionName') ? flutterVersionName : "1.1"
     }
 
