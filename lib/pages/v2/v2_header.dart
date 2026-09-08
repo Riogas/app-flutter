@@ -5,6 +5,7 @@ import 'package:hive/hive.dart';
 
 import '../../services/logout_service.dart';
 import '../../services/modo_restringido.dart';
+import '../../services/promos_habilitadas.dart';
 import '../../services/persistent_stream_manager.dart';
 import '../message_page.dart';
 import '../settings_page.dart';
@@ -264,8 +265,12 @@ class V2Header extends StatelessWidget {
           if (!ModoRestringido.activo.value)
             _menuItem('reporte-visitas', Icons.check_circle_outline,
                 'Reporte de visitas'),
+          // Con la constante 604 en "N" el item se ve pero no se puede
+          // tocar: así queda claro que la sección existe y está apagada, en
+          // vez de desaparecer y parecer un bug.
           _menuItem('reporte-promos', Icons.description_outlined,
-              'Reporte promociones'),
+              'Reporte promociones',
+              habilitado: PromosHabilitadas.activas.value),
           const PopupMenuDivider(),
         ],
         _menuItem('logout', Icons.logout, 'Cerrar sesión',
@@ -275,12 +280,16 @@ class V2Header extends StatelessWidget {
   }
 
   PopupMenuItem<String> _menuItem(String value, IconData icon, String label,
-      {Color? color}) {
+      {Color? color, bool habilitado = true}) {
+    final tinte = habilitado
+        ? (color ?? V2Colors.textoPrimario)
+        : V2Colors.textoSecundario.withOpacity(0.45);
     return PopupMenuItem<String>(
       value: value,
+      enabled: habilitado,
       child: Row(
         children: [
-          Icon(icon, size: 20, color: color ?? V2Colors.textoPrimario),
+          Icon(icon, size: 20, color: tinte),
           const SizedBox(width: 12),
           // Flexible: con rótulos largos ("Reporte promociones") la fila se
           // pasaba del ancho del popup y Flutter tiraba overflow.
@@ -289,7 +298,7 @@ class V2Header extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: color ?? V2Colors.textoPrimario),
+              style: TextStyle(color: tinte),
             ),
           ),
         ],

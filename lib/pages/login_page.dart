@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter; // 🧊 Para el blur del glassmorphism
 import '../services/auth_service.dart';
 import '../services/riogas_service.dart';
 import '../services/firebase_constants_service.dart';
+import '../services/promos_habilitadas.dart';
 import '../services/session_service.dart';
 import '../services/session_sync_service.dart'; // 🔄 Sincronización de sesión
 import '../services/debug_config_manager.dart'; // 🆕 Sistema de logging remoto
@@ -2692,6 +2693,7 @@ class _LoginPageState extends State<LoginPage> {
         print(
             "[33m$kLoginFlowTag Cargando y guardando constantes desde Firebase...[0m");
         await ConstantsService.loadAndSaveConstants();
+        await PromosHabilitadas.refrescar();
 
         // 🔹 Cerrar el diálogo de carga
         print("[33m$kLoginFlowTag Cerrando diálogo de carga[0m");
@@ -3206,6 +3208,7 @@ class _LoginPageState extends State<LoginPage> {
     // 🔹 Cargar y guardar constantes desde Firebase
     print("Cargando y guardando constantes desde Firebase...");
     await ConstantsService.loadAndSaveConstants();
+    await PromosHabilitadas.refrescar();
 
     final sessionBox = await Hive.openBox('sessionBox');
     final movil = sessionBox.get('movil') ?? "0";

@@ -13,7 +13,8 @@ import '../services/location_service.dart'; // ðŸ”¹ Importamos LocationServ
 import '../services/riogas_service.dart'; // ðŸ”¹ Importamos LocationService
 import '../services/logout_service.dart'; // ðŸ”¥ Servicio de logout (forced logout)
 import '../services/debug_config_manager.dart'; // ðŸ†• Sistema de logging remoto
-import '../services/modo_restringido.dart'; // 🏪 Perfil comercio (escenario 9998)
+import '../services/modo_restringido.dart';
+import '../services/promos_habilitadas.dart'; // 🏪 Perfil comercio (escenario 9998)
 import 'v2/promos_shell.dart'; // 🏪 Shell del modo restringido
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart'; // Import Geolocator for Position
@@ -1112,6 +1113,9 @@ class _HomePageState extends State<HomePage>
     return ValueListenableBuilder<int>(
       valueListenable: _pendingOrdersCountNotifier,
       builder: (context, pendingOrdersCount, child) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: PromosHabilitadas.activas,
+          builder: (context, promosOk, __) {
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -1129,10 +1133,22 @@ class _HomePageState extends State<HomePage>
                   'Pedidos', pendingOrdersCount),
               _navItemV2(Icons.map_outlined, Icons.map, 'Mapa', 0),
               _navItemV2(Icons.card_giftcard_outlined, Icons.card_giftcard,
-                  'Promos', 0),
+                  'Promos', 0, habilitado: promosOk),
             ],
             currentIndex: _legacyIndex,
-            onTap: _onItemTapped,
+            // La solapa se ve igual pero no entra: apagar promos es una
+            // decisión remota (constante 604), no un error del repartidor,
+            // así que se le explica en vez de no hacer nada.
+            onTap: (i) {
+              if (i == 2 && !promosOk) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Las promociones están desactivadas '
+                      'por el momento.'),
+                ));
+                return;
+              }
+              _onItemTapped(i);
+            },
             backgroundColor: Colors.white,
             elevation: 0,
             type: BottomNavigationBarType.fixed,
@@ -1145,12 +1161,15 @@ class _HomePageState extends State<HomePage>
             showUnselectedLabels: true,
           ),
         );
+          },
+        );
       },
     );
   }
 
   BottomNavigationBarItem _navItemV2(
-      IconData icon, IconData activeIcon, String label, int badge) {
+      IconData icon, IconData activeIcon, String label, int badge,
+      {bool habilitado = true}) {
     Widget conBadge(Widget child) {
       if (badge <= 0) return child;
       return Stack(
@@ -1182,9 +1201,12 @@ class _HomePageState extends State<HomePage>
       );
     }
 
+    Widget apagable(Widget child) =>
+        habilitado ? child : Opacity(opacity: 0.38, child: child);
+
     return BottomNavigationBarItem(
-      icon: conBadge(Icon(icon, size: 24)),
-      activeIcon: conBadge(Icon(activeIcon, size: 24)),
+      icon: apagable(conBadge(Icon(icon, size: 24))),
+      activeIcon: apagable(conBadge(Icon(activeIcon, size: 24))),
       label: label,
     );
   }

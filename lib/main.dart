@@ -38,7 +38,8 @@ import 'package:android_intent_plus/flag.dart';
 import 'services/location_service.dart'; // 🔹 Importamos LocationService
 import 'services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogSyncService
 import 'services/proteccion_pantalla.dart'; // 🔒 Anti-captura (flag + pantallas)
-import 'services/modo_restringido.dart'; // 🏪 Perfil comercio (escenario 9998)
+import 'services/modo_restringido.dart';
+import 'services/promos_habilitadas.dart'; // 🎁 Interruptor remoto de Promos
 import 'services/remote_logout_listener.dart'; // 🚨 Importar listener de logout remoto
 import 'services/fcm_token_manager.dart'; // 🔑 Importar FCM Token Manager
 
@@ -367,6 +368,7 @@ void main() async {
     // lugar donde se puede saber que el usuario es un comercio 9998.
     try {
       await ModoRestringido.init();
+      await PromosHabilitadas.refrescar();
     } catch (e) {
       print('⚠️ Error inicializando ModoRestringido: $e');
     }

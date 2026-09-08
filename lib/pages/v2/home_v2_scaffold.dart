@@ -7,6 +7,7 @@ import 'mapa_tab_v2.dart';
 import 'pedidos_tab_v2.dart';
 import 'promociones_page.dart';
 import 'v2_theme.dart';
+import '../../services/promos_habilitadas.dart';
 
 /// 🏗️ Scaffold del rediseño 2026: Pedidos / Mapa / Promos.
 /// Presentación pura — la lógica (streams, FCM, estado del móvil) sigue
@@ -77,6 +78,9 @@ class _HomeV2ScaffoldState extends State<HomeV2Scaffold> {
             valueListenable: _streamManager.promocionesNotifier,
             builder: (context, promos, __) {
               final promosNuevas = _promosNuevas(promos);
+              return ValueListenableBuilder<bool>(
+                valueListenable: PromosHabilitadas.activas,
+                builder: (context, promosOk, ___) {
               return Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -94,10 +98,21 @@ class _HomeV2ScaffoldState extends State<HomeV2Scaffold> {
                         'Pedidos', pedidos.length),
                     _item(Icons.map_outlined, Icons.map, 'Mapa', 0),
                     _item(Icons.card_giftcard_outlined, Icons.card_giftcard,
-                        'Promos', promosNuevas),
+                        'Promos', promosNuevas, habilitado: promosOk),
                   ],
                   currentIndex: _tab,
                   onTap: (i) {
+                    // Apagar promos es una decisión remota (constante 604),
+                    // no un error del repartidor: se le explica.
+                    if (i == 2 && !promosOk) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Las promociones están desactivadas '
+                              'por el momento.'),
+                        ),
+                      );
+                      return;
+                    }
                     setState(() => _tab = i);
                     // Entrar a Promos apaga el badge (la página marca vistas)
                     if (i == 2) {
@@ -122,6 +137,8 @@ class _HomeV2ScaffoldState extends State<HomeV2Scaffold> {
                   showUnselectedLabels: true,
                 ),
               );
+                },
+              );
             },
           );
         },
@@ -130,7 +147,8 @@ class _HomeV2ScaffoldState extends State<HomeV2Scaffold> {
   }
 
   BottomNavigationBarItem _item(
-      IconData icon, IconData activeIcon, String label, int badge) {
+      IconData icon, IconData activeIcon, String label, int badge,
+      {bool habilitado = true}) {
     Widget conBadge(Widget child) {
       if (badge <= 0) return child;
       return Stack(
@@ -162,9 +180,12 @@ class _HomeV2ScaffoldState extends State<HomeV2Scaffold> {
       );
     }
 
+    Widget apagable(Widget child) =>
+        habilitado ? child : Opacity(opacity: 0.38, child: child);
+
     return BottomNavigationBarItem(
-      icon: conBadge(Icon(icon, size: 24)),
-      activeIcon: conBadge(Icon(activeIcon, size: 24)),
+      icon: apagable(conBadge(Icon(icon, size: 24))),
+      activeIcon: apagable(conBadge(Icon(activeIcon, size: 24))),
       label: label,
     );
   }
