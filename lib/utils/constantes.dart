@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/riogas_service.dart'; // 🆕 Para resetear HTTP client
@@ -9,6 +10,12 @@ enum Environment { production, development }
 class AppEnvironment {
   static const String _keyEnvironment = 'app_environment';
   static Environment _currentEnvironment = Environment.production;
+
+  /// Avisa cada vez que el ambiente cambia. Existe para que nadie tenga que
+  /// acordarse de recalcular lo que dependa del ambiente en cada uno de los
+  /// cinco lugares que lo cambian: se escucha una vez y listo.
+  static final ValueNotifier<Environment> cambios =
+      ValueNotifier<Environment>(Environment.production);
 
   // 🔧 URL de desarrollo cargada desde constante 611
   static String? _devUrlFromConstant;
@@ -24,6 +31,7 @@ class AppEnvironment {
   static Future<void> initialize() async {
     // 🔒 SIEMPRE iniciar en PRODUCCIÓN (ignorar preferencia guardada)
     _currentEnvironment = Environment.production;
+    cambios.value = _currentEnvironment;
     print('🌍 [AMBIENTE] Aplicación SIEMPRE inicia en modo PRODUCCIÓN');
     print(
         'ℹ️ [AMBIENTE] El ambiente se cambiará después del login si el usuario es especial');
@@ -68,6 +76,7 @@ class AppEnvironment {
   // Cambiar el ambiente (solo para usuarios especiales)
   static Future<void> setEnvironment(Environment environment) async {
     _currentEnvironment = environment;
+    cambios.value = environment;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _keyEnvironment,
@@ -83,6 +92,7 @@ class AppEnvironment {
   // 🆕 Cambiar el ambiente SOLO durante la sesión actual (no persiste en SharedPreferences)
   static void setEnvironmentForSession(Environment environment) {
     _currentEnvironment = environment;
+    cambios.value = environment;
     print(
         '🌍 [AMBIENTE] Cambiado temporalmente a: ${environment == Environment.development ? "DESARROLLO" : "PRODUCCIÓN"}');
     print(
@@ -95,6 +105,7 @@ class AppEnvironment {
   // 🆕 Resetear a producción (llamar al cerrar sesión)
   static Future<void> resetToProduction() async {
     _currentEnvironment = Environment.production;
+    cambios.value = _currentEnvironment;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyEnvironment); // Eliminar preferencia guardada
     print('🌍 [AMBIENTE] Reseteado a PRODUCCIÓN (por defecto)');
