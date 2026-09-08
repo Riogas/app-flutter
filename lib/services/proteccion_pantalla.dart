@@ -1,5 +1,7 @@
 import 'package:screen_protector/screen_protector.dart';
 
+import '../utils/constantes.dart';
+
 /// Función que efectivamente prende/apaga la protección en la plataforma.
 /// Se inyecta en tests para no depender del plugin.
 typedef AplicadorProteccion = Future<void> Function(bool bloquear);
@@ -20,6 +22,12 @@ typedef AplicadorProteccion = Future<void> Function(bool bloquear);
 /// apagara el bloqueo al salir, dejaría descubierto al chofer que lo tenía
 /// encendido por el flag. Por eso acá se lleva un contador y se aplica el OR
 /// de ambas fuentes.
+///
+/// 🧪 **En DESARROLLO no se bloquea nada**, ni siquiera Promos: hace falta
+/// poder sacar capturas de todas las pantallas para documentar y reportar
+/// problemas. En producción funciona igual que siempre — el ambiente arranca
+/// SIEMPRE en producción y solo un usuario especial puede cambiarlo después
+/// del login, así que la flota nunca queda descubierta por esto.
 class ProteccionPantalla {
   ProteccionPantalla._();
 
@@ -33,8 +41,21 @@ class ProteccionPantalla {
   static int _pantallas = 0;
   static bool? _ultimoAplicado;
 
-  /// Estado efectivo: alcanza con que UNA de las fuentes lo pida.
-  static bool get bloqueando => _base || _pantallas > 0;
+  static bool _escuchandoAmbiente = false;
+
+  /// Estado efectivo: alcanza con que UNA de las fuentes lo pida, salvo en
+  /// desarrollo, donde nunca se bloquea.
+  static bool get bloqueando =>
+      !AppEnvironment.isDevelopment && (_base || _pantallas > 0);
+
+  /// El ambiente se elige después del login, con la pantalla ya montada, así
+  /// que hay que volver a empujar el flag cuando cambia. Se engancha una sola
+  /// vez al notifier de `AppEnvironment`.
+  static void _escucharAmbiente() {
+    if (_escuchandoAmbiente) return;
+    _escuchandoAmbiente = true;
+    AppEnvironment.cambios.addListener(reaplicar);
+  }
 
   /// Flag `printScreen` del móvil. Lo llama el listener de Firestore.
   static Future<void> configurarBase(bool activa) async {
@@ -71,6 +92,7 @@ class ProteccionPantalla {
   }
 
   static Future<void> _sincronizar() async {
+    _escucharAmbiente();
     final objetivo = bloqueando;
     if (_ultimoAplicado == objetivo) return;
     _ultimoAplicado = objetivo;

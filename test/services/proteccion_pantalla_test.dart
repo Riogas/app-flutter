@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:MoveIT/services/proteccion_pantalla.dart';
+import 'package:MoveIT/utils/constantes.dart';
 
 void main() {
   late List<bool> aplicado;
@@ -111,6 +112,49 @@ void main() {
         aplicador: (_) async => throw Exception('sin plugin'),
       );
       await expectLater(ProteccionPantalla.adquirir(), completes);
+    });
+  });
+
+  group('ambiente', () {
+    late List<bool> aplicado;
+
+    setUp(() {
+      aplicado = [];
+      ProteccionPantalla.resetParaTests(
+          aplicador: (bloquear) async => aplicado.add(bloquear));
+      AppEnvironment.setEnvironmentForSession(Environment.production);
+    });
+
+    tearDown(() =>
+        AppEnvironment.setEnvironmentForSession(Environment.production));
+
+    test('en desarrollo no se bloquea, ni siquiera con las dos fuentes activas',
+        () async {
+      await ProteccionPantalla.configurarBase(true);
+      await ProteccionPantalla.adquirir();
+      expect(ProteccionPantalla.bloqueando, isTrue);
+
+      AppEnvironment.setEnvironmentForSession(Environment.development);
+      expect(ProteccionPantalla.bloqueando, isFalse,
+          reason: 'en desarrollo hay que poder capturar todas las pantallas');
+    });
+
+    test('volver a producción vuelve a bloquear', () async {
+      await ProteccionPantalla.adquirir();
+      AppEnvironment.setEnvironmentForSession(Environment.development);
+      expect(ProteccionPantalla.bloqueando, isFalse);
+
+      AppEnvironment.setEnvironmentForSession(Environment.production);
+      expect(ProteccionPantalla.bloqueando, isTrue,
+          reason: 'la pantalla sensible sigue montada');
+    });
+
+    test('en producción el comportamiento no cambia', () async {
+      expect(ProteccionPantalla.bloqueando, isFalse);
+      await ProteccionPantalla.adquirir();
+      expect(ProteccionPantalla.bloqueando, isTrue);
+      await ProteccionPantalla.liberar();
+      expect(ProteccionPantalla.bloqueando, isFalse);
     });
   });
 }
