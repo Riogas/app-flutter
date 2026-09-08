@@ -178,6 +178,7 @@ class BeneficiosService {
     String? nombreCliente,
     String? telCliente,
     String? campoIn1,
+    String? campoIn2,
     int pedidoId = 0,
   }) {
     return {
@@ -192,7 +193,7 @@ class BeneficiosService {
       'nombreCliente': nombreCliente ?? '',
       'telCliente': telCliente ?? '',
       'CampoIn1': campoIn1 ?? '',
-      'CampoIn2': '',
+      'CampoIn2': campoIn2 ?? '',
       // 📦 Pedido al que se asocia la promoción.
       //
       // Solo se manda cuando hay un pedido de verdad. El servicio TODAVÍA no
@@ -308,6 +309,7 @@ class BeneficiosService {
     String? telefono,
     String? nombre,
     String? auxIn1,
+    String? auxIn2,
     required String movil,
     required String usuario,
     required String escenario,
@@ -332,6 +334,7 @@ class BeneficiosService {
       nombreCliente: nombre,
       telCliente: telefono,
       campoIn1: auxIn1,
+      campoIn2: auxIn2,
     );
 
     final resp = await RioGasService.validarPromo(body);

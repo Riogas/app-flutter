@@ -1,3 +1,19 @@
+/// 🎚️ Qué pide la promo para un campo del formulario, según su `Req*`.
+///
+/// Los documentos traen **`"No"` / `"Opcional"` / `"Obligatorio"`**, que es lo
+/// que escribe quien los carga. Se aceptan además otras grafías vistas o
+/// probables (`Requerido`, `S`, `N`, `Si`) porque la carga es manual.
+enum RequisitoCampo {
+  /// No se muestra el campo.
+  no,
+
+  /// Se muestra dentro del colapsable de datos opcionales.
+  opcional,
+
+  /// Se muestra junto a los campos que hay que completar sí o sí.
+  obligatorio,
+}
+
 /// 🎁 Lectura del documento de una promoción (colección Firestore
 /// `Promociones`).
 ///
@@ -89,5 +105,29 @@ class PromoDoc {
       return false;
     }
     return true;
+  }
+
+  /// Lee el `Req*` de un campo (`ReqAuxIn1`, `ReqNomCliente`…).
+  ///
+  /// Si el campo no tiene rótulo no hay nada que mostrar, así que devuelve
+  /// [RequisitoCampo.no] sin mirar el `Req*`. Si el `Req*` viene vacío o con
+  /// un valor que nadie previó, se usa [porDefecto]: un dato mal cargado tiene
+  /// que degradar a algo usable, nunca dejar el formulario inservible.
+  static RequisitoCampo requisito(
+    Map<String, dynamic> doc, {
+    required String campoLabel,
+    required String campoReq,
+    required RequisitoCampo porDefecto,
+  }) {
+    if (texto(doc, campoLabel).isEmpty) return RequisitoCampo.no;
+
+    final r = texto(doc, campoReq).toLowerCase();
+    if (r.isEmpty) return porDefecto;
+    if (r.startsWith('oblig') || r == 'requerido' || r == 's' || r == 'si') {
+      return RequisitoCampo.obligatorio;
+    }
+    if (r.startsWith('opcion')) return RequisitoCampo.opcional;
+    if (r == 'no' || r == 'n') return RequisitoCampo.no;
+    return porDefecto;
   }
 }

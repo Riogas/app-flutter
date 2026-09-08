@@ -80,6 +80,7 @@ class _PromocionesPageState extends State<PromocionesPage>
   final _telCtrl = TextEditingController();
   final _nombreCtrl = TextEditingController();
   final _auxCtrl = TextEditingController();
+  final _aux2Ctrl = TextEditingController();
 
   _Fase _fase = _Fase.inicial;
   String _mensajeResultado = '';
@@ -131,7 +132,7 @@ class _PromocionesPageState extends State<PromocionesPage>
     PromoConsumosStore().init();
     PromoUsoStore().init();
     // Refrescar habilitación del botón Validar al tipear
-    for (final c in [_codigoCtrl, _telCtrl, _nombreCtrl, _auxCtrl]) {
+    for (final c in [_codigoCtrl, _telCtrl, _nombreCtrl, _auxCtrl, _aux2Ctrl]) {
       c.addListener(_alEditarCampo);
     }
   }
@@ -165,6 +166,7 @@ class _PromocionesPageState extends State<PromocionesPage>
     _telCtrl.clear();
     _nombreCtrl.clear();
     _auxCtrl.clear();
+    _aux2Ctrl.clear();
     _limpiandoCampos = false;
     if (mounted) setState(() {});
   }
@@ -205,6 +207,7 @@ class _PromocionesPageState extends State<PromocionesPage>
     _telCtrl.dispose();
     _nombreCtrl.dispose();
     _auxCtrl.dispose();
+    _aux2Ctrl.dispose();
     super.dispose();
   }
 
@@ -241,32 +244,51 @@ class _PromocionesPageState extends State<PromocionesPage>
   ModoIngresoCodigo get _modoCodigo =>
       ModoIngresoCodigo.desde(_promo[ModoIngresoCodigo.campoFirestore]);
 
-  /// Con escaneo el campo se muestra SIEMPRE: si la promo pide cámara pero
-  /// olvidaron cargar `LabelCodCliente`, ocultarlo dejaría la promo sin forma
-  /// de validarse. Para el modo manual se respeta la regla de siempre.
-  bool get _tieneCodigo =>
-      _label('LabelCodCliente').isNotEmpty || _modoCodigo.esEscaneo;
-
   /// Label del campo código, con respaldo según el modo.
   String get _labelCodigo {
     final l = _label('LabelCodCliente');
     return l.isNotEmpty ? l : _modoCodigo.labelPorDefecto;
   }
 
-  bool get _tieneTel => _label('LabelCodTelCliente').isNotEmpty;
-  bool get _tieneNombre => _label('LabelNomCliente').isNotEmpty;
-  bool get _tieneAux => _label('LabelAuxIn1').isNotEmpty;
+  /// Qué pide la promo para cada campo: no mostrarlo, mostrarlo entre los
+  /// opcionales, o exigirlo. Antes se leía como un booleano contra el texto
+  /// "Requerido", y los documentos dicen "Obligatorio" / "Opcional" / "No":
+  /// un `ReqAuxIn1: "Obligatorio"` terminaba escondido entre los opcionales.
+  RequisitoCampo _req(String campoLabel, String campoReq,
+          RequisitoCampo porDefecto) =>
+      PromoDoc.requisito(_promo,
+          campoLabel: campoLabel,
+          campoReq: campoReq,
+          porDefecto: porDefecto);
 
-  bool _esRequerido(String campoReq, {required bool porDefecto}) {
-    final r = _label(campoReq).toLowerCase();
-    if (r.isEmpty) return porDefecto;
-    return r == 'requerido';
+  RequisitoCampo get _reqCodigo {
+    // Con escaneo el campo va SIEMPRE: si la promo pide cámara pero olvidaron
+    // cargar `LabelCodCliente`, ocultarlo dejaría la promo sin forma de
+    // validarse.
+    if (_modoCodigo.esEscaneo) return RequisitoCampo.obligatorio;
+    return _req('LabelCodCliente', 'ReqCodCliente', RequisitoCampo.obligatorio);
   }
 
-  bool get _codigoReq => _esRequerido('ReqCodCliente', porDefecto: true);
-  bool get _telReq => _esRequerido('ReqCodTelCliente', porDefecto: true);
-  bool get _nombreReq => _esRequerido('ReqNomCliente', porDefecto: false);
-  bool get _auxReq => _esRequerido('ReqAuxIn1', porDefecto: false);
+  RequisitoCampo get _reqTel =>
+      _req('LabelCodTelCliente', 'ReqCodTelCliente', RequisitoCampo.obligatorio);
+  RequisitoCampo get _reqNombre =>
+      _req('LabelNomCliente', 'ReqNomCliente', RequisitoCampo.opcional);
+  RequisitoCampo get _reqAux =>
+      _req('LabelAuxIn1', 'ReqAuxIn1', RequisitoCampo.opcional);
+  RequisitoCampo get _reqAux2 =>
+      _req('LabelAuxIn2', 'ReqAuxIn2', RequisitoCampo.opcional);
+
+  bool get _tieneCodigo => _reqCodigo != RequisitoCampo.no;
+  bool get _tieneTel => _reqTel != RequisitoCampo.no;
+  bool get _tieneNombre => _reqNombre != RequisitoCampo.no;
+  bool get _tieneAux => _reqAux != RequisitoCampo.no;
+  bool get _tieneAux2 => _reqAux2 != RequisitoCampo.no;
+
+  bool get _codigoReq => _reqCodigo == RequisitoCampo.obligatorio;
+  bool get _telReq => _reqTel == RequisitoCampo.obligatorio;
+  bool get _nombreReq => _reqNombre == RequisitoCampo.obligatorio;
+  bool get _auxReq => _reqAux == RequisitoCampo.obligatorio;
+  bool get _aux2Req => _reqAux2 == RequisitoCampo.obligatorio;
 
   /// Solo mientras hay una llamada en vuelo. `consumido` NO bloquea: los
   /// campos quedan vacíos y listos para el próximo cliente, y como ya no
@@ -288,6 +310,7 @@ class _PromocionesPageState extends State<PromocionesPage>
       return false;
     }
     if (_tieneAux && _auxReq && _auxCtrl.text.trim().isEmpty) return false;
+    if (_tieneAux2 && _aux2Req && _aux2Ctrl.text.trim().isEmpty) return false;
     return true;
   }
 
@@ -301,6 +324,7 @@ class _PromocionesPageState extends State<PromocionesPage>
       _telCtrl.clear();
       _nombreCtrl.clear();
       _auxCtrl.clear();
+      _aux2Ctrl.clear();
       _fase = _Fase.inicial;
       _mensajeResultado = '';
       _fechaConsumo = null;
@@ -423,6 +447,7 @@ class _PromocionesPageState extends State<PromocionesPage>
       telefono: _tieneTel ? _telCtrl.text.trim() : null,
       nombre: _tieneNombre ? _nombreCtrl.text.trim() : null,
       auxIn1: _tieneAux ? _auxCtrl.text.trim() : null,
+      auxIn2: _tieneAux2 ? _aux2Ctrl.text.trim() : null,
       movil: ident['movil']!,
       usuario: ident['usuario']!,
       escenario: ident['escenario']!,
@@ -1308,6 +1333,9 @@ class _PromocionesPageState extends State<PromocionesPage>
                       hint: _labelCodigo,
                       icon: Icons.qr_code_2,
                       destacado: true,
+                      // Los cupones más largos vistos tienen 8; 15 deja margen
+                      // sin permitir pegar cualquier cosa.
+                      maxLength: 15,
                     ),
             ));
     agregar(
@@ -1320,6 +1348,11 @@ class _PromocionesPageState extends State<PromocionesPage>
                 icon: Icons.phone_outlined,
                 destacado: true,
                 keyboardType: TextInputType.phone,
+                // 10 dígitos: el celular uruguayo más largo con el 0 adelante.
+                // Se corta al tipear en vez de avisar después, y sin contador
+                // debajo (`counterText: ''`) para no meter ruido en el
+                // formulario.
+                maxLength: 10,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 helper: _label('TelValores').isNotEmpty
                     ? _label('TelValores')
@@ -1344,6 +1377,18 @@ class _PromocionesPageState extends State<PromocionesPage>
               campo: _campoTexto(
                 controller: _auxCtrl,
                 hint: _label('LabelAuxIn1'),
+                icon: Icons.notes_outlined,
+                maxLines: 3,
+                maxLength: 120,
+              ),
+            ));
+    agregar(
+        _tieneAux2,
+        _aux2Req,
+        () => _bloqueCampo(
+              campo: _campoTexto(
+                controller: _aux2Ctrl,
+                hint: _label('LabelAuxIn2'),
                 icon: Icons.notes_outlined,
                 maxLines: 3,
                 maxLength: 120,
@@ -1552,6 +1597,9 @@ class _PromocionesPageState extends State<PromocionesPage>
       textCapitalization: textCapitalization,
       maxLines: maxLines,
       maxLength: maxLength,
+      // El contador "3/15" debajo del campo no aporta y descoloca el
+      // formulario: el corte al tipear ya es la señal.
+      buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
       style: const TextStyle(color: V2Colors.textoPrimario, fontSize: 15),
       cursorColor: V2Colors.accion,
       decoration: InputDecoration(

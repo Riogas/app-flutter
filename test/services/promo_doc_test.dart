@@ -165,4 +165,50 @@ void main() {
       expect(PromoDoc.lista(<String, dynamic>{}, 'x'), isEmpty);
     });
   });
+
+  group('PromoDoc.requisito', () {
+    Map<String, dynamic> doc(String label, String req) =>
+        {'LabelAuxIn1': label, 'ReqAuxIn1': req};
+
+    RequisitoCampo leer(Map<String, dynamic> d,
+            {RequisitoCampo porDefecto = RequisitoCampo.opcional}) =>
+        PromoDoc.requisito(d,
+            campoLabel: 'LabelAuxIn1',
+            campoReq: 'ReqAuxIn1',
+            porDefecto: porDefecto);
+
+    test('los tres valores que escriben en los documentos', () {
+      // Antel llega con "Obligatorio"/"No"; antes se comparaba contra
+      // "Requerido" y el campo obligatorio caía entre los opcionales.
+      expect(leer(doc('Observaciones', 'Obligatorio')),
+          RequisitoCampo.obligatorio);
+      expect(leer(doc('Observaciones', 'Opcional')), RequisitoCampo.opcional);
+      expect(leer(doc('Obs2', 'No')), RequisitoCampo.no);
+    });
+
+    test('tolera mayúsculas y las grafías viejas', () {
+      expect(leer(doc('Obs', 'OBLIGATORIO')), RequisitoCampo.obligatorio);
+      expect(leer(doc('Obs', 'Requerido')), RequisitoCampo.obligatorio);
+      expect(leer(doc('Obs', 'S')), RequisitoCampo.obligatorio);
+      expect(leer(doc('Obs', ' opcional ')), RequisitoCampo.opcional);
+      expect(leer(doc('Obs', 'N')), RequisitoCampo.no);
+    });
+
+    test('sin rótulo no hay campo, aunque el Req diga que es obligatorio', () {
+      expect(leer(doc('', 'Obligatorio')), RequisitoCampo.no);
+      expect(leer(doc('   ', 'Obligatorio')), RequisitoCampo.no);
+    });
+
+    test('un Req vacío o desconocido cae al valor por defecto', () {
+      expect(leer(doc('Obs', '')), RequisitoCampo.opcional);
+      expect(leer(doc('Obs', 'cualquier cosa')), RequisitoCampo.opcional);
+      expect(leer(doc('Obs', ''), porDefecto: RequisitoCampo.obligatorio),
+          RequisitoCampo.obligatorio);
+    });
+
+    test('el Req también tolera la grafía de la clave', () {
+      final d = {'LabelAuxIn1': 'Obs', 'reqauxin1': 'Obligatorio'};
+      expect(leer(d), RequisitoCampo.obligatorio);
+    });
+  });
 }
