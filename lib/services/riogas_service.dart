@@ -103,7 +103,19 @@ class RioGasService {
     });
   }
 
-  static late final String _baseUrlProduction;
+  /// URL de producción armada con las constantes 600+601.
+  ///
+  /// NO es `late final` a propósito: se recalcula cada vez que se refrescan
+  /// las constantes. Antes se asignaba una sola vez al arrancar el proceso
+  /// —antes del login— y como el logout borra el `constantBox`, el primer
+  /// arranque después de cerrar sesión no tenía constantes y quedaba pegado
+  /// al fallback de abajo hasta que se cerrara la app. Producción parecía
+  /// ignorar la constante; en realidad la leía demasiado temprano.
+  static String? _baseUrlProduction;
+
+  /// A dónde se pega si las constantes todavía no están.
+  static const String _baseUrlProduccionPorDefecto =
+      'https://www.riogas.uy/ica_geos_/appservices/';
   static bool _isInitialized =
       false; // 🆕 Flag para prevenir doble inicialización
 
@@ -114,7 +126,7 @@ class RioGasService {
       return AppEnvironment.devUrl;
     }
     // Si está en producción, usar la URL configurada desde constantes 600+601
-    return _baseUrlProduction;
+    return _baseUrlProduction ?? _baseUrlProduccionPorDefecto;
   }
 
   /* aca la constante */
@@ -188,7 +200,32 @@ class RioGasService {
       return;
     }
 
-    // 👇 NUEVO: inicializar baseUrl dinámico con 600 (base) + 601 (appservices)
+    await configurarUrlsDesdeConstantes();
+
+    await initializeRetryInterval();
+
+    _isInitialized = true; // 🆕 Marcar como inicializado
+    print('✅ [INIT] RioGasService inicializado correctamente');
+    await deleteOldRequests();
+    await _setupFailedRequestsListener(); // Configurar listener separado
+
+    // Verificar si ya hay requests pendientes e iniciar timer inmediatamente
+    var failedRequestsBoxInit = await Hive.openBox('failedRequestsBox');
+    if (failedRequestsBoxInit.isNotEmpty) {
+      print(
+          '🔄 Hay ${failedRequestsBoxInit.length} requests pendientes. Iniciando timer inmediatamente.');
+      await startRetryTimer();
+    }
+  }
+
+  /// Rearma la URL de producción leyendo las constantes 600 y 601.
+  ///
+  /// Se llama al arrancar y OTRA VEZ apenas el login baja las constantes: en
+  /// el arranque posterior a un logout el `constantBox` está vacío, así que la
+  /// primera pasada se queda con el valor por defecto y sólo esta segunda
+  /// deja la URL correcta. Sin esto había que cerrar y reabrir la app para que
+  /// producción apuntara a donde dice la constante.
+  static Future<void> configurarUrlsDesdeConstantes() async {
     print('🔧 [INIT] Inicializando configuración de URLs...');
     final baseRootConst = (await getConstantValue('600'))?.trim();
     final servicesPathConst = (await getConstantValue('601'))?.trim();
@@ -224,21 +261,6 @@ class RioGasService {
     print('🔧 [INIT] baseUrl DESARROLLO (611) = "${AppEnvironment.devUrl}"');
     print('🌍 [INIT] Ambiente actual: ${AppEnvironment.environmentName}');
     print('🔧 [INIT] =====================================');
-
-    await initializeRetryInterval();
-
-    _isInitialized = true; // 🆕 Marcar como inicializado
-    print('✅ [INIT] RioGasService inicializado correctamente');
-    await deleteOldRequests();
-    await _setupFailedRequestsListener(); // Configurar listener separado
-
-    // Verificar si ya hay requests pendientes e iniciar timer inmediatamente
-    var failedRequestsBox = await Hive.openBox('failedRequestsBox');
-    if (failedRequestsBox.isNotEmpty) {
-      print(
-          '🔄 Hay ${failedRequestsBox.length} requests pendientes. Iniciando timer inmediatamente.');
-      await startRetryTimer();
-    }
   }
 
   static Future<void> _setupFailedRequestsListener() async {

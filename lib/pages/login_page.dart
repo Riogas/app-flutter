@@ -2693,6 +2693,12 @@ class _LoginPageState extends State<LoginPage> {
         print(
             "[33m$kLoginFlowTag Cargando y guardando constantes desde Firebase...[0m");
         await ConstantsService.loadAndSaveConstants();
+        // 🌍 Rearmar las URLs con las constantes recién bajadas: el arranque
+        // las leyó cuando el constantBox todavía estaba vacío (el logout lo
+        // borra del disco), así que hasta acá producción venía apuntando al
+        // valor por defecto.
+        await RioGasService.configurarUrlsDesdeConstantes();
+        await AppEnvironment.recargarDevUrl();
         await PromosHabilitadas.refrescar();
 
         // 🔹 Cerrar el diálogo de carga
@@ -3208,6 +3214,9 @@ class _LoginPageState extends State<LoginPage> {
     // 🔹 Cargar y guardar constantes desde Firebase
     print("Cargando y guardando constantes desde Firebase...");
     await ConstantsService.loadAndSaveConstants();
+    // 🌍 Ver el comentario del otro call site: las URLs se rearman acá.
+    await RioGasService.configurarUrlsDesdeConstantes();
+    await AppEnvironment.recargarDevUrl();
     await PromosHabilitadas.refrescar();
 
     final sessionBox = await Hive.openBox('sessionBox');

@@ -40,6 +40,11 @@ class AppEnvironment {
     await _loadDevUrlFromConstant();
   }
 
+  /// Relee la constante 611. Se llama apenas el login baja las constantes:
+  /// en el arranque posterior a un logout el `constantBox` está vacío y la
+  /// primera lectura se queda con el fallback.
+  static Future<void> recargarDevUrl() => _loadDevUrlFromConstant();
+
   // 🔧 Cargar la constante 611 desde Hive
   static Future<void> _loadDevUrlFromConstant() async {
     try {
