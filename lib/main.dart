@@ -38,6 +38,7 @@ import 'package:android_intent_plus/flag.dart';
 import 'services/location_service.dart'; // 🔹 Importamos LocationService
 import 'services/native_log_sync_service.dart'; // 🔹 Importamos NativeLogSyncService
 import 'services/proteccion_pantalla.dart'; // 🔒 Anti-captura (flag + pantallas)
+import 'services/firebase_constants_service.dart';
 import 'services/modo_restringido.dart';
 import 'services/promos_habilitadas.dart'; // 🎁 Interruptor remoto de Promos
 import 'services/remote_logout_listener.dart'; // 🚨 Importar listener de logout remoto
@@ -305,6 +306,31 @@ void main() async {
       } catch (e2) {
         print('❌ No se pudo recuperar Hive: $e2');
       }
+    }
+
+    // 🌐 Constantes de URL ANTES de armar ninguna URL, y sin depender del
+    // login: ConstantsService se autentica solo contra Firebase.
+    //
+    // El logout borra el constantBox del disco, y ese arranque era el que
+    // armaba el baseUrl de producción con el valor por defecto — hasta el
+    // handshake del login salía al servidor equivocado.
+    //
+    // Solo cuando faltan, y solo las tres de URL (3 documentos, no los 48 de
+    // la colección): con las constantes ya cacheadas no se gasta ninguna
+    // lectura en cada arranque. El refresco completo sigue en el login.
+    //
+    // Con timeout y dentro de un try: sin red se sigue con lo que haya, en vez
+    // de dejar la app trabada en el splash.
+    try {
+      if (await ConstantsService.faltanConstantesDeUrl()) {
+        print('🌐 [INIT] Faltan las constantes de URL: bajándolas...');
+        await ConstantsService.cargarConstantesDeUrl()
+            .timeout(const Duration(seconds: 10));
+      } else {
+        print('🌐 [INIT] Constantes de URL ya cacheadas, no se bajan');
+      }
+    } catch (e) {
+      print('⚠️ [INIT] No se pudieron bajar las constantes de URL: $e');
     }
 
     // 🌍 Inicializar ambiente de aplicación (Dev/Prod)
