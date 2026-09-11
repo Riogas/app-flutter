@@ -84,6 +84,15 @@ class _PromocionesPageState extends State<PromocionesPage>
 
   _Fase _fase = _Fase.inicial;
   String _mensajeResultado = '';
+
+  /// Código de autorización del consumo: lo devuelve ConsumirPromo en
+  /// `OUTAux1` y el fletero lo necesita ver en el momento.
+  String _codigoAutorizacion = '';
+
+  /// El `message` que devuelve ConsumirPromo. Va como encabezado de la
+  /// tarjeta de confirmación: antes había un texto fijo que no se
+  /// correspondía con lo que contesta el servicio.
+  String _mensajeConsumo = '';
   DateTime? _fechaConsumo;
   bool _opcionalesAbiertos = false;
 
@@ -152,6 +161,8 @@ class _PromocionesPageState extends State<PromocionesPage>
           _fase == _Fase.consumido) {
         _fase = _Fase.inicial;
         _mensajeResultado = '';
+        _codigoAutorizacion = '';
+        _mensajeConsumo = '';
         _fechaConsumo = null;
       }
     });
@@ -327,6 +338,8 @@ class _PromocionesPageState extends State<PromocionesPage>
       _aux2Ctrl.clear();
       _fase = _Fase.inicial;
       _mensajeResultado = '';
+      _codigoAutorizacion = '';
+      _mensajeConsumo = '';
       _fechaConsumo = null;
       _opcionalesAbiertos = false;
     });
@@ -582,6 +595,8 @@ class _PromocionesPageState extends State<PromocionesPage>
       if (res.ok) {
         _fase = _Fase.consumido;
         _fechaConsumo = res.fechaHora;
+        _codigoAutorizacion = res.codigoAutorizacion ?? '';
+        _mensajeConsumo = res.mensaje;
       } else {
         _fase = _Fase.error;
         _mensajeResultado = res.mensaje;
@@ -1072,6 +1087,9 @@ class _PromocionesPageState extends State<PromocionesPage>
     // Solo la máscara del código: alcanza para reconocer cuál fue sin
     // exponerlo (el código entero ya no se guarda).
     final identificadores = [
+      // El código de autorización va PRIMERO y SIN enmascarar: es el dato que
+      // el fletero necesita leer y dictar. La máscara es solo para el cupón.
+      if (c.autorizacion.isNotEmpty) 'Cod. Autorización: ${c.autorizacion}',
       if (c.codigoMascara.isNotEmpty) 'Cód: ${c.codigoMascara}',
       if (c.telefono.isNotEmpty) 'Tel: ${c.telefono}',
     ].join(' · ');
@@ -1772,7 +1790,11 @@ class _PromocionesPageState extends State<PromocionesPage>
             fondo: const Color(0xFFE8F5E9),
             icono: Icons.verified,
             titulo: 'Beneficio consumido',
-            mensaje: 'El beneficio fue utilizado correctamente.',
+            // Lo que conteste el servicio; el texto fijo queda solo de
+            // respaldo para el caso raro de un message vacío.
+            mensaje: _mensajeConsumo.isNotEmpty
+                ? _mensajeConsumo
+                : 'El beneficio fue utilizado correctamente.',
             extra: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1782,6 +1804,8 @@ class _PromocionesPageState extends State<PromocionesPage>
                     '${_fechaConsumo!.day.toString().padLeft(2, '0')}/${_fechaConsumo!.month.toString().padLeft(2, '0')} ${V2Data.fmtHora(_fechaConsumo!)}',
                   ),
                 _lineaConfirm('Promoción', _label('NombreCombo')),
+                if (_codigoAutorizacion.isNotEmpty)
+                  _lineaConfirm('Cod. Autorización', _codigoAutorizacion),
                 // El teléfono del cliente NO se repite acá: se acaba de
                 // limpiar del formulario justamente para que no quede
                 // expuesto, y volver a pintarlo sería dejarlo igual.
